@@ -35,6 +35,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 	
     private int kind;
     private char[] value = CharArrayUtils.EMPTY;
+    private char[] suffix = CharArrayUtils.EMPTY;
 
     public CPPASTLiteralExpression() {
 	}
@@ -42,8 +43,15 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 	public CPPASTLiteralExpression(int kind, char[] value) {
 		this.kind = kind;
 		this.value = value;
+		this.suffix = extractSuffixFromValue();
 	}
-
+	
+	public CPPASTLiteralExpression(int kind, char[] value, char[] suffix) {
+		this.kind = kind;
+		this.value = value;
+		this.suffix = suffix;
+	}
+	
 	@Override
 	public CPPASTLiteralExpression copy() {
 		return copy(CopyStyle.withoutLocations);
@@ -52,7 +60,8 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 	@Override
 	public CPPASTLiteralExpression copy(CopyStyle style) {
 		CPPASTLiteralExpression copy = new CPPASTLiteralExpression(kind,
-				value == null ? null : value.clone());
+				value == null ? null : value.clone(),
+				suffix == null ? null : suffix.clone());
 		copy.setOffsetAndLength(this);
 		if (style == CopyStyle.withLocations) {
 			copy.setCopyLocation(this);
@@ -80,6 +89,15 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 	public void setValue(char[] value) {
         assertNotFrozen();
     	this.value= value;
+    }
+    
+    public char[] getSuffix() {
+    	return value;
+    }
+    
+    public void setSuffix(char[] value) {
+    	assertNotFrozen();
+    	this.suffix = value;
     }
     
     @Override
@@ -187,7 +205,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
     }
     
 	private IType classifyTypeOfFloatLiteral() {
-		final char[] lit= getValue();
+		final char[] lit= getSuffix();
 		final int len= lit.length;
 		Kind kind= Kind.eDouble;
 		int flags= 0;
@@ -208,7 +226,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		int makelong= 0;
 		boolean unsigned= false;
 	
-		final char[] lit= getValue();
+		final char[] lit= getSuffix();
 		for (int i= lit.length - 1; i >= 0; i--) {
 			final char c= lit[i];
 			if (!(c > 'f' && c <= 'z') && !(c > 'F' && c <= 'Z')) {
@@ -238,7 +256,110 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		} 
 		return new CPPBasicType(Kind.eInt, flags, this);
 	}
-
+	
+	/* 
+	 * Parse valid integer and float literals, anything after the valid part
+	 * must be the suffix, whether that's user-defined or not.
+	 * 
+	 * refs: 2.14.2, 2.14.4 
+	 */
+	private char[] extractSuffixFromValue() {
+		final char[] lit = getValue();
+		int i = 0;
+		char c = lit[i];
+		
+		if (c == '.') {
+			// parse float
+			i = parseFloat(i);
+		}
+		else {
+			// int-or-float
+			
+			if (c == '0') {
+				// probably octal or hex
+				c = lit[++i];
+				
+				if ((c | 0x20) == 'x') {
+					// Hex
+					do {
+						c = lit[++i];
+					} while (isHexDigit(c));
+					
+				}
+				else if (isOctalDigit(c)) {
+					// Octal
+					do {
+						c = lit[++i];
+					} while (isOctalDigit(c));
+				}
+				else if (c == '.') {
+					// need to include the '0' in case it's "0."
+					i = parseFloat(i-1); 
+				}
+			}
+			else {
+				int startNum = i;
+				do {
+					c = lit[++i];
+				} while (isNonZeroDigit(c));
+				
+				if (c == '.' || ((c | 0x20) == 'e')) {
+					i = parseFloat(startNum);
+				}
+			}
+			
+		}
+		
+		// At this point `i` should be the offset of the suffix
+		return toString().substring(i).toCharArray();
+	}
+	
+	private int parseFloat(int offset) {
+		final char[] lit = getValue();
+		boolean seenDecimalPoint = false;
+		
+		if (lit[offset] == '.') {
+			offset++;
+			seenDecimalPoint = true;
+		}
+		
+		do {
+			offset++;
+		} while (Character.isDigit(lit[offset]));
+		
+		if (!seenDecimalPoint && lit[offset] == '.') {
+			offset++;
+			seenDecimalPoint = true;
+		}
+		// either 'e' | 'E' | suffix
+		
+		if ((lit[offset] | 0x20) == 'e') {
+			offset++;
+			// Optional 'sign'
+			if (lit[offset] == '-' || lit[offset] == '+') {
+				offset++;
+			}
+			do {
+				offset++;
+			} while (Character.isDigit(lit[offset]));
+		}
+		
+		return offset;
+	}
+	
+	private boolean isNonZeroDigit(char c) {
+		return (c <= '9' && c >= '1');
+	}
+	
+	private boolean isOctalDigit(char c) {
+		return (c <= '7' && c >= '0');
+	}
+	
+	private boolean isHexDigit(char c) {
+		return isNonZeroDigit(c) || c == '0' || ((c | 0x20) <= 'f' && (c | 0x20) >= 'a');
+	}
+	
+	
     /**
      * @deprecated, use {@link #setValue(char[])}, instead.
      */
