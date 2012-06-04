@@ -9742,4 +9742,16 @@ public class AST2CPPTests extends AST2BaseTest {
 		assertEquals(1, declarations.length);
 		assertEquals(bh.findName("S", 1), declarations[0]);
 	}
+	
+	// int operator "" _A(unsigned long long i) { return 1; }
+	// int operator "" _B(long double d) { return 1; }
+	// int operator "" _C(const char* s, size_t sz) { return sz; }
+	// int operator "" _D(const wchar_t* s, size_t sz) { return sz; }
+	// int operator "" _E(const char16_t* s, size_t sz) { return sz; }
+	// int operator "" _F(const char32_t* s, size_t sz) { return sz; }
+	// int operator "" _G(char c) { return (int)c; }
+	// constexpr double "" _km_to_miles(long double km) { return km * 0.6213; } 
+	public void testSimpleUserDefinedLiteral() throws Exception {
+		parseAndCheckBindings();
+	}
 }
