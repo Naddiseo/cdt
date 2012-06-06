@@ -11,6 +11,7 @@
  *     Markus Schorn (Wind River Systems)
  *     Andrew Ferguson (Symbian)
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.ast2;
 
@@ -50,6 +51,8 @@ import org.eclipse.cdt.core.dom.ast.IASTFunctionDefinition;
 import org.eclipse.cdt.core.dom.ast.IASTIdExpression;
 import org.eclipse.cdt.core.dom.ast.IASTImplicitName;
 import org.eclipse.cdt.core.dom.ast.IASTImplicitNameOwner;
+import org.eclipse.cdt.core.dom.ast.IASTInitializer;
+import org.eclipse.cdt.core.dom.ast.IASTInitializerClause;
 import org.eclipse.cdt.core.dom.ast.IASTLabelStatement;
 import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
 import org.eclipse.cdt.core.dom.ast.IASTName;
@@ -9732,5 +9735,104 @@ public class AST2CPPTests extends AST2BaseTest {
 	// constexpr double "" _km_to_miles(long double km) { return km * 0.6213; } 
 	public void testSimpleUserDefinedLiteral() throws Exception {
 		parseAndCheckBindings();
+	}
+	
+	// int speed = 80_kmh;
+	public void testUserDefinedIntegerLiteral() throws Exception{
+		IASTTranslationUnit tu = parseAndCheckBindings();
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		IASTDeclaration speedDeclaration = declarations[0];
+		assertTrue(speedDeclaration instanceof IASTSimpleDeclaration);
+		IASTDeclarator declaratorSpeed = ((IASTSimpleDeclaration)speedDeclaration).getDeclarators()[0];
+		IASTInitializer initializer = declaratorSpeed.getInitializer();
+		assertTrue(initializer instanceof IASTEqualsInitializer);
+		IASTInitializerClause initClause = ((IASTEqualsInitializer)initializer).getInitializerClause();
+		assertTrue(initClause instanceof ICPPASTLiteralExpression);
+		ICPPASTLiteralExpression initExpression = (ICPPASTLiteralExpression) initClause;
+		assertEquals("80_kmh", initExpression.toString());
+	}
+	
+	// int speed = 80.0_kmh;
+	public void testUserDefinedDoubleLiteral() throws Exception{
+		IASTTranslationUnit tu = parseAndCheckBindings();
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		IASTDeclaration speedDeclaration = declarations[0];
+		assertTrue(speedDeclaration instanceof IASTSimpleDeclaration);
+		IASTDeclarator declaratorSpeed = ((IASTSimpleDeclaration)speedDeclaration).getDeclarators()[0];
+		IASTInitializer initializer = declaratorSpeed.getInitializer();
+		assertTrue(initializer instanceof IASTEqualsInitializer);
+		IASTInitializerClause initClause = ((IASTEqualsInitializer)initializer).getInitializerClause();
+		assertTrue(initClause instanceof ICPPASTLiteralExpression);
+		ICPPASTLiteralExpression initExpression = (ICPPASTLiteralExpression) initClause;
+		assertEquals("80.0_kmh", initExpression.toString());
+	}
+	
+	// int speed = "80"_kmh;
+	public void testUserDefinedStringLiteral() throws Exception{
+		IASTTranslationUnit tu = parseAndCheckBindings();
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		IASTDeclaration speedDeclaration = declarations[0];
+		assertTrue(speedDeclaration instanceof IASTSimpleDeclaration);
+		IASTDeclarator declaratorSpeed = ((IASTSimpleDeclaration)speedDeclaration).getDeclarators()[0];
+		IASTInitializer initializer = declaratorSpeed.getInitializer();
+		assertTrue(initializer instanceof IASTEqualsInitializer);
+		IASTInitializerClause initClause = ((IASTEqualsInitializer)initializer).getInitializerClause();
+		assertTrue(initClause instanceof ICPPASTLiteralExpression);
+		ICPPASTLiteralExpression initExpression = (ICPPASTLiteralExpression) initClause;
+		assertEquals("\"80\"_kmh", initExpression.toString());
+	}
+	
+	// int speed = '5'_kmh;
+	public void testUserDefinedCharacterLiteral() throws Exception{
+		IASTTranslationUnit tu = parseAndCheckBindings();
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		IASTDeclaration speedDeclaration = declarations[0];
+		assertTrue(speedDeclaration instanceof IASTSimpleDeclaration);
+		IASTDeclarator declaratorSpeed = ((IASTSimpleDeclaration)speedDeclaration).getDeclarators()[0];
+		IASTInitializer initializer = declaratorSpeed.getInitializer();
+		assertTrue(initializer instanceof IASTEqualsInitializer);
+		IASTInitializerClause initClause = ((IASTEqualsInitializer)initializer).getInitializerClause();
+		assertTrue(initClause instanceof ICPPASTLiteralExpression);
+		ICPPASTLiteralExpression initExpression = (ICPPASTLiteralExpression) initClause;
+		assertEquals("'5'_kmh", initExpression.toString());
+	}
+	
+	// int operator "" _kmh(unsigned long long int speedInKMH) {
+	//     return speedInKMH * 1000 / 3600; //conversion to meters per second
+	// }
+	// int speed = 80_kmh; 
+	public void testSimpleLiteralOperator() throws Exception{
+		IASTTranslationUnit tu = parseAndCheckBindings();
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		IASTDeclaration literalOperatorDeclaration = declarations[0];
+		assertTrue(literalOperatorDeclaration instanceof ICPPASTFunctionDefinition);
+		ICPPASTFunctionDefinition functionDef = (ICPPASTFunctionDefinition) literalOperatorDeclaration;
+		IASTFunctionDeclarator functionDeclarator = functionDef.getDeclarator();
+		IASTName functionName = functionDeclarator.getName();
+		assertTrue(functionName instanceof ICPPASTOperatorName);
+		ICPPASTOperatorName operatorName = (ICPPASTOperatorName) functionName;
+		assertEquals("_kmh", operatorName.toString());
+	}
+	
+	// template<char... Items>
+	// int operator "" _kmh() {
+	//     return 0;
+	// }
+	// int speed = "80"_kmh; 
+	public void testTemplateLiteralOperator() throws Exception{
+		parseAndCheckBindings();
+		IASTTranslationUnit tu = parseAndCheckBindings();
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		IASTDeclaration templateLiteralOperatorDeclaration = declarations[0];
+		assertTrue(templateLiteralOperatorDeclaration instanceof ICPPASTTemplateDeclaration);
+		ICPPASTTemplateDeclaration operatorTemplate = (ICPPASTTemplateDeclaration) templateLiteralOperatorDeclaration;
+		IASTDeclaration functionDeclaration = operatorTemplate.getDeclaration();
+		assertTrue(functionDeclaration instanceof ICPPASTFunctionDefinition);
+		ICPPASTFunctionDefinition functionDef = (ICPPASTFunctionDefinition) functionDeclaration;
+		IASTFunctionDeclarator functionDeclarator = functionDef.getDeclarator();
+		IASTName functionName = functionDeclarator.getName();
+		assertTrue(functionName instanceof ICPPASTOperatorName);
+		ICPPASTOperatorName operatorName = (ICPPASTOperatorName) functionName;
+		assertEquals("_kmh", operatorName.toString());
 	}
 }

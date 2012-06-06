@@ -8,6 +8,8 @@
  * Contributors:
  *     John Camelon (IBM Rational Software) - Initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Thomas Corbat (IFS)
+ *     Richard Eames
  *******************************************************************************/
 package org.eclipse.cdt.core.parser;
 
@@ -184,7 +186,11 @@ public interface IToken {
 	/** @deprecated use {@link #tXOR} */ @Deprecated int t_xor = 127;
 	/** @deprecated use {@link #tXORASSIGN} */ @Deprecated int t_xor_eq = 128;
 	int tFLOATINGPT = 129;
-
+	/** @since 5.4 */ int tUSER_DEFINED_INTEGER_LITERAL = 5404;
+	/** @since 5.4 */ int tUSER_DEFINED_FLOATING_LITERAL = 5405;
+	/** @since 5.4 */ int tUSER_DEFINED_STRING_LITERAL = 5406;
+	/** @since 5.4 */ int tUSER_DEFINED_CHARACTER_LITERAL = 5407;
+	
 	int tSTRING = 130;
 	int tLSTRING = 131;
 	/** @since 5.1 */ int tUTF16STRING = 5000;
