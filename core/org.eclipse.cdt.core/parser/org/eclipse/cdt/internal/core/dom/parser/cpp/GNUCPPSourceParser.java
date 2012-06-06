@@ -2699,7 +2699,9 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         			// storage class specifiers
         		case IToken.t_auto:
         			if (supportAutoTypeSpecifier) {
-            			if (encounteredTypename) // TODO: what is this supposed to be: "break declSpecifiers;" was deleted 
+            			if (encounteredTypename) {
+            				break declSpecifiers;
+            			}
             			simpleType = IASTSimpleDeclSpecifier.t_auto;
             			encounteredRawType= true;
             			endOffset= consume().getEndOffset();
