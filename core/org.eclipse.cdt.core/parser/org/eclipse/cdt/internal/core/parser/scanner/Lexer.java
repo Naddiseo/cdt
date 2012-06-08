@@ -11,6 +11,10 @@
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.parser.scanner;
 
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 import org.eclipse.cdt.core.parser.IGCCToken;
 import org.eclipse.cdt.core.parser.IProblem;
 import org.eclipse.cdt.core.parser.IToken;
@@ -54,6 +58,7 @@ final public class Lexer implements ITokenSequence {
 		public boolean fCreateImageLocations= true;
 		public boolean fSupportSlashPercentComments= false;
 		public boolean fSupportUTFLiterals= true;
+		public boolean fSupportUserDefinedLiterals = true;
 		
 		@Override
 		public Object clone() {
@@ -86,9 +91,9 @@ final public class Lexer implements ITokenSequence {
 	private Token fLastToken;
 	
 	// For the few cases where we have to lookahead more than one character
-	private int fMarkOffset;
-	private int fMarkEndOffset;
-	private int fMarkPrefetchedChar;
+	private Deque<Integer> fMarkOffset;
+	private Deque<Integer> fMarkEndOffset;
+	private Deque<Integer> fMarkPrefetchedChar;
 	// To store the entire state.
 	private boolean fMarkInsideIncludeDirective;
 	private Token fMarkToken;
@@ -110,6 +115,9 @@ final public class Lexer implements ITokenSequence {
 		fLog= log;
 		fSource= source;
 		fLastToken= fToken= new Token(tBEFORE_INPUT, source, start, start);
+		fMarkOffset = new ArrayDeque<Integer>();
+		fMarkEndOffset = new ArrayDeque<Integer>();
+		fMarkPrefetchedChar = new ArrayDeque<Integer>();
 		nextCharPhase3();
 	}
 	
@@ -368,14 +376,13 @@ final public class Lexer implements ITokenSequence {
 
 			case '0': case '1': case '2': case '3': case '4':
 			case '5': case '6': case '7': case '8': case '9':
-				return number(start, 1, false);
+				return number(start, 1, c, d);
 
 			case '.':
 				switch(d) {
 				case '0': case '1': case '2': case '3': case '4':
 				case '5': case '6': case '7': case '8': case '9':
-					nextCharPhase3();
-					return number(start, 2, true);
+					return floatLiteral(start, 2, c, d);
 
 				case '.':
 					markPhase3();
@@ -707,7 +714,7 @@ final public class Lexer implements ITokenSequence {
 		}
 	}
 
-	private Token stringLiteral(final int start, int length, final int tokenType) throws OffsetLimitReachedException {
+	private Token stringLiteral(final int start, int length, int tokenType) throws OffsetLimitReachedException {
 		boolean escaped = false;
 		boolean done = false;
 		
@@ -740,10 +747,17 @@ final public class Lexer implements ITokenSequence {
 			length++;
 			c= nextCharPhase3();
 		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+			Token udSuffix = identifier(start + length, 0);
+			tokenType = IToken.tUSER_DEFINED_STRING_LITERAL;
+			length = length + udSuffix.getLength();
+		}
+		
 		return newToken(tokenType, start, length);
 	}
 
-	private Token rawStringLiteral(final int start, int length, final int tokenType) throws OffsetLimitReachedException {
+	private Token rawStringLiteral(final int start, int length, int tokenType) throws OffsetLimitReachedException {
 		final int delimOffset= fOffset;
 		int delimEndOffset = delimOffset;
 		int offset;
@@ -787,10 +801,15 @@ final public class Lexer implements ITokenSequence {
 		fEndOffset= offset;
 		fCharPhase3=  0;
 		nextCharPhase3();
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+			tokenType = IToken.tUSER_DEFINED_STRING_LITERAL;
+			Token udSuffix = identifier(offset, 0);
+			offset = udSuffix.getEndOffset();
+		}
 		return newToken(tokenType, start, offset-start);
 	}
 
-	private Token charLiteral(final int start, final int tokenType) throws OffsetLimitReachedException {
+	private Token charLiteral(final int start, int tokenType) throws OffsetLimitReachedException {
 		boolean escaped = false;
 		boolean done = false;
 		int length= tokenType == IToken.tCHAR ? 1 : 2;
@@ -821,6 +840,12 @@ final public class Lexer implements ITokenSequence {
 			}
 			length++;
 			c= nextCharPhase3();
+		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+			tokenType = IToken.tUSER_DEFINED_CHARACTER_LITERAL;
+			Token udSuffix = identifier(start + length, 0);
+			length = length + udSuffix.getLength();
 		}
 		return newToken(tokenType, start, length);
 	}
@@ -894,91 +919,257 @@ final public class Lexer implements ITokenSequence {
         return newToken(tokenKind, start, length);
 	}
 	
-	private Token number(final int start, int length, boolean isFloat) throws OffsetLimitReachedException {
-		boolean isPartOfNumber= true;
-		boolean isHex= false;
-		int c= fCharPhase3;
-		while (true) {
-			switch(c) {
-			// non-digit
-            case 'a': case 'b': case 'c': case 'd':           case 'f': case 'g': case 'h': case 'i': 
-            case 'j': case 'k': case 'l': case 'm': case 'n': case 'o':           case 'q': case 'r': 
-            case 's': case 't': case 'u': case 'v': case 'w':           case 'y': case 'z':
-            case 'A': case 'B': case 'C': case 'D':           case 'F': case 'G': case 'H': case 'I':
-            case 'J': case 'K': case 'L': case 'M': case 'N': case 'O':           case 'Q': case 'R': 
-            case 'S': case 'T': case 'U': case 'V': case 'W': 		    case 'Y': case 'Z':
-            case '_': 
-            	
-            // digit
-            case '0': case '1': case '2': case '3': case '4':
-            case '5': case '6': case '7': case '8': case '9':
-            	break;
-            	
-            case 'x': case 'X':
-            	isHex= !isFloat;
-            	break;
-            	
-            // period
-            case '.':
-            	isFloat= true;
-            	break;
-            	
-            // exponents
-            case 'e':
-            case 'E':
-            	if (isHex)
-            		break;
-            	//$FALL-THROUGH$
-            case 'p':
-            case 'P':
-            	length++;
-            	c= nextCharPhase3();
-            	switch (c) {
-            	case '+': case '-':
-            	case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-            		isFloat= true;
-            		isHex= false;
-            		length++;
-                	c= nextCharPhase3();
-            		break;
-            	}
-            	continue;
-            	
-            // universal character name (non-digit)
-            case '\\':
-            	markPhase3();
-            	switch(nextCharPhase3()) {
-            	case 'u': case 'U':
-            		length++;
-            		break;
-            	default:
-            		restorePhase3();
-            		isPartOfNumber= false;
-            		break;
-            	}
-            	break;
-            
-            case END_OF_INPUT:
-				if (fSupportContentAssist) {
-					throw new OffsetLimitReachedException(ORIGIN_LEXER, 
-							newToken((isFloat ? IToken.tFLOATINGPT : IToken.tINTEGER), start, length));
+	// Ref: 2.14.2
+	private Token integerLiteral(final int start, int length, int c, int d) throws OffsetLimitReachedException {
+		
+		if (c == '0') {
+			// Probably octal or hex
+			c = d;
+			if ((c | 0x20) == 'x') {
+				/* hexadecimal-literal
+				 *   0x hexadecimal-digit
+				 *   0X hexadecimal-digit
+				 *   hexadecimal-literal hexadecimal-digit
+				 */
+				c = nextCharPhase3();
+				length++;
+				while (((c | 0x20) <= 'f' && (c | 0x20) >= 'a') || Character.isDigit(c)) {
+					c = nextCharPhase3();
+					length++;
 				}
-				isPartOfNumber= false;
-				break;
-				
-            default:
-            	isPartOfNumber= false;
-            	break;
 			}
-        	if (!isPartOfNumber) {
-        		break;
-        	}
-        	
-        	c= nextCharPhase3();
-        	length++;
+			else if (c >= '0' && c <= '7') {
+				/* octal-literal:
+				 *   0
+				 *   octal-literal octal-digit
+				 */
+				while (c >= '0' && c <= '7') {
+					c = nextCharPhase3();
+					length++;
+				}
+			}
+			else if (c == '.') {
+				return floatLiteral(start, length, '0' , '.');
+			}
+		}
+		else {
+			/* decimal-literal :
+			 *    nonzero-digit         (c has to be this to get into this else)
+			 *    decimal-literal digit
+			 */
+			c = d;
+			while (Character.isDigit(c)) {
+				c = nextCharPhase3(); 
+				length++;
+			}
+			
+			if (c == '.') {
+				//  looks like this is a float
+				return afterDecimalPoint(start, length);
+			}
+			else if ((c | 0x20) =='e') {
+				return exponentPart(start, length);
+			}
 		}
 		
-        return newToken((isFloat ? IToken.tFLOATINGPT : IToken.tINTEGER), start, length);
+		if (c == END_OF_INPUT) {
+			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken( IToken.tINTEGER, start, length));
+		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+			Token udSuffix = identifier(start + length, 0);
+			return newToken(IToken.tUSER_DEFINED_INTEGER_LITERAL, start, length + udSuffix.getLength());
+		}
+		
+		return newToken(IToken.tINTEGER, start, length);
+	}
+	
+	// Ref: 2.14.4
+	private Token floatLiteral(final int start, int length, int c, int d) throws OffsetLimitReachedException {
+		boolean seenDecimalPoint = false;
+		
+		if (c == '.') {
+			seenDecimalPoint = true;
+			c = d;
+			length--;
+		}
+		else if (Character.isDigit(c)) {
+			c = d;
+		}
+		
+		while (Character.isDigit(c)) {
+			c = nextCharPhase3();
+			length++;
+		}
+		
+		if (!seenDecimalPoint && c == '.') {
+			return afterDecimalPoint(start, length);
+		}
+		
+		if (c == END_OF_INPUT) {
+			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken(IToken.tFLOATINGPT, start, length));
+		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+			Token udSuffix = identifier(start + length, 0);
+			return newToken(IToken.tUSER_DEFINED_FLOATING_LITERAL, start, length + udSuffix.getLength());
+		}
+		
+		return newToken(IToken.tFLOATINGPT, start, length);
+	}
+	
+	private Token afterDecimalPoint(final int start, int length) throws OffsetLimitReachedException {
+		int c = fCharPhase3;
+		
+		if (c == '.') {
+			c = nextCharPhase3();
+			length++;
+			while (Character.isDigit(c)) {
+				c = nextCharPhase3();
+				length++;
+			}
+			// either 'e'  or 'E'
+			if ((c | 0x20) == 'e') {
+				return exponentPart(start, length);
+			}
+		}
+		
+		if (c == END_OF_INPUT) {
+			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken(IToken.tFLOATINGPT, start, length));
+		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+			Token udSuffix = identifier(start + length, 0);
+			return newToken(IToken.tUSER_DEFINED_FLOATING_LITERAL, start, length + udSuffix.getLength());
+		}
+		
+		return newToken(IToken.tFLOATINGPT, start, length);
+	}
+	
+	private Token exponentPart(final int start, int length) throws OffsetLimitReachedException {
+		int c = fCharPhase3;
+		if ((c | 0x20) == 'e') {
+			c = nextCharPhase3();
+			length++;
+			// optional  '+' or '-'
+			if (c == '+' || c == '-') {
+				c = nextCharPhase3();
+				length++;
+			}
+			while (Character.isDigit(c)){
+				c = nextCharPhase3();
+				length++;
+			}
+		}
+		
+		if (c == END_OF_INPUT) {
+			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken(IToken.tFLOATINGPT, start, length));
+		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+			Token udSuffix = identifier(start + length, 0);
+			return newToken(IToken.tUSER_DEFINED_FLOATING_LITERAL, start, length + udSuffix.getLength());
+		}
+		
+		return newToken(IToken.tFLOATINGPT, start, length);
+	}
+	
+	private Token number(final int start, int length, int c, int d) throws OffsetLimitReachedException {
+		
+		if (c == '.') {
+			return floatLiteral(start, length, c, d);
+		}
+		else {
+			return integerLiteral(start, length, c, d);
+		}
+	}
+	
+	// Checks the next token will be an identifier
+	private boolean isIdentifierStart() {
+		final int c = fCharPhase3;
+		markPhase3();
+		int d = nextCharPhase3();
+		
+		switch (c) {
+		case 'L':
+			switch (d) {
+			case 'R':
+				markPhase3();
+				if (nextCharPhase3() == '"') {
+					return false;
+				}
+				restorePhase3();
+				break;
+			case '"':
+			case '\'':
+				return false;
+			}
+			return true;
+			
+		case 'u':
+		case 'U':
+			if (fOptions.fSupportUTFLiterals) {
+				switch (d) {
+				case 'R':
+					markPhase3();
+					if (nextCharPhase3() == '"') {
+						return false;
+					}
+					restorePhase3();
+					break;
+				case '"':
+				case '\'':
+					return false;
+				case '8':
+					if (c == 'u') {
+						markPhase3();
+						switch (nextCharPhase3()) {
+						case 'R':
+							if (nextCharPhase3() == '"') {
+								return false;
+							}
+							break;
+						case '"':
+							return false;
+						}
+						restorePhase3();
+					}
+					break;
+				}
+			}
+			return true;
+		
+		case 'R':
+			if (d == '"') {
+				return false;
+			}
+			return true;
+			
+		case '"':
+		case '\'':
+			return false;
+		
+		case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': 
+		case 'j': case 'k': case 'l': case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': 
+		case 's': case 't':           case 'v': case 'w': case 'x': case 'y': case 'z':
+		case 'A': case 'B': case 'C': case 'D': case 'E': case 'F': case 'G': case 'H': case 'I':
+		case 'J': case 'K':           case 'M': case 'N': case 'O': case 'P': case 'Q':  
+		case 'S': case 'T':           case 'V': case 'W': case 'X': case 'Y': case 'Z':
+		case '_':
+			return true;
+			
+		case '$':
+			return fOptions.fSupportDollarInIdentifiers;
+		case '@':
+			return fOptions.fSupportAtSignInIdentifiers;
+		default:
+			if (Character.isUnicodeIdentifierStart((char) c)) {
+				return true;
+			}
+			break;
+		}
+		restorePhase3();
+		return false;
 	}
 	
 	
@@ -987,18 +1178,18 @@ final public class Lexer implements ITokenSequence {
 	 * with a long prefix.
 	 */
 	private void markPhase3() {
-		fMarkOffset= fOffset;
-		fMarkEndOffset= fEndOffset;
-		fMarkPrefetchedChar= fCharPhase3;
+		fMarkOffset.push(fOffset);
+		fMarkEndOffset.push(fEndOffset);
+		fMarkPrefetchedChar.push(fCharPhase3);
 	}
 	
 	/**
 	 * Restores a previously saved state of phase3.
 	 */
 	private void restorePhase3() {
-		fOffset= fMarkOffset;
-		fEndOffset= fMarkEndOffset;
-		fCharPhase3= fMarkPrefetchedChar;
+		fOffset= fMarkOffset.pop();
+		fEndOffset= fMarkEndOffset.pop();
+		fCharPhase3= fMarkPrefetchedChar.pop();
 	}
 	
 	/**
@@ -1163,18 +1354,18 @@ final public class Lexer implements ITokenSequence {
 	}
 
 	public void saveState() {
-		fMarkOffset= fOffset;
-		fMarkEndOffset= fEndOffset;
-		fMarkPrefetchedChar= fCharPhase3;
+		fMarkOffset.push(fOffset);
+		fMarkEndOffset.push(fEndOffset);
+		fMarkPrefetchedChar.push(fCharPhase3);
 		fMarkInsideIncludeDirective= fInsideIncludeDirective;
 		fMarkToken= fToken;
 		fMarkLastToken= fLastToken;
 	}
 
 	public void restoreState() {
-		fOffset= fMarkOffset;
-		fEndOffset= fMarkEndOffset;
-		fCharPhase3= fMarkPrefetchedChar;
+		fOffset= fMarkOffset.pop();
+		fEndOffset= fMarkEndOffset.pop();
+		fCharPhase3= fMarkPrefetchedChar.pop();
 		fInsideIncludeDirective= fMarkInsideIncludeDirective;
 		fToken= fMarkToken;
 		fLastToken= fMarkLastToken;

@@ -752,7 +752,7 @@ public class CPPNodeFactory extends NodeFactory implements ICPPNodeFactory {
 	@Override
 	public ICPPASTLiteralExpression newUserDefinedLiteralExpression(int kind, String image) {
 		// TODO Auto-generated method stub
-		return newLiteralExpression(kind, image);
+		return new CPPASTUserDefinedLiteralExpression(kind, image.toCharArray());
 	}
 
 	@Override

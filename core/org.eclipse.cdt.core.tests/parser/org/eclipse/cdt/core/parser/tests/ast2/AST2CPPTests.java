@@ -9737,6 +9737,21 @@ public class AST2CPPTests extends AST2BaseTest {
 		parseAndCheckBindings();
 	}
 	
+	// int speed = 80kmh;
+	public void testUserDefinedIntegerLiteral2() throws Exception{
+		IASTTranslationUnit tu = parseAndCheckBindings();
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		IASTDeclaration speedDeclaration = declarations[0];
+		assertTrue(speedDeclaration instanceof IASTSimpleDeclaration);
+		IASTDeclarator declaratorSpeed = ((IASTSimpleDeclaration)speedDeclaration).getDeclarators()[0];
+		IASTInitializer initializer = declaratorSpeed.getInitializer();
+		assertTrue(initializer instanceof IASTEqualsInitializer);
+		IASTInitializerClause initClause = ((IASTEqualsInitializer)initializer).getInitializerClause();
+		assertTrue(initClause instanceof ICPPASTLiteralExpression);
+		ICPPASTLiteralExpression initExpression = (ICPPASTLiteralExpression) initClause;
+		assertEquals("80kmh", initExpression.toString());
+	}
+	
 	// int speed = 80_kmh;
 	public void testUserDefinedIntegerLiteral() throws Exception{
 		IASTTranslationUnit tu = parseAndCheckBindings();
