@@ -289,6 +289,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         fLexOptions.fSupportMinAndMax = configuration.supportMinAndMaxOperators();
         fLexOptions.fSupportSlashPercentComments= configuration.supportSlashPercentComments();
         fLexOptions.fSupportUTFLiterals = configuration.supportUTFLiterals();
+        fLexOptions.fSupportUserDefinedLiterals = configuration.supportUserDefinedLiterals();
         fLocationMap= new LocationMap(fLexOptions);
         fKeywords= new CharArrayIntMap(40, -1);
         fPPKeywords= new CharArrayIntMap(40, -1);
@@ -891,12 +892,14 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
             	return ppToken;
         		
         	case IToken.tINTEGER:
+        	case IToken.tUSER_DEFINED_INTEGER_LITERAL:
         		if ((options & CHECK_NUMBERS) != 0) {
         			checkNumber(ppToken, false);
         		}
         		break;
 
         	case IToken.tFLOATINGPT:
+        	case IToken.tUSER_DEFINED_FLOATING_LITERAL:
         		if ((options & CHECK_NUMBERS) != 0) {
         			checkNumber(ppToken, true);
         		}
