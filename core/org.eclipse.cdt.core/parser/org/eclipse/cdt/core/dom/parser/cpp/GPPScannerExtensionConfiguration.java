@@ -103,4 +103,13 @@ public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfigu
 	public boolean supportMinAndMaxOperators() {
         return true;
     }
+
+
+	/**
+	 * @since 5.4
+	 */
+	@Override
+	public boolean supportUserDefinedLiterals() {
+		return true;
+	}
 }
