@@ -751,7 +751,7 @@ final public class Lexer implements ITokenSequence {
 		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
 			Token udSuffix = identifier(start + length, 0);
 			tokenType = IToken.tUSER_DEFINED_STRING_LITERAL;
-			length = length + udSuffix.getLength();
+			length += udSuffix.getLength();
 		}
 		
 		return newToken(tokenType, start, length);
@@ -845,7 +845,7 @@ final public class Lexer implements ITokenSequence {
 		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
 			tokenType = IToken.tUSER_DEFINED_CHARACTER_LITERAL;
 			Token udSuffix = identifier(start + length, 0);
-			length = length + udSuffix.getLength();
+			length +=  udSuffix.getLength();
 		}
 		return newToken(tokenType, start, length);
 	}
@@ -921,6 +921,7 @@ final public class Lexer implements ITokenSequence {
 	
 	// Ref: 2.14.2
 	private Token integerLiteral(final int start, int length, int c, int d) throws OffsetLimitReachedException {
+		int tokenType = IToken.tINTEGER;
 		
 		if (c == '0') {
 			// Probably octal or hex
@@ -976,16 +977,20 @@ final public class Lexer implements ITokenSequence {
 			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken( IToken.tINTEGER, start, length));
 		}
 		
-		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+		if (isIdentifierStart()) {
 			Token udSuffix = identifier(start + length, 0);
-			return newToken(IToken.tUSER_DEFINED_INTEGER_LITERAL, start, length + udSuffix.getLength());
+			length += udSuffix.getLength();
+			if (fOptions.fSupportUserDefinedLiterals) {
+				tokenType = IToken.tUSER_DEFINED_INTEGER_LITERAL;
+			}
 		}
 		
-		return newToken(IToken.tINTEGER, start, length);
+		return newToken(tokenType, start, length);
 	}
 	
 	// Ref: 2.14.4
 	private Token floatLiteral(final int start, int length, int c, int d) throws OffsetLimitReachedException {
+		int tokenType = IToken.tFLOATINGPT;
 		boolean seenDecimalPoint = false;
 		
 		if (c == '.') {
@@ -1010,15 +1015,19 @@ final public class Lexer implements ITokenSequence {
 			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken(IToken.tFLOATINGPT, start, length));
 		}
 		
-		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+		if (isIdentifierStart()) {
 			Token udSuffix = identifier(start + length, 0);
-			return newToken(IToken.tUSER_DEFINED_FLOATING_LITERAL, start, length + udSuffix.getLength());
+			length += udSuffix.getLength();
+			if (fOptions.fSupportUserDefinedLiterals) {
+				tokenType = IToken.tUSER_DEFINED_FLOATING_LITERAL;
+			}
 		}
 		
-		return newToken(IToken.tFLOATINGPT, start, length);
+		return newToken(tokenType, start, length);
 	}
 	
 	private Token afterDecimalPoint(final int start, int length) throws OffsetLimitReachedException {
+		int tokenType = IToken.tFLOATINGPT;
 		int c = fCharPhase3;
 		
 		if (c == '.') {
@@ -1038,16 +1047,21 @@ final public class Lexer implements ITokenSequence {
 			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken(IToken.tFLOATINGPT, start, length));
 		}
 		
-		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+		if (isIdentifierStart()) {
 			Token udSuffix = identifier(start + length, 0);
-			return newToken(IToken.tUSER_DEFINED_FLOATING_LITERAL, start, length + udSuffix.getLength());
+			length += udSuffix.getLength();
+			if (fOptions.fSupportUserDefinedLiterals) {
+				tokenType = IToken.tUSER_DEFINED_FLOATING_LITERAL;
+			}
 		}
 		
-		return newToken(IToken.tFLOATINGPT, start, length);
+		return newToken(tokenType, start, length);
 	}
 	
 	private Token exponentPart(final int start, int length) throws OffsetLimitReachedException {
+		int tokenType = IToken.tFLOATINGPT;
 		int c = fCharPhase3;
+		
 		if ((c | 0x20) == 'e') {
 			c = nextCharPhase3();
 			length++;
@@ -1066,12 +1080,15 @@ final public class Lexer implements ITokenSequence {
 			throw new OffsetLimitReachedException(ORIGIN_LEXER, newToken(IToken.tFLOATINGPT, start, length));
 		}
 		
-		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart()) {
+		if (isIdentifierStart()) {
 			Token udSuffix = identifier(start + length, 0);
-			return newToken(IToken.tUSER_DEFINED_FLOATING_LITERAL, start, length + udSuffix.getLength());
+			length += udSuffix.getLength();
+			if (fOptions.fSupportUserDefinedLiterals) {
+				tokenType = IToken.tUSER_DEFINED_FLOATING_LITERAL;
+			}
 		}
 		
-		return newToken(IToken.tFLOATINGPT, start, length);
+		return newToken(tokenType, start, length);
 	}
 	
 	private Token number(final int start, int length, int c, int d) throws OffsetLimitReachedException {
