@@ -276,7 +276,11 @@ public class ExpressionEvaluator {
         case IToken.tUTF16STRING:
         case IToken.tUTF32STRING:
             throw new EvalException(IProblem.SCANNER_EXPRESSION_SYNTAX_ERROR, null); 
-        	
+        case IToken.tUSER_DEFINED_CHARACTER_LITERAL:
+        case IToken.tUSER_DEFINED_FLOATING_LITERAL:
+        case IToken.tUSER_DEFINED_INTEGER_LITERAL:
+        case IToken.tUSER_DEFINED_STRING_LITERAL:
+            throw new EvalException(IProblem.PREPROCESS_FOUND_USERDEFINED_LITEAL, fTokens.getCharImage());
         default:
             // 16.1.4 keywords are replaced by 0
         	final char[] image= fTokens.getCharImage();
