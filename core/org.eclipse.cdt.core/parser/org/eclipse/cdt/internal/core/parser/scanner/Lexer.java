@@ -932,11 +932,61 @@ final public class Lexer implements ITokenSequence {
 				 *   0X hexadecimal-digit
 				 *   hexadecimal-literal hexadecimal-digit
 				 */
+				markPhase3();
 				c = nextCharPhase3();
-				length++;
-				while (((c | 0x20) <= 'f' && (c | 0x20) >= 'a') || Character.isDigit(c)) {
-					c = nextCharPhase3();
+				if (isHexDigit(c)) {
 					length++;
+					while (isHexDigit(c)) {
+						c = nextCharPhase3();
+						length++;
+					}
+					
+					if (c == '.') {
+						// Could be GCC's Hex Float
+						// 0xHHH.HHH[pP]DDDD
+						markPhase3();
+						c = nextCharPhase3();
+						if (isHexDigit(c)) {
+							length++;
+							while (isHexDigit(c)) {
+								c = nextCharPhase3();
+								length++;
+							}
+							
+							if ((c | 0x20) == 'p') {
+								markPhase3();
+								c = nextCharPhase3();
+								
+								if (c == '-' || c == '+') {
+									length++;
+									c = nextCharPhase3();
+								}
+								
+								if (Character.isDigit((char)c)) {
+									length++;
+									while (Character.isDigit((char)c)) {
+										c = nextCharPhase3();
+										length++;
+									}
+								}
+								else {
+									restorePhase3();
+								}
+							}
+							else {
+								// The parser can get very confused at this
+								// point as the expression can be 0x1.f
+								restorePhase3();
+							}
+						}
+						else {
+							restorePhase3();
+						}
+					}
+					
+				}
+				else {
+					restorePhase3(); // 0x could be '0' with 'x' UDL
 				}
 			}
 			else if (c >= '0' && c <= '7') {
@@ -948,6 +998,22 @@ final public class Lexer implements ITokenSequence {
 					c = nextCharPhase3();
 					length++;
 				}
+			}
+			else if ((c | 0x20) == 'b') {
+				// GCC's binary constant notation
+				markPhase3();
+				c = nextCharPhase3();
+				if (c == '1' || c == '0') {
+					length++;
+					while (c == '1' || c == '0') {
+						c = nextCharPhase3();
+						length++;
+					}
+				}
+				else {
+					restorePhase3(); // 0b could be '0' with 'b' UDL
+				}
+				
 			}
 			else if (c == '.') {
 				return floatLiteral(start, length, '0' , '.');
@@ -1099,6 +1165,11 @@ final public class Lexer implements ITokenSequence {
 		else {
 			return integerLiteral(start, length, c, d);
 		}
+	}
+	
+	private boolean isHexDigit(int c) {
+		c |= 0x20;
+		return ((c <= 'f' && c >= 'a') || (c <= '9' && c >= '0'));
 	}
 	
 	// Checks the next token will be an identifier
