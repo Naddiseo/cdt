@@ -179,20 +179,17 @@ public class NumberParser {
 				c = next();
 			}
 			tp = NumberType.BINARY;
-			if (Character.isDigit((char)c) || !isIdentifierStart()) {
+			if (Character.isDigit((char)c)) {
 				// UDL can't begin with a digit, so this is a malformed binary
-				
-				if (c == '.') {
-					// No such thing as binary floating point (yet)
-					c = next();
-					while (Character.isDigit((char)c)) {
-						c = next();
-					}
-				}
-				else {
-					next(); // TODO: is this safe consuming the bad number?
-				}
+				next(); // TODO: is this safe consuming the bad number?
 				failed = true;
+			}
+			else if (c == '.') {
+				// No such thing as binary floating point (yet)
+				c = next();
+				while (Character.isDigit((char)c)) {
+					c = next();
+				}
 			}
 		}
 		else {
