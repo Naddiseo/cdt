@@ -419,7 +419,7 @@ public class LexerTests extends BaseTestCase {
 	}
 	
 	public void testNumber() throws Exception {
-		final String number= ".0123456789.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+		final String number= ".0123456789.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_" +
 			"\\uaaaa\\Uaaaaaaaae+e-E+E-";
 		for (int i = 0; i < 11; i++) {
 			String n= number.substring(i);
