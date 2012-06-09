@@ -19,6 +19,7 @@ import org.eclipse.cdt.core.dom.ast.IScope;
 import org.eclipse.cdt.core.parser.IToken;
 import org.eclipse.cdt.core.parser.Keywords;
 import org.eclipse.cdt.core.parser.OffsetLimitReachedException;
+import org.eclipse.cdt.core.parser.util.CharArrayUtils;
 import org.eclipse.cdt.internal.core.dom.Linkage;
 import org.eclipse.cdt.internal.core.parser.scanner.Lexer.LexerOptions;
 
@@ -165,7 +166,7 @@ class ObjectStyleMacro extends PreprocessorMacro {
 	public TokenList getTokens(MacroDefinitionParser mdp, LexerOptions lexOptions, MacroExpander expander) {
 		if (fExpansionTokens == null) {
 			fExpansionTokens= new TokenList();
-			Lexer lex= new Lexer(fExpansion, fExpansionOffset, fEndOffset, lexOptions, ILexerLog.NULL, this);
+			Lexer lex= new Lexer(fExpansion, fExpansionOffset, fEndOffset, lexOptions, ILexerLog.NULL, this, CharArrayUtils.EMPTY);
 			try {
 				lex.nextToken(); // consume the start token
 				mdp.parseExpansion(lex, ILexerLog.NULL, getNameCharArray(), getParameterPlaceholderList(), fExpansionTokens);

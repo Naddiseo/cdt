@@ -63,7 +63,7 @@ public class MacroDefinitionParser {
 	
 	public static char[] getExpansion(AbstractCharArray expansionImage, int offset, int endOffset) {
 		TokenList tl= new TokenList();
-		Lexer lex= new Lexer(expansionImage, offset, endOffset, new LexerOptions(), ILexerLog.NULL, null);
+		Lexer lex= new Lexer(expansionImage, offset, endOffset, new LexerOptions(), ILexerLog.NULL, null, CharArrayUtils.EMPTY);
 		try {
 			lex.nextToken(); // consume the start token
 			new MacroDefinitionParser().parseExpansion(lex, ILexerLog.NULL, null, new char[][]{}, tl);

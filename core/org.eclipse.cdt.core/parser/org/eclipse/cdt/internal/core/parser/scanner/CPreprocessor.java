@@ -308,7 +308,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         setupMacroDictionary(configuration, info, language);		
 
         ILocationCtx ctx= fLocationMap.pushTranslationUnit(fRootContent.getFileLocation(), fRootContent.getSource());
-        Lexer lexer = new Lexer(fRootContent.getSource(), fLexOptions, this, this);
+        Lexer lexer = new Lexer(fRootContent.getSource(), fLexOptions, this, this, fAdditionalNumericLiteralSuffixes);
         fRootContext= fCurrentContext= new ScannerContext(ctx, null, lexer);
         if (info instanceof IExtendedScannerInfo) {
         	final IExtendedScannerInfo einfo= (IExtendedScannerInfo) info;
@@ -926,7 +926,33 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 
 	private void checkNumber(Token number, final boolean isFloat) {
         final char[] image= number.getCharImage();
-        boolean hasExponent = false;
+        
+        NumberParser np = new NumberParser(fLexOptions, fAdditionalNumericLiteralSuffixes, new DefaultCharGetter(image, 0));
+        NumberToken nt = np.getNumber();
+        
+        if (nt.hasFailed()) {
+        	switch (nt.getType()) {
+        	case BINARY:
+        		handleProblem(IProblem.SCANNER_BAD_BINARY_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case FLOAT:
+        		handleProblem(IProblem.SCANNER_BAD_FLOATING_POINT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case DECIMAL:
+        		handleProblem(IProblem.SCANNER_BAD_DECIMAL_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case HEX:
+        	case HEXFLOAT:
+        		handleProblem(IProblem.SCANNER_BAD_HEX_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case OCTAL:
+        		handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	}
+        }
+        
+        return;
+/*        boolean hasExponent = false;
 
         // Integer constants written in binary are a non-standard extension
         // supported by GCC since 4.3 and by some other C compilers
@@ -1067,6 +1093,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
             }
             return;
         }
+        */
     }
 
     private <T> T findInclusion(final String includeDirective, final boolean quoteInclude,
