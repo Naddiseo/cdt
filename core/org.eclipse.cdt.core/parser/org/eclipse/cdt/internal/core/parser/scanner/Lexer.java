@@ -175,6 +175,11 @@ final public class Lexer implements ITokenSequence {
 			public boolean isIdentifierStart() {
 				return Lexer.this.isIdentifierStart();
 			}
+
+			@Override
+			public char[] getCharImage(int offset, int endOffset, int imageLength) {
+				return Lexer.this.getCharImage(offset, endOffset, imageLength);
+			}
 		});
 	}
 	

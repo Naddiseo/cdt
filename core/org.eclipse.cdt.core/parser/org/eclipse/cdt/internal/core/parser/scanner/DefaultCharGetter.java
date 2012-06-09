@@ -82,4 +82,17 @@ public class DefaultCharGetter implements CharGetter {
 		return Character.isLetter(c) || c == '_'; // Naive check
 	}
 
+	@Override
+	public char[] getCharImage(int offset, int endOffset, int imageLength) {
+		char[] result = new char[imageLength];
+		int j = 0;
+		for (int i = offset; i < endOffset; i++) {
+			char c = fImage.get(i);
+			if (c != '\n' && c != '\r') {
+				result[j++] = c;
+			}
+		}
+		return result;
+	}
+
 }

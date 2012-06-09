@@ -31,10 +31,12 @@ public class NumberParser {
 		public int getOffset(); // Offset into the CharArray
 		public char[] getSubstring(int start, int length);
 		public boolean isIdentifierStart(); // is the current character the start of an identifier
+		public char[] getCharImage(int offset, int endOffset, int imageLength);
 	}
 	
 	private int fStart; // Start of the number into the CharArray
 	private int fChar; // Current char
+	private int fExpectedLength; // The expected length of the number
 	
 	private final LexerOptions fOptions;
 	private final char[] fAdditionalNumericLiteralSuffixes;
@@ -47,9 +49,11 @@ public class NumberParser {
 
 		fStart = getOffset();
 		fChar = fGetter.get();
+		fExpectedLength = 0;
 	}
 	
 	public NumberToken getNumber() {
+		fExpectedLength = 0;
 		fStart = getOffset();
 		fChar = fGetter.get();
 		if (fChar == '.') {
@@ -369,12 +373,17 @@ public class NumberParser {
 					failed =  true;
 				}
 			}
-		}		
+		}	
+		if (getLength() != fExpectedLength) {
+			result = fGetter.getCharImage(fStart, getOffset(), fExpectedLength);
+			
+		}
 		return new NumberToken(result, type, kind, suffixOffset, fStart, failed);
 	}
 	
 	private int next() {
 		fChar = fGetter.next();
+		fExpectedLength++;
 		return fChar;
 	}
 	
