@@ -179,9 +179,19 @@ public class NumberParser {
 				c = next();
 			}
 			tp = NumberType.BINARY;
-			if (Character.isDigit((char)c)) {
+			if (Character.isDigit((char)c) || !isIdentifierStart()) {
 				// UDL can't begin with a digit, so this is a malformed binary
-				next(); // TODO: is this safe consuming the bad number?
+				
+				if (c == '.') {
+					// No such thing as binary floating point (yet)
+					c = next();
+					while (Character.isDigit((char)c)) {
+						c = next();
+					}
+				}
+				else {
+					next(); // TODO: is this safe consuming the bad number?
+				}
 				failed = true;
 			}
 		}
@@ -288,9 +298,6 @@ public class NumberParser {
 	
 	private boolean isCompilerSuffix(char[] suffix, int kind) {
 		boolean result = true;
-		if (!fOptions.fSupportUserDefinedLiterals) {
-			return true;
-		}
 		
 		if (kind == IToken.tINTEGER) {
 			loop: for (char c : suffix) {
@@ -345,22 +352,27 @@ public class NumberParser {
 	
 	private NumberToken nextToken(int kind, NumberType type, boolean failed) {
 		Token udSuffix = getSuffix();
-		int suffixOffset = 0;
+		int suffixOffset = getLength();
 		char[] result = CharArrayUtils.EMPTY;
 		
 		result = fGetter.getSubstring(fStart, getLength());
 		
 		if (udSuffix != null) {
-			suffixOffset = udSuffix.getLength();
+			suffixOffset = udSuffix.getOffset();
 			if (!isCompilerSuffix(udSuffix.getCharImage(), kind)) {
-				if (kind == IToken.tINTEGER) {
-					kind = IToken.tUSER_DEFINED_INTEGER_LITERAL;
+				if (fOptions.fSupportUserDefinedLiterals) {
+					if (kind == IToken.tINTEGER) {
+						kind = IToken.tUSER_DEFINED_INTEGER_LITERAL;
+					}
+					else if (kind == IToken.tFLOATINGPT) {
+						kind = IToken.tUSER_DEFINED_FLOATING_LITERAL;
+					}
 				}
-				else if (kind == IToken.tFLOATINGPT) {
-					kind = IToken.tUSER_DEFINED_FLOATING_LITERAL;
+				else {
+					failed =  true;
 				}
 			}
-		}
+		}		
 		return new NumberToken(result, type, kind, suffixOffset, fStart, failed);
 	}
 	

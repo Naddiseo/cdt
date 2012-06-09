@@ -49,7 +49,9 @@ public class DefaultCharGetter implements CharGetter {
 	public Token getIdentifier() {
 		// Assume that the end of the number to the end of the string
 		// is an identifier
-		return new TokenWithImage(IToken.tIDENTIFIER, this, fOffset, fImage.getLength(), fImage.toString().toCharArray());
+		char[] image = new char[fImage.getLength() - fOffset];
+		fImage.arraycopy(fOffset, image, 0, image.length);
+		return new TokenWithImage(IToken.tIDENTIFIER, this, fOffset, fImage.getLength(), image);
 	}
 
 	@Override
