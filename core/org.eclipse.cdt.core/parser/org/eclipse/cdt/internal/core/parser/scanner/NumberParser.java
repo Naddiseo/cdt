@@ -105,6 +105,11 @@ public class NumberParser {
 			if (fChar == '8' || fChar == '9') {
 				tp = NumberType.OCTAL;
 				failed = true;
+				
+				// eat any remaining numbers
+				while (Character.isDigit((char)fChar)) {
+					next();
+				}
 			}
 		}
 		else if (Character.isDigit((char)fChar)) {
@@ -220,7 +225,10 @@ public class NumberParser {
 			tp = NumberType.HEX;
 			if (fChar == '.') {
 				// Could be GCC's Hex Float
-				return probablyHexFloat();
+				return hexFloatAfterDecimal();
+			}
+			else if ((fChar | 0x20) == 'p') {
+				return hexFloatExponent();
 			}
 		}
 		else {
@@ -231,9 +239,9 @@ public class NumberParser {
 		return nextToken(IToken.tINTEGER, tp, false);
 	}
 	
-	private NumberToken probablyHexFloat() {
-		// 0xHHH.HHH[pP]DDDD
-		NumberType tp = NumberType.HEX;
+	// Assumes fChar == '.
+	private NumberToken hexFloatAfterDecimal() {
+		// 0xHHH.
 		boolean failed = false;
 		mark();
 		next();
@@ -243,23 +251,7 @@ public class NumberParser {
 			}
 			
 			if ((fChar | 0x20) == 'p') {
-				mark();
-				next();
-				
-				if (fChar == '-' || fChar == '+') {
-					next();
-				}
-				
-				if (Character.isDigit((char)fChar)) {
-					while (Character.isDigit((char)fChar)) {
-						next();
-					}
-					tp = NumberType.HEXFLOAT;
-				}
-				else {
-					restore();
-					failed = true;
-				}
+				return hexFloatExponent();
 			}
 			else {
 				// The parser can get very confused at this
@@ -274,7 +266,37 @@ public class NumberParser {
 			failed = true;
 		}
 		
-		return nextToken(IToken.tINTEGER, tp, failed);
+		return nextToken(IToken.tINTEGER, NumberType.HEX, failed);
+	}
+	
+	// Assumes fChar == 'p'
+	private NumberToken hexFloatExponent() {
+		// 0xHHH.HHH[pP]DDDD
+		NumberType tp = NumberType.HEX;
+		int tokenType = IToken.tINTEGER;
+		boolean failed = false;
+
+		mark();
+		next();
+		
+		if (fChar == '-' || fChar == '+') {
+			next();
+		}
+		
+		if (Character.isDigit((char)fChar)) {
+			while (Character.isDigit((char)fChar)) {
+				next();
+			}
+			tp = NumberType.HEXFLOAT;
+			tokenType = IToken.tFLOATINGPT;
+		}
+		else {
+			restore();
+			failed = true;
+		}
+			
+		
+		return nextToken(tokenType, tp, failed);
 	}
 	
 	private boolean isHexDigit() {
@@ -354,12 +376,14 @@ public class NumberParser {
 	private NumberToken nextToken(int kind, NumberType type, boolean failed) {
 		Token udSuffix = getSuffix();
 		int suffixOffset = getLength();
+		int udLength = 0;
 		char[] result = CharArrayUtils.EMPTY;
 		
 		result = fGetter.getSubstring(fStart, getLength());
 		
 		if (udSuffix != null) {
 			suffixOffset = udSuffix.getOffset();
+			udLength = udSuffix.getLength();
 			if (!isCompilerSuffix(udSuffix.getCharImage(), kind)) {
 				if (fOptions.fSupportUserDefinedLiterals) {
 					if (kind == IToken.tINTEGER) {
@@ -374,7 +398,7 @@ public class NumberParser {
 				}
 			}
 		}	
-		if (getLength() != fExpectedLength) {
+		if (getLength() != fExpectedLength + udLength) {
 			result = fGetter.getCharImage(fStart, getOffset(), fExpectedLength);
 			
 		}
