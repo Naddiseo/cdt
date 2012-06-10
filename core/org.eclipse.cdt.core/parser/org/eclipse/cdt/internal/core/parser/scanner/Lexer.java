@@ -11,6 +11,9 @@
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.parser.scanner;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 import org.eclipse.cdt.core.parser.IGCCToken;
 import org.eclipse.cdt.core.parser.IProblem;
 import org.eclipse.cdt.core.parser.IToken;
@@ -86,9 +89,10 @@ final public class Lexer implements ITokenSequence {
 	private Token fLastToken;
 	
 	// For the few cases where we have to lookahead more than one character
-	private int fMarkOffset;
-	private int fMarkEndOffset;
-	private int fMarkPrefetchedChar;
+	private Deque<Integer> fMarkOffset;
+	private Deque<Integer> fMarkEndOffset;
+	private Deque<Integer> fMarkPrefetchedChar;
+	private int fDequeDepth; // Keep track of how many internal save states
 	// To store the entire state.
 	private boolean fMarkInsideIncludeDirective;
 	private Token fMarkToken;
@@ -110,6 +114,10 @@ final public class Lexer implements ITokenSequence {
 		fLog= log;
 		fSource= source;
 		fLastToken= fToken= new Token(tBEFORE_INPUT, source, start, start);
+		fMarkOffset = new ArrayDeque<Integer>();
+		fMarkEndOffset = new ArrayDeque<Integer>();
+		fMarkPrefetchedChar = new ArrayDeque<Integer>();
+		fDequeDepth = 0;
 		nextCharPhase3();
 	}
 	
@@ -248,6 +256,7 @@ final public class Lexer implements ITokenSequence {
 	 */
 	private Token fetchToken() throws OffsetLimitReachedException {
 		while (true) {
+			markPhase3();
 			final int start= fOffset;
 			final int c= fCharPhase3;
 			final int d= nextCharPhase3();
@@ -262,6 +271,7 @@ final public class Lexer implements ITokenSequence {
 			case 0xb:  // vertical tab
 			case '\f': 
 			case '\r':
+				popPhase3State();
 				continue;
 
 			case 'L':
@@ -473,13 +483,16 @@ final public class Lexer implements ITokenSequence {
 				case '/':
 					nextCharPhase3();
 					lineComment(start);
+					popPhase3State();
 					continue; 
 				case '*':
 					blockComment(start, '*');
+					popPhase3State();
 					continue;
 				case '%':
 					if (fOptions.fSupportSlashPercentComments) {
 						blockComment(start, '%');
+						popPhase3State();
 						continue;
 					}
 					break;
@@ -622,10 +635,12 @@ final public class Lexer implements ITokenSequence {
     }
 
 	private Token newToken(int kind, int offset) {
+		popPhase3State();
     	return new Token(kind, fSource, offset, fOffset);
     }
 
 	private Token newDigraphToken(int kind, int offset) {
+		popPhase3State();
     	return new TokenForDigraph(kind, fSource, offset, fOffset);
     }
 
@@ -640,6 +655,7 @@ final public class Lexer implements ITokenSequence {
 			image= new char[imageLength];
 			fInput.arraycopy(offset, image, 0, imageLength);
     	}
+    	popPhase3State();
     	return new TokenWithImage(kind, fSource, offset, endOffset, image);
     }
 
@@ -987,18 +1003,29 @@ final public class Lexer implements ITokenSequence {
 	 * with a long prefix.
 	 */
 	private void markPhase3() {
-		fMarkOffset= fOffset;
-		fMarkEndOffset= fEndOffset;
-		fMarkPrefetchedChar= fCharPhase3;
+		fMarkOffset.addFirst(fOffset);
+		fMarkEndOffset.addFirst(fEndOffset);
+		fMarkPrefetchedChar.addFirst(fCharPhase3);
+		fDequeDepth++;
 	}
 	
 	/**
 	 * Restores a previously saved state of phase3.
 	 */
 	private void restorePhase3() {
-		fOffset= fMarkOffset;
-		fEndOffset= fMarkEndOffset;
-		fCharPhase3= fMarkPrefetchedChar;
+		fOffset= fMarkOffset.removeFirst();
+		fEndOffset= fMarkEndOffset.removeFirst();
+		fCharPhase3= fMarkPrefetchedChar.removeFirst();
+		fDequeDepth--;
+	}
+	
+	private void popPhase3State() {
+		if (fDequeDepth > 0) {
+			fMarkOffset.removeFirst();
+			fMarkEndOffset.removeFirst();
+			fMarkPrefetchedChar.removeFirst();
+			fDequeDepth--;
+		}
 	}
 	
 	/**
@@ -1163,20 +1190,22 @@ final public class Lexer implements ITokenSequence {
 	}
 
 	public void saveState() {
-		fMarkOffset= fOffset;
-		fMarkEndOffset= fEndOffset;
-		fMarkPrefetchedChar= fCharPhase3;
+		fMarkOffset.addFirst(fOffset);
+		fMarkEndOffset.addFirst(fEndOffset);
+		fMarkPrefetchedChar.addFirst(fCharPhase3);
 		fMarkInsideIncludeDirective= fInsideIncludeDirective;
 		fMarkToken= fToken;
 		fMarkLastToken= fLastToken;
+		fDequeDepth++;
 	}
 
 	public void restoreState() {
-		fOffset= fMarkOffset;
-		fEndOffset= fMarkEndOffset;
-		fCharPhase3= fMarkPrefetchedChar;
+		fOffset= fMarkOffset.removeFirst();
+		fEndOffset= fMarkEndOffset.removeFirst();
+		fCharPhase3= fMarkPrefetchedChar.removeFirst();
 		fInsideIncludeDirective= fMarkInsideIncludeDirective;
 		fToken= fMarkToken;
 		fLastToken= fMarkLastToken;
+		fDequeDepth--;
 	}
 }
