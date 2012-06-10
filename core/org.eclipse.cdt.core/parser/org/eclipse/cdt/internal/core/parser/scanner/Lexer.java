@@ -697,6 +697,12 @@ final public class Lexer implements ITokenSequence {
 
 	private Token newToken(int kind, int offset) {
 		popPhase3State();
+		return newToken(kind, offset, true);
+	}
+	private Token newToken(int kind, int offset, boolean restore) {
+		if (restore) {
+			popPhase3State(); // Undo the restore done at the beginning of fetchToken
+		}
     	return new Token(kind, fSource, offset, fOffset);
     }
 
@@ -705,7 +711,10 @@ final public class Lexer implements ITokenSequence {
     	return new TokenForDigraph(kind, fSource, offset, fOffset);
     }
 
-    private Token newToken(final int kind, final int offset, final int imageLength) {
+	private Token newToken(final int kind, final int offset, final int imageLength) {
+		return newToken(kind, offset, imageLength, true);
+	}
+    private Token newToken(final int kind, final int offset, final int imageLength, boolean restore) {
     	final int endOffset= fOffset;
     	final int sourceLen= endOffset-offset;
     	char[] image;
@@ -716,7 +725,9 @@ final public class Lexer implements ITokenSequence {
 			image= new char[imageLength];
 			fInput.arraycopy(offset, image, 0, imageLength);
     	}
-    	popPhase3State();
+    	if (restore) {
+    		popPhase3State(); // Undo the restore done at the beginning of fetchToken
+		}
     	return new TokenWithImage(kind, fSource, offset, endOffset, image);
     }
 
@@ -974,7 +985,7 @@ final public class Lexer implements ITokenSequence {
 	private Token number() throws OffsetLimitReachedException {
 		NumberToken nt = fNumberParser.getNumber();
 
-		return newToken(nt.getKind(), nt.getOffset(), nt.getLength());
+		return newToken(nt.getKind(), nt.getOffset(), nt.getLength(), false);
 	}
 	
 	// Checks the next token will be an identifier
