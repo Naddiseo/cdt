@@ -98,15 +98,26 @@ final public class Lexer implements ITokenSequence {
 	private Token fMarkToken;
 	private Token fMarkLastToken;
 	
+	// Utility for numbers
+	private NumberParser fNumberParser;
+	
 	public Lexer(char[] input, LexerOptions options, ILexerLog log, Object source) {
-		this(new CharArray(input), 0, input.length, options, log, source);
+		this(new CharArray(input), options, log, source, CharArrayUtils.EMPTY);
 	}
 
 	public Lexer(AbstractCharArray input, LexerOptions options, ILexerLog log, Object source) {
-		this(input, 0, input.tryGetLength(), options, log, source);
+		this(input, options, log, source, CharArrayUtils.EMPTY);
+	}
+
+	public Lexer(char[] input, LexerOptions options, ILexerLog log, Object source, char[] additionalSuffixes) {
+		this(new CharArray(input), 0, input.length, options, log, source, additionalSuffixes);
+	}
+
+	public Lexer(AbstractCharArray input, LexerOptions options, ILexerLog log, Object source, char[] additionalSuffixes) {
+		this(input, 0, input.tryGetLength(), options, log, source, additionalSuffixes);
 	}
 	
-	public Lexer(AbstractCharArray input, int start, int end, LexerOptions options, ILexerLog log, Object source) {
+	public Lexer(AbstractCharArray input, int start, int end, LexerOptions options, ILexerLog log, Object source, char[] additionalSuffixes) {
 		fInput= input;
 		fStart= fOffset= fEndOffset= start;
 		fLimit= end;
@@ -119,6 +130,55 @@ final public class Lexer implements ITokenSequence {
 		fMarkPrefetchedChar = new ArrayDeque<Integer>();
 		fDequeDepth = 0;
 		nextCharPhase3();
+
+		fNumberParser = new NumberParser(fOptions, additionalSuffixes, new NumberParser.CharGetter() {
+			@Override
+			public int get() {
+				return fCharPhase3;
+			}
+
+			@Override
+			public int next() {
+				return nextCharPhase3();
+			}
+
+			@Override
+			public Token getIdentifier() {
+				return identifier(fOffset, 0);
+			}
+
+			@Override
+			public void mark() {
+				markPhase3();
+			}
+
+			@Override
+			public void restore() {
+				restorePhase3();
+			}
+
+			@Override
+			public int getOffset() {
+				return fOffset;
+			}
+
+			@Override
+			public char[] getSubstring(int start, int length) {
+				char[] result = new char[length];
+				fInput.arraycopy(start, result, 0, length);
+				return result;
+			}
+
+			@Override
+			public boolean isIdentifierStart() {
+				return Lexer.this.isIdentifierStart();
+			}
+
+			@Override
+			public char[] getCharImage(int offset, int endOffset, int imageLength) {
+				return Lexer.this.getCharImage(offset, endOffset, imageLength);
+			}
+		});
 	}
 	
 	private boolean isValidOffset(int pos) {
@@ -378,14 +438,15 @@ final public class Lexer implements ITokenSequence {
 
 			case '0': case '1': case '2': case '3': case '4':
 			case '5': case '6': case '7': case '8': case '9':
-				return number(start, 1, false);
+				restorePhase3();
+				return number();
 
 			case '.':
 				switch(d) {
 				case '0': case '1': case '2': case '3': case '4':
 				case '5': case '6': case '7': case '8': case '9':
-					nextCharPhase3();
-					return number(start, 2, true);
+					restorePhase3();
+					return number();
 
 				case '.':
 					markPhase3();
@@ -910,93 +971,105 @@ final public class Lexer implements ITokenSequence {
         return newToken(tokenKind, start, length);
 	}
 	
-	private Token number(final int start, int length, boolean isFloat) throws OffsetLimitReachedException {
-		boolean isPartOfNumber= true;
-		boolean isHex= false;
-		int c= fCharPhase3;
-		while (true) {
-			switch(c) {
-			// non-digit
-            case 'a': case 'b': case 'c': case 'd':           case 'f': case 'g': case 'h': case 'i': 
-            case 'j': case 'k': case 'l': case 'm': case 'n': case 'o':           case 'q': case 'r': 
-            case 's': case 't': case 'u': case 'v': case 'w':           case 'y': case 'z':
-            case 'A': case 'B': case 'C': case 'D':           case 'F': case 'G': case 'H': case 'I':
-            case 'J': case 'K': case 'L': case 'M': case 'N': case 'O':           case 'Q': case 'R': 
-            case 'S': case 'T': case 'U': case 'V': case 'W': 		    case 'Y': case 'Z':
-            case '_': 
-            	
-            // digit
-            case '0': case '1': case '2': case '3': case '4':
-            case '5': case '6': case '7': case '8': case '9':
-            	break;
-            	
-            case 'x': case 'X':
-            	isHex= !isFloat;
-            	break;
-            	
-            // period
-            case '.':
-            	isFloat= true;
-            	break;
-            	
-            // exponents
-            case 'e':
-            case 'E':
-            	if (isHex)
-            		break;
-            	//$FALL-THROUGH$
-            case 'p':
-            case 'P':
-            	length++;
-            	c= nextCharPhase3();
-            	switch (c) {
-            	case '+': case '-':
-            	case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-            		isFloat= true;
-            		isHex= false;
-            		length++;
-                	c= nextCharPhase3();
-            		break;
-            	}
-            	continue;
-            	
-            // universal character name (non-digit)
-            case '\\':
-            	markPhase3();
-            	switch(nextCharPhase3()) {
-            	case 'u': case 'U':
-            		length++;
-            		break;
-            	default:
-            		restorePhase3();
-            		isPartOfNumber= false;
-            		break;
-            	}
-            	break;
-            
-            case END_OF_INPUT:
-				if (fSupportContentAssist) {
-					throw new OffsetLimitReachedException(ORIGIN_LEXER, 
-							newToken((isFloat ? IToken.tFLOATINGPT : IToken.tINTEGER), start, length));
-				}
-				isPartOfNumber= false;
-				break;
-				
-            default:
-            	isPartOfNumber= false;
-            	break;
-			}
-        	if (!isPartOfNumber) {
-        		break;
-        	}
-        	
-        	c= nextCharPhase3();
-        	length++;
-		}
-		
-        return newToken((isFloat ? IToken.tFLOATINGPT : IToken.tINTEGER), start, length);
+	private Token number() throws OffsetLimitReachedException {
+		NumberToken nt = fNumberParser.getNumber();
+
+		return newToken(nt.getKind(), nt.getOffset(), nt.getLength());
 	}
 	
+	// Checks the next token will be an identifier
+	private boolean isIdentifierStart() {
+		final int c = fCharPhase3;
+		markPhase3();
+		int d = nextCharPhase3();
+		boolean ret = false;
+
+		lookup: switch (c) {
+		case 'L':
+			switch (d) {
+			case 'R':
+				markPhase3();
+				if (nextCharPhase3() == '"') {
+					break lookup;
+				}
+				restorePhase3();
+				break;
+			case '"':
+			case '\'':
+				break lookup;
+			}
+			ret = true;
+			break lookup;
+		case 'u':
+		case 'U':
+			if (fOptions.fSupportUTFLiterals) {
+				switch (d) {
+				case 'R':
+					markPhase3();
+					if (nextCharPhase3() == '"') {
+						break lookup;
+					}
+					restorePhase3();
+					break;
+				case '"':
+				case '\'':
+					break lookup;
+				case '8':
+					if (c == 'u') {
+						markPhase3();
+						switch (nextCharPhase3()) {
+						case 'R':
+							if (nextCharPhase3() == '"') {
+								break lookup;
+							}
+							break;
+						case '"':
+							break lookup;
+						}
+						restorePhase3();
+					}
+					break;
+				}
+			}
+			ret = true;
+			break lookup;
+
+		case 'R':
+			if (d == '"') {
+				break lookup;
+			}
+			ret =  true;
+			break lookup;
+		case '"':
+		case '\'':
+			break lookup;
+
+		case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': 
+		case 'j': case 'k': case 'l': case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': 
+		case 's': case 't':           case 'v': case 'w': case 'x': case 'y': case 'z':
+		case 'A': case 'B': case 'C': case 'D': case 'E': case 'F': case 'G': case 'H': case 'I':
+		case 'J': case 'K':           case 'M': case 'N': case 'O': case 'P': case 'Q':  
+		case 'S': case 'T':           case 'V': case 'W': case 'X': case 'Y': case 'Z':
+		case '_':
+			ret = true;
+			break lookup;
+
+		case '$':
+			ret = fOptions.fSupportDollarInIdentifiers;
+			break lookup;
+		case '@':
+			ret = fOptions.fSupportAtSignInIdentifiers;
+			break lookup;
+		default:
+			if (Character.isUnicodeIdentifierStart((char) c)) {
+				ret = true;
+			}
+			break;
+		}
+		restorePhase3();
+		return ret;
+	}
+
 	
 	/**
 	 * Saves the current state of phase3, necessary for '...', '%:%:', UNCs and string literals
@@ -1187,6 +1260,14 @@ final public class Lexer implements ITokenSequence {
 		}
 		restorePhase3();
 		return result;
+	}
+
+	public void resetStateStack() {
+		while (fDequeDepth-- > 0) {
+			fMarkOffset.removeFirst();
+			fMarkEndOffset.removeFirst();
+			fMarkPrefetchedChar.removeFirst();
+		}
 	}
 
 	public void saveState() {

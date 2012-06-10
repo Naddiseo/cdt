@@ -307,7 +307,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         setupMacroDictionary(configuration, info, language);		
 
         ILocationCtx ctx= fLocationMap.pushTranslationUnit(fRootContent.getFileLocation(), fRootContent.getSource());
-        Lexer lexer = new Lexer(fRootContent.getSource(), fLexOptions, this, this);
+        Lexer lexer = new Lexer(fRootContent.getSource(), fLexOptions, this, this, fAdditionalNumericLiteralSuffixes);
         fRootContext= fCurrentContext= new ScannerContext(ctx, null, lexer);
         if (info instanceof IExtendedScannerInfo) {
         	final IExtendedScannerInfo einfo= (IExtendedScannerInfo) info;
@@ -923,147 +923,34 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 
 	private void checkNumber(Token number, final boolean isFloat) {
         final char[] image= number.getCharImage();
-        boolean hasExponent = false;
-
-        // Integer constants written in binary are a non-standard extension
-        // supported by GCC since 4.3 and by some other C compilers
-        // They consist of a prefix 0b or 0B, followed by a sequence of 0 and 1 digits
-        // see http://gcc.gnu.org/onlinedocs/gcc/Binary-constants.html
-        boolean isBin = false;
-
-        boolean isHex = false;
-        boolean isOctal = false;
-        boolean hasDot= false;
-
-        int pos= 0;
-        if (image.length > 1) {
-        	if (image[0] == '0') {
-        		switch (image[++pos]) {
-        		case 'b':
-        		case 'B':
-        			isBin = true;
-        			++pos;
-        			break;
-        		case 'x':
-        		case 'X':
-        			isHex = true;
-        			++pos;
-        			break;
-        		case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
-        			isOctal = true;
-        			++pos;
-        			break;
-        		case '8': case '9':
-        			handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
-        			return;
-        		}
+        NumberParser np = new NumberParser(fLexOptions, fAdditionalNumericLiteralSuffixes, new DefaultCharGetter(image, 0));
+        NumberToken nt = np.getNumber();
+        
+        if (nt == null) {
+        	return;
+        }
+        
+        if (nt.hasFailed()) {
+        	switch (nt.getType()) {
+        	case BINARY:
+        		handleProblem(IProblem.SCANNER_BAD_BINARY_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case FLOAT:
+        		handleProblem(IProblem.SCANNER_BAD_FLOATING_POINT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case DECIMAL:
+        		handleProblem(IProblem.SCANNER_BAD_DECIMAL_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case HEX:
+        	case HEXFLOAT:
+        		handleProblem(IProblem.SCANNER_BAD_HEX_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
+        	case OCTAL:
+        		handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
+        		break;
         	}
         }
-
-        loop: for (; pos < image.length; pos++) {
-            if (isBin) {
-            	switch (image[pos]) {
-                case '0': case'1':
-                	continue;
-                default:
-                	// 0 and 1 are the only allowed digits for binary integers
-                	// No floating point, exponents etc. are allowed
-                	break loop;
-            	}
-            }
-            switch (image[pos]) {
-            // octal digits
-            case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
-            	continue;
-            	
-            // decimal digits
-            case '8': case '9':
-            	if (isOctal) {
-        			handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
-        			return;
-            	}
-                continue;
-
-            // hex digits
-            case 'a': case 'A': case 'b': case 'B': case 'c': case 'C': case 'd': case 'D': case 'f': case 'F':
-                if (isHex && !hasExponent) {
-                    continue;
-                }
-                break loop;
-
-            case '.':
-                if (hasDot) {
-                    handleProblem(IProblem.SCANNER_BAD_FLOATING_POINT, image, number.getOffset(), number.getEndOffset());
-                    return;
-                }
-                hasDot= true;
-                continue;
-
-            // check for exponent or hex digit
-            case 'E': case 'e':
-                if (isHex && !hasExponent) {
-                    continue;
-                }
-                if (isFloat && !isHex && !hasExponent && pos+1 < image.length) {
-                	switch (image[pos+1]) {
-                	case '+': case '-':
-                	case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-                		hasExponent = true;
-                		++pos;
-                		continue;
-                	}
-                }
-                break loop;
-
-            // check for hex float exponent
-            case 'p': case 'P':
-                if (isFloat && isHex && !hasExponent && pos+1 < image.length) {
-                	switch (image[pos+1]) {
-                	case '+': case '-':
-                	case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-                		hasExponent = true;
-                		++pos;
-                		continue;
-                	}
-                }
-                break loop;
-
-            default:
-            	break loop;
-            }
-        }
-
-        // check the suffix
-        loop: for (; pos < image.length; pos++) {
-        	final char c= image[pos];
-            switch (c) {
-            case 'u': case 'U': case 'L': case 'l':
-            	continue;
-            case 'f': case 'F':
-            	if (isFloat) {
-            		continue loop;
-            	}
-            }
-            for (int i= 0; i < fAdditionalNumericLiteralSuffixes.length; i++) {
-				if (fAdditionalNumericLiteralSuffixes[i] == c) {
-					continue loop;
-				}
-			}
-            if (isBin) {
-            	// The check for bin has to come before float, otherwise binary integers
-            	// with float components get flagged as BAD_FLOATING_POINT
-            	handleProblem(IProblem.SCANNER_BAD_BINARY_FORMAT, image, number.getOffset(), number.getEndOffset());
-            } else if (isFloat) {
-            	handleProblem(IProblem.SCANNER_BAD_FLOATING_POINT, image, number.getOffset(), number.getEndOffset());
-            } else if (isHex) {
-            	handleProblem(IProblem.SCANNER_BAD_HEX_FORMAT, image, number.getOffset(), number.getEndOffset());
-            } else if (isOctal) {
-            	handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
-            } else {
-            	handleProblem(IProblem.SCANNER_BAD_DECIMAL_FORMAT, image, number.getOffset(), number.getEndOffset());
-            }
-            return;
-        }
+        return;
     }
 
     private <T> T findInclusion(final String includeDirective, final boolean quoteInclude,
