@@ -930,6 +930,10 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         NumberParser np = new NumberParser(fLexOptions, fAdditionalNumericLiteralSuffixes, new DefaultCharGetter(image, 0));
         NumberToken nt = np.getNumber();
         
+        if (nt == null) {
+        	return;
+        }
+        
         if (nt.hasFailed()) {
         	switch (nt.getType()) {
         	case BINARY:

@@ -56,7 +56,10 @@ public class NumberParser {
 		fExpectedLength = 0;
 		fStart = getOffset();
 		fChar = fGetter.get();
-		if (fChar == '.') {
+		if (fChar == -1) {
+			return null;
+		}
+		else if (fChar == '.') {
 			return afterDecimalPoint();
 		}
 		else {
@@ -336,10 +339,14 @@ public class NumberParser {
 				for (char d : fAdditionalNumericLiteralSuffixes) {
 					if (d == c) {
 						found = true;
+						break;
 					}
 				}
 				if (!found && !result) {
 					return false;
+				}
+				else if (found) {
+					result = true; 
 				}
 			}
 		}
@@ -362,6 +369,9 @@ public class NumberParser {
 				}
 				if (!found && !result) {
 					return false;
+				}
+				else {
+					return true;
 				}
 			}
 		}
@@ -407,7 +417,9 @@ public class NumberParser {
 	
 	private int next() {
 		fChar = fGetter.next();
-		fExpectedLength++;
+		if (fChar > 0) {
+			fExpectedLength++;
+		}
 		return fChar;
 	}
 	
