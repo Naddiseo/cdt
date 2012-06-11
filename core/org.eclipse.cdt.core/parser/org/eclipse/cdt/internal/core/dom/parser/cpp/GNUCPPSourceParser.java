@@ -13,6 +13,7 @@
  *     Mike Kucera (IBM)
  *     Andrew Ferguson (Symbian)
  *     Sergey Prigogin (Google)
+ *     Richard Eames
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -161,6 +162,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
     private final boolean allowCPPRestrict;
     private final boolean supportExtendedTemplateSyntax;
     private final boolean supportAutoTypeSpecifier;
+    private final boolean supportUserDefinedLiterals;
 
 	private final IIndex index;
     protected ICPPASTTranslationUnit translationUnit;
@@ -194,6 +196,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         supportFunctionStyleAsm= config.supportFunctionStyleAssembler();
         functionCallCanBeLValue= true;
         supportAutoTypeSpecifier= true;
+        supportUserDefinedLiterals= true;
         this.index= index;
         this.nodeFactory = CPPNodeFactory.getDefault();
         scanner.setSplitShiftROperator(true);
@@ -1727,16 +1730,18 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
             return null;
         }
         
-        IToken la = LA(1);
-        ASTNode loc = (ASTNode) leWithRange.getOriginalNode();
-        if (la.getType() == IToken.tIDENTIFIER && loc != null) {
-        	// literal suffix must immediately follow the literal
-			if (loc.getOffset()+loc.getLength() == la.getOffset()) {
-				IToken opName = consume(IToken.tIDENTIFIER);
-				((CPPASTLiteralExpression) leWithRange).setSuffix(opName.getCharImage());
-				setRange(leWithRange, loc.getOffset(), opName.getEndOffset());
-				return leWithRange;
-			}
+        if (supportUserDefinedLiterals) {
+	        IToken la = LA(1);
+	        ASTNode loc = (ASTNode) leWithRange.getOriginalNode();
+	        if (la.getType() == IToken.tIDENTIFIER && loc != null) {
+	        	// literal suffix must immediately follow the literal
+				if (loc.getOffset()+loc.getLength() == la.getOffset()) {
+					IToken opName = consume(IToken.tIDENTIFIER);
+					((CPPASTLiteralExpression) leWithRange).setSuffix(opName.getCharImage());
+					setRange(leWithRange, loc.getOffset(), opName.getEndOffset());
+					return leWithRange;
+				}
+	        }
         }
         
         return leWithRange;
