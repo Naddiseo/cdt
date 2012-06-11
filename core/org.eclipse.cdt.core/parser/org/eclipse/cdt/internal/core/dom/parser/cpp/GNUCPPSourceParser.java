@@ -196,7 +196,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         supportFunctionStyleAsm= config.supportFunctionStyleAssembler();
         functionCallCanBeLValue= true;
         supportAutoTypeSpecifier= true;
-        supportUserDefinedLiterals= true;
+        supportUserDefinedLiterals= config.supportUserDefinedLiterals();
         this.index= index;
         this.nodeFactory = CPPNodeFactory.getDefault();
         scanner.setSplitShiftROperator(true);

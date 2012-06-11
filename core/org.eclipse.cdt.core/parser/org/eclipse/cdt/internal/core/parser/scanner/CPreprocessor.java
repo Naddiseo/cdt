@@ -892,14 +892,12 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
             	return ppToken;
         		
         	case IToken.tINTEGER:
-        	case IToken.tUSER_DEFINED_INTEGER_LITERAL:
         		if ((options & CHECK_NUMBERS) != 0) {
         			checkNumber(ppToken, false);
         		}
         		break;
 
         	case IToken.tFLOATINGPT:
-        	case IToken.tUSER_DEFINED_FLOATING_LITERAL:
         		if ((options & CHECK_NUMBERS) != 0) {
         			checkNumber(ppToken, true);
         		}

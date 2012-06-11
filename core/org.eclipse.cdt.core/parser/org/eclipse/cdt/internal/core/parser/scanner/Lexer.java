@@ -8,6 +8,7 @@
  * Contributors:
  *    Markus Schorn - initial API and implementation
  *    Mike Kucera (IBM) - UTF string literals
+ *    Richard Eames
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.parser.scanner;
 
@@ -54,6 +55,7 @@ final public class Lexer implements ITokenSequence {
 		public boolean fCreateImageLocations= true;
 		public boolean fSupportSlashPercentComments= false;
 		public boolean fSupportUTFLiterals= true;
+		public boolean fSupportUserDefinedLiterals = true;
 		
 		@Override
 		public Object clone() {
