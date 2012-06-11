@@ -1733,6 +1733,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         	// literal suffix must immediately follow the literal
 			if (loc.getOffset()+loc.getLength() == la.getOffset()) {
 				IToken opName = consume(IToken.tIDENTIFIER);
+				((CPPASTLiteralExpression) leWithRange).setSuffix(opName.getCharImage());
 				setRange(leWithRange, loc.getOffset(), opName.getEndOffset());
 				return leWithRange;
 			}
