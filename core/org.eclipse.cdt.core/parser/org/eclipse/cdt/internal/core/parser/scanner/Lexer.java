@@ -728,6 +728,11 @@ final public class Lexer implements ITokenSequence {
     	if (restore) {
     		popPhase3State(); // Undo the restore done at the beginning of fetchToken
 		}
+    	if (image.length > 0) {
+    		System.out.print(String.format("token: %d [%d:%d] '", kind, offset, imageLength));
+    		System.out.print(image);
+    		System.out.println("'");
+    	  }
     	return new TokenWithImage(kind, fSource, offset, endOffset, image);
     }
 
@@ -1091,6 +1096,7 @@ final public class Lexer implements ITokenSequence {
 		fMarkEndOffset.addFirst(fEndOffset);
 		fMarkPrefetchedChar.addFirst(fCharPhase3);
 		fDequeDepth++;
+		System.out.print(String.format("Mark (%d): %d %d '%c'\n", fDequeDepth, fOffset, fEndOffset, (char)fCharPhase3));
 	}
 	
 	/**
@@ -1101,6 +1107,7 @@ final public class Lexer implements ITokenSequence {
 		fEndOffset= fMarkEndOffset.removeFirst();
 		fCharPhase3= fMarkPrefetchedChar.removeFirst();
 		fDequeDepth--;
+		System.out.print(String.format("Restore (%d): %d %d '%c'\n", fDequeDepth, fOffset, fEndOffset, (char)fCharPhase3));
 	}
 	
 	private void popPhase3State() {
@@ -1109,6 +1116,7 @@ final public class Lexer implements ITokenSequence {
 			fMarkEndOffset.removeFirst();
 			fMarkPrefetchedChar.removeFirst();
 			fDequeDepth--;
+			System.out.print(String.format("Pop (%d): %d %d '%c'\n", fDequeDepth, fOffset, fEndOffset, (char)fCharPhase3));
 		}
 	}
 	
@@ -1289,6 +1297,7 @@ final public class Lexer implements ITokenSequence {
 		fMarkToken= fToken;
 		fMarkLastToken= fLastToken;
 		fDequeDepth++;
+		System.out.print(String.format("SaveState (%d): %d %d '%c'\n", fDequeDepth, fOffset, fEndOffset, (char)fCharPhase3));
 	}
 
 	public void restoreState() {
@@ -1299,5 +1308,6 @@ final public class Lexer implements ITokenSequence {
 		fToken= fMarkToken;
 		fLastToken= fMarkLastToken;
 		fDequeDepth--;
+		System.out.print(String.format("RestoreState (%d): %d %d '%c'\n", fDequeDepth, fOffset, fEndOffset, (char)fCharPhase3));
 	}
 }

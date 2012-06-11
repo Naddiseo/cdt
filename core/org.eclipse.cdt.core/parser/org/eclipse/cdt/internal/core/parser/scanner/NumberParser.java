@@ -48,7 +48,7 @@ public class NumberParser {
 		fGetter = getter;
 
 		fStart = getOffset();
-		fChar = fGetter.get();
+		fChar = fGetter.next();
 		fExpectedLength = 0;
 	}
 	
@@ -408,7 +408,7 @@ public class NumberParser {
 	
 	private int next() {
 		fChar = fGetter.next();
-		if (fChar > 0) {
+		if (fChar != -1) {
 			fExpectedLength++;
 		}
 		return fChar;

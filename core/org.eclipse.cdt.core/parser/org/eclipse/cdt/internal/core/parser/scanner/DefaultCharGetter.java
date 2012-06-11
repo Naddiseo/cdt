@@ -22,6 +22,7 @@ public class DefaultCharGetter implements CharGetter {
 	private int fOffset;
 	private int fChar;
 	private Deque<Integer> fMarkOffset;
+	private boolean fAtEnd;
 	
 	public DefaultCharGetter(char[] image, int start) {
 		this(new CharArray(image), start);
@@ -30,8 +31,10 @@ public class DefaultCharGetter implements CharGetter {
 	DefaultCharGetter(AbstractCharArray image, int start) {
 		fImage = image;
 		fOffset = start;
-		fChar = (fImage.tryGetLength() > 0) ? fImage.get(0) : -1;
 		fMarkOffset = new ArrayDeque<Integer>();
+		fChar = fImage.tryGetLength() > 0 ? fImage.get(fOffset) : -1;
+		fAtEnd = !fImage.isValidOffset(fOffset + 1);
+		fOffset++;
 	}
 
 	@Override
@@ -41,12 +44,24 @@ public class DefaultCharGetter implements CharGetter {
 
 	@Override
 	public int next() {
-		if (fImage.isValidOffset(fOffset + 1)) {
-			fChar = fImage.get(++fOffset);
-		}
-		else {
+		
+		if (fAtEnd) {
+			// We're already at the end
+			if (fChar != -1) {
+				fOffset++;
+			}
 			fChar = -1;
 		}
+		else {
+			if (fImage.isValidOffset(fOffset + 1)) {
+				fChar = fImage.get(++fOffset);
+			}
+			if (!fImage.isValidOffset(fOffset + 1)) {
+				fAtEnd = true;
+				//fOffset++;
+			}
+		}
+		
 		return fChar;
 	}
 
