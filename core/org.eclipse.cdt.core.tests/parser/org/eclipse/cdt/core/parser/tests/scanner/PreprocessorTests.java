@@ -8,6 +8,7 @@
  * Contributors:
  *    IBM - Initial API and implementation
  *    Markus Schorn (Wind River Systems)
+ *    Richard Eames
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.scanner;
 
@@ -1363,5 +1364,13 @@ public class PreprocessorTests extends PreprocessorTestsBase {
 		for (int i = 0; i < 5; i++) {
 			validateProblem(i, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
 		}
+	}
+	
+	// #define X 123ASDF
+	public void testUDLInPP() throws Exception {
+		initializeScanner();
+		validateEOF();
+		validateProblemCount(1);
+		validateProblem(0, IProblem.PREPROCESSOR_FOUND_USER_DEFINED_LITERAL, "f");
 	}
 }

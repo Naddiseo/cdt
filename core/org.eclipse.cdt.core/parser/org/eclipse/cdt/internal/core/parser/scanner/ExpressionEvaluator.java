@@ -10,6 +10,7 @@
  *     Markus Schorn (Wind River Systems)
  *     Bryan Wilkinson (QNX) - https://bugs.eclipse.org/bugs/show_bug.cgi?id=151207
  *     Anton Leherbauer (Wind River Systems)
+ *     Richard Eames
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.parser.scanner;
 
@@ -437,6 +438,10 @@ public class ExpressionEvaluator {
 			case 'u' : case 'l': case 'U': case 'L':
 				break;
 			default:
+				char c = tokenImage[i];
+				if (Character.isLetterOrDigit(c) || c == '_') {
+					throw new EvalException(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, tokenImage);
+				}
 				throw new EvalException(problemID, tokenImage);
 			}
 		}
