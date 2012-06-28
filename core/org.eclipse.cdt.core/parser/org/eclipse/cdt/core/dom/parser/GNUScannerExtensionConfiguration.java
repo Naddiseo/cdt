@@ -84,7 +84,7 @@ public abstract class GNUScannerExtensionConfiguration extends AbstractScannerEx
     
     
     /**
-	 * @since 5.4
+	 * @since 5.5
 	 */
     @Override
 	public boolean supportUserDefinedLiterals() {

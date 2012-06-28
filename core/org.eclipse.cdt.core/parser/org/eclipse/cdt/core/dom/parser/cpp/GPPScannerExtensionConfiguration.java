@@ -115,7 +115,7 @@ public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfigu
 
 	/**
 	 * User Defined Literals are supported in gcc >= 4.7
-	 * @since 5.4
+	 * @since 5.5
 	 */
 	@Override
 	public boolean supportUserDefinedLiterals() {

@@ -225,7 +225,7 @@ public interface IProblem {
 	
 	/**
 	 * Invalid suffix in constant
-	 * @since 5.4
+	 * @since 5.5
 	 */
 	public final static int SCANNER_BAD_SUFFIX_ON_CONSTANT = SCANNER_RELATED | 0x010;
 
