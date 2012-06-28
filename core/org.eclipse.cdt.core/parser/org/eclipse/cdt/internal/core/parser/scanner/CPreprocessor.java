@@ -1066,14 +1066,15 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 				if (fAdditionalNumericLiteralSuffixes[i] == c) {
 					continue loop;
 				}
-				else {
-					badSuffix = true;
-				}
+				//else {
+				//	badSuffix = true;
+				//}
 			}
             
-            if (badSuffix) {
-            	handleProblem(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, image, number.getOffset(), number.getEndOffset());
-            }
+            //if (badSuffix) {
+            //	handleProblem(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, image, number.getOffset(), number.getEndOffset());
+            //	return;
+            //}
             if (isBin) {
             	// The check for bin has to come before float, otherwise binary integers
             	// with float components get flagged as BAD_FLOATING_POINT

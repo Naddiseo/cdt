@@ -29,13 +29,16 @@ import org.eclipse.cdt.core.parser.Keywords;
 public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfiguration {
 
 	private static final int VERSION_4_3 = version(4,3);
+	private static final int VERSION_4_7 = version(4,7);
 	private static GPPScannerExtensionConfiguration CONFIG= new GPPScannerExtensionConfiguration();
 	private static GPPScannerExtensionConfiguration CONFIG_4_3= new GPPScannerExtensionConfiguration(VERSION_4_3);
+	private static GPPScannerExtensionConfiguration CONFIG_4_7 = new GPPScannerExtensionConfiguration(VERSION_4_7);
+	
+	private int version = VERSION_4_3;
 
 	private static int version(int major, int minor) {
 		return (major << 16) + minor;
 	}
-
 
 	public static GPPScannerExtensionConfiguration getInstance() {
 		return CONFIG;
@@ -51,6 +54,9 @@ public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfigu
 				int major= Integer.valueOf(definedSymbols.get("__GNUC__")); //$NON-NLS-1$
 				int minor= Integer.valueOf(definedSymbols.get("__GNUC_MINOR__")); //$NON-NLS-1$
 				int version= version(major, minor);
+				if (version >= VERSION_4_7) {
+					return CONFIG_4_7;
+				}
 				if (version >= VERSION_4_3) {
 					return CONFIG_4_3;
 				}
@@ -70,6 +76,8 @@ public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfigu
 	 */
 	@SuppressWarnings("nls")
 	public GPPScannerExtensionConfiguration(int version) {
+		this.version = version;
+		
 		addMacro("__null", "0");  
 		addMacro("__builtin_offsetof(T,m)", "(reinterpret_cast <size_t>(&reinterpret_cast <const volatile char &>(static_cast<T*> (0)->m)))");
 		addKeyword(Keywords.c_COMPLEX, IToken.t__Complex);
@@ -106,10 +114,11 @@ public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfigu
 
 
 	/**
+	 * User Defined Literals are supported in gcc >= 4.7
 	 * @since 5.4
 	 */
 	@Override
 	public boolean supportUserDefinedLiterals() {
-		return true;
+		return version >= VERSION_4_7;
 	}
 }

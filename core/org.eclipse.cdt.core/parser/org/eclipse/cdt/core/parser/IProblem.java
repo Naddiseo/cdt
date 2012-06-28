@@ -334,12 +334,6 @@ public interface IProblem {
 	public final static int PREPROCESSOR_EXCEEDS_MAXIMUM_INCLUSION_DEPTH= PREPROCESSOR_RELATED | 0x00F;
 	
 	/**
-	 * Userdefined literal found in preprocessor
-	 * @since 5.4
-	 */
-	public final static int PREPROCESSOR_FOUND_USER_DEFINED_LITERAL = PREPROCESSOR_RELATED | 0x010;
-	
-	/**
 	 * Syntax error, detected by the parser.
 	 */
 	public final static int SYNTAX_ERROR = SYNTAX_RELATED | 0x001;

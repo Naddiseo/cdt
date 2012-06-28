@@ -1809,9 +1809,9 @@ public class PortedScannerTests extends PreprocessorTestsBase {
 		assertEquals(17, problems.length);
 		int i= 0;
 		assertEquals(IProblem.SCANNER_BAD_OCTAL_FORMAT,          problems[i].getID() );  
-		assertEquals(IProblem.SCANNER_BAD_DECIMAL_FORMAT,        problems[++i].getID() );  
-		assertEquals(IProblem.SCANNER_BAD_HEX_FORMAT,            problems[++i].getID() );  
-		assertEquals(IProblem.SCANNER_BAD_HEX_FORMAT,            problems[++i].getID() );  
+		assertEquals(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT,        problems[++i].getID() );  
+		assertEquals(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT,            problems[++i].getID() );  
+		assertEquals(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT,            problems[++i].getID() );  
 		assertEquals(IProblem.SCANNER_DIVIDE_BY_ZERO,            problems[++i].getID() );  
 		assertEquals(IProblem.SCANNER_MISSING_R_PAREN,           problems[++i].getID() );  
 		assertEquals(IProblem.SCANNER_MISSING_R_PAREN,           problems[++i].getID() );  

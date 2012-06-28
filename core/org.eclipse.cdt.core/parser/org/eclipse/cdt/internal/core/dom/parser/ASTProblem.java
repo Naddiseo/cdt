@@ -59,8 +59,6 @@ public class ASTProblem extends ASTNode implements IASTProblem {
     			ParserMessages.getString("ScannerProblemFactory.error.preproc.missingRParen")); //$NON-NLS-1$       
     	errorMessages.put(new Integer(PREPROCESSOR_INVALID_VA_ARGS), 
     			ParserMessages.getString("ScannerProblemFactory.error.preproc.invalidVaArgs")); //$NON-NLS-1$   
-    	errorMessages.put(new Integer(PREPROCESSOR_FOUND_USER_DEFINED_LITERAL),
-    			ParserMessages.getString("ScannerProblemFactory.error.preproc.userdefinedLiteralInPP")); //$NON-NLS-1$
     	errorMessages.put(new Integer(SCANNER_INVALID_ESCAPECHAR), 
     			ParserMessages.getString("ScannerProblemFactory.error.scanner.invalidEscapeChar")); //$NON-NLS-1$
     	errorMessages.put(new Integer(SCANNER_UNBOUNDED_STRING), 

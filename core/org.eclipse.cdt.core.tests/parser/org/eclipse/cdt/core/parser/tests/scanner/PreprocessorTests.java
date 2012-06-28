@@ -17,8 +17,13 @@ import java.util.List;
 
 import junit.framework.TestSuite;
 
+import org.eclipse.cdt.core.dom.parser.IScannerExtensionConfiguration;
+import org.eclipse.cdt.core.dom.parser.cpp.GPPScannerExtensionConfiguration;
 import org.eclipse.cdt.core.parser.IProblem;
+import org.eclipse.cdt.core.parser.IScannerInfo;
 import org.eclipse.cdt.core.parser.IToken;
+import org.eclipse.cdt.core.parser.ParserLanguage;
+import org.eclipse.cdt.core.parser.ScannerInfo;
 
 
 /**
@@ -1356,21 +1361,50 @@ public class PreprocessorTests extends PreprocessorTestsBase {
 		validateToken(IToken.tSEMI);
 		validateEOF();
 		validateProblemCount(0);
-	
-		String badbinary = "{0b012, 0b01b, 0b1111e01, 0b1111p10, 0b10010.10010}";
-		initializeScanner(badbinary);
-		fullyTokenize();
-		validateProblemCount(5);
-		for (int i = 0; i < 5; i++) {
-			validateProblem(i, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
-		}
 	}
 	
-	// #define X 123ASDF
+	public void testBadBinaryNumbersC() throws Exception {
+		String badbinary = "{0b012, 0b01b, 0b1111e01, 0b1111p10, 0b10010.10010}";
+		initializeScanner(badbinary, ParserLanguage.C);
+		fullyTokenize();
+		validateProblemCount(5);
+		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
+		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(2, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(3, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(4, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+	}
+	
+	
+	public void testBadBinaryNumbersNoUDL() throws Exception {
+		String badbinary = "{0b012, 0b01b, 0b1111e01, 0b1111p10, 0b10010.10010}";
+		initializeScanner(badbinary, ParserLanguage.CPP);
+		fullyTokenize();
+		validateProblemCount(5);
+		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
+		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(2, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(3, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(4, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+	}
+	
+	public void testBadBinaryNumbersWithUDL() throws Exception {
+		String badbinary = "{0b012, 0b01b, 0b1111e01, 0b1111p10, 0b10010.10010}";
+		initializeGPPScanner(badbinary, "4", "7");
+		fullyTokenize();
+		validateProblemCount(2);
+		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
+		validateProblem(1, IProblem.SCANNER_BAD_FLOATING_POINT, null);
+	}
+	// #if 123ASDF
+	// #endif
+	// #if 0xU
+	// #endif
 	public void testUDLInPP() throws Exception {
 		initializeScanner();
 		validateEOF();
-		validateProblemCount(1);
-		validateProblem(0, IProblem.PREPROCESSOR_FOUND_USER_DEFINED_LITERAL, "f");
+		validateProblemCount(2);
+		validateProblem(0, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "123ASDF");
+		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "0xU");
 	}
 }
