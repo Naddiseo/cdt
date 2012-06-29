@@ -8,7 +8,6 @@
  * Contributors:
  *    IBM - Initial API and implementation
  *    Markus Schorn (Wind River Systems)
- *    Richard Eames
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.scanner;
 
@@ -1371,23 +1370,10 @@ public class PreprocessorTests extends PreprocessorTestsBase {
 		validateProblem(4, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
 	}
 	
-	
-	public void testBadBinaryNumbersNoUDL() throws Exception {
-		String badbinary = "{0b012, 0b01b, 0b1111e01, 0b1111p10, 0b10010.10010}";
-		initializeScanner(badbinary, ParserLanguage.CPP);
-		fullyTokenize();
-		validateProblemCount(5);
-		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
-		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "b");
-		validateProblem(2, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
-		validateProblem(3, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "p10");
-		validateProblem(4, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
-	}
-	
-	public void testBadBinaryNumbersWithUDL() throws Exception {
+	public void testBadBinaryNumbersCPP() throws Exception {
 		// First, third, and fift are invalid in c++11
 		String badbinary = "{0b012, 0b01b, 0b1111e01, 0b1111p10, 0b10010.10010}";
-		initializeGPPScanner(badbinary, "4", "7");
+		initializeScanner(badbinary);
 		fullyTokenize();
 		validateProblemCount(3);
 		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);

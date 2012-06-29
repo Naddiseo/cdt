@@ -11,8 +11,6 @@
 package org.eclipse.cdt.core.parser.tests.scanner;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 import junit.framework.ComparisonFailure;
 
@@ -58,15 +56,6 @@ public abstract class PreprocessorTestsBase extends BaseTestCase {
 
 	protected void initializeScanner(String input, ParserMode mode) throws IOException {
 		initializeScanner(getContent(input), ParserLanguage.CPP, mode, new ScannerInfo());
-	}
-	
-	protected void initializeGPPScanner(String input, String majorVersion, String minorVersion) throws IOException {
-		Map<String, String> symbols = new HashMap<String, String>();
-		symbols.put("__GNUC__", majorVersion);
-		symbols.put("__GNUC_MINOR__", minorVersion);
-		IScannerInfo info = new ScannerInfo(symbols);
-		IScannerExtensionConfiguration scannerConfig = GPPScannerExtensionConfiguration.getInstance(info);
-		initializeScanner(input, ParserLanguage.CPP, scannerConfig);
 	}
 
 	protected void initializeScanner(String input, ParserLanguage lang) throws IOException {
