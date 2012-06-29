@@ -150,7 +150,7 @@ public interface ICPPParserExtensionConfiguration {
 	/**
 	 * Support user-defined literal expressions:
 	 * (char_expr | string_expr | int_expr | float_expr) ud-suffix
-	 * @since 5.5
+	 * @since 5.4
 	 */
 	public boolean supportUserDefinedLiterals();
 

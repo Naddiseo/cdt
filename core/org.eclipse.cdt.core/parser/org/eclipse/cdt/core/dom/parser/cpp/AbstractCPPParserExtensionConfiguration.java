@@ -157,7 +157,7 @@ public abstract class AbstractCPPParserExtensionConfiguration implements ICPPPar
 	
 	/**
 	 * {@inheritDoc}
-	 * @since 5.5
+	 * @since 5.4
 	 */
 	@Override
 	public boolean supportUserDefinedLiterals() {

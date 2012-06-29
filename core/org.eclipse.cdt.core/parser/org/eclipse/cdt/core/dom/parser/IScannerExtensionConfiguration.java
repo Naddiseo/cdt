@@ -112,7 +112,7 @@ public interface IScannerExtensionConfiguration {
 	
 	/**
 	 * Support for User Defined Literals such as 123_suffix
-	 * @since 5.5
+	 * @since 5.4
 	 */
 	public boolean supportUserDefinedLiterals();
 }

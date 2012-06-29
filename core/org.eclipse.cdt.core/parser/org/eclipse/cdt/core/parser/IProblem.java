@@ -225,13 +225,13 @@ public interface IProblem {
 	
 	/**
 	 * Invalid suffix on constant
-	 * @since 5.5
+	 * @since 5.4
 	 */
 	public final static int SCANNER_BAD_SUFFIX_ON_CONSTANT = SCANNER_RELATED | 0x010;
 	
 	/**
 	 * Invalid prefix on float
-	 * @since 5.5
+	 * @since 5.4
 	 */
 	public final static int SCANNER_BAD_PREFIX_ON_FLOAT = SCANNER_RELATED | 0x011;
 	// Preprocessor
