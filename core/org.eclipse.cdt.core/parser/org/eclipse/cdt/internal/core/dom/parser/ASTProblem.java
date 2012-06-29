@@ -90,7 +90,9 @@ public class ASTProblem extends ASTNode implements IASTProblem {
     	errorMessages.put(new Integer(SCANNER_BAD_CHARACTER), 
     			ParserMessages.getString("ScannerProblemFactory.error.scanner.badCharacter")); //$NON-NLS-1$
     	errorMessages.put(new Integer(SCANNER_BAD_SUFFIX_ON_CONSTANT),
-    			ParserMessages.getString("ScannerProblemFactory.error.scanner.badConstantOnConstant")); //$NON-NLS-1$
+    			ParserMessages.getString("ScannerProblemFactory.error.scanner.badSuffixOnConstant")); //$NON-NLS-1$
+    	errorMessages.put(new Integer(SCANNER_BAD_PREFIX_ON_FLOAT),
+    			ParserMessages.getString("ScannerProblemFactory.error.scanner.badPrefixOnFloat")); //$NON-NLS-1$
     	errorMessages.put(new Integer(SYNTAX_ERROR), 
     			ParserMessages.getString("ParserProblemFactory.error.syntax.syntaxError")); //$NON-NLS-1$
     	errorMessages.put(new Integer(MISSING_SEMICOLON), 

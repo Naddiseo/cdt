@@ -224,11 +224,16 @@ public interface IProblem {
 	public final static int SCANNER_BAD_BINARY_FORMAT = SCANNER_RELATED | 0x00F;
 	
 	/**
-	 * Invalid suffix in constant
+	 * Invalid suffix on constant
 	 * @since 5.5
 	 */
 	public final static int SCANNER_BAD_SUFFIX_ON_CONSTANT = SCANNER_RELATED | 0x010;
-
+	
+	/**
+	 * Invalid prefix on float
+	 * @since 5.5
+	 */
+	public final static int SCANNER_BAD_PREFIX_ON_FLOAT = SCANNER_RELATED | 0x011;
 	// Preprocessor
 	/**
 	 *	#error encountered by Preprocessor.  

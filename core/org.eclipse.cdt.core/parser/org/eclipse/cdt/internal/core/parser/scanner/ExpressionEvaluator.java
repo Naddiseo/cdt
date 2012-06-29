@@ -20,6 +20,7 @@ import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.parser.IProblem;
 import org.eclipse.cdt.core.parser.IToken;
 import org.eclipse.cdt.core.parser.util.CharArrayMap;
+import org.eclipse.cdt.core.parser.util.CharArrayUtils;
 
 /**
  * Used to evaluate expressions in preprocessor directives.
@@ -440,6 +441,7 @@ public class ExpressionEvaluator {
 			i = 1;
 		}
 		// The rest should be a suffix
+		final int suffixStart = i;
 		for (; i < to; i++) {
 			switch(tokenImage[i]) {
 			case 'u' : case 'l': case 'U': case 'L':
@@ -447,7 +449,8 @@ public class ExpressionEvaluator {
 			default:
 				c = tokenImage[i];
 				if (Character.isLetterOrDigit(c) || c == '_') {
-					throw new EvalException(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, tokenImage);
+					char[] suffix = CharArrayUtils.subarray(tokenImage, suffixStart, -1);
+					throw new EvalException(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, suffix);
 				}
 				throw new EvalException(problemID, tokenImage);
 			}

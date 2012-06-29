@@ -923,7 +923,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 		}
 	}
 
-	private void checkNumber(Token number, final boolean isFloat) {
+	private void checkNumber(Token number, boolean isFloat) {
         final char[] image= number.getCharImage();
         boolean hasExponent = false;
 
@@ -969,6 +969,10 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
             	switch (image[pos]) {
                 case '0': case'1':
                 	continue;
+                case 'e': case 'E':
+                case '.':
+                	handleProblem(IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b".toCharArray(), number.getOffset(), number.getEndOffset()); //$NON-NLS-1$
+                	return;
                 default:
                 	// 0 and 1 are the only allowed digits for binary integers
                 	// No floating point, exponents etc. are allowed
@@ -1036,60 +1040,72 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
             	break loop;
             }
         }
-
-        // check the suffix
-        loop: for (; pos < image.length; pos++) {
-        	final char c= image[pos];
-            switch (c) {
-            case 'u': case 'U': case 'L': case 'l':
-            	continue;
-            case 'f': case 'F':
-            	if (isFloat) {
-            		continue loop;
-            	}
-            
-				//$FALL-THROUGH$
-			case 'a': case 'b': case 'c': case 'd': case 'e':  case 'g': case 'h': case 'i': 
-            case 'j': case 'k':  case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': 
-            case 's': case 't': case 'v': case 'w': case 'x': case 'y': case 'z':
-            case 'A': case 'B': case 'C': case 'D': case 'E': case 'G': case 'H': case 'I':
-            case 'J': case 'K':  case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R': 
-            case 'S': case 'T':case 'V': case 'W': case 'X': case 'Y': case 'Z':
-            case '0': case '1': case '2': case '3': case '4':
-            case '5': case '6': case '7': case '8': case '9':
-            case '_':
-            	if (fLexOptions.fSupportUserDefinedLiterals) {
-            		continue loop;
-            	}
-            }
-            for (int i= 0; i < fAdditionalNumericLiteralSuffixes.length; i++) {
-				if (fAdditionalNumericLiteralSuffixes[i] == c) {
-					continue loop;
-				}
-				//else {
-				//	badSuffix = true;
-				//}
-			}
-            
-            //if (badSuffix) {
-            //	handleProblem(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, image, number.getOffset(), number.getEndOffset());
-            //	return;
-            //}
-            if (isBin) {
-            	// The check for bin has to come before float, otherwise binary integers
-            	// with float components get flagged as BAD_FLOATING_POINT
-            	handleProblem(IProblem.SCANNER_BAD_BINARY_FORMAT, image, number.getOffset(), number.getEndOffset());
-            } else if (isFloat) {
-            	handleProblem(IProblem.SCANNER_BAD_FLOATING_POINT, image, number.getOffset(), number.getEndOffset());
-            } else if (isHex) {
-            	handleProblem(IProblem.SCANNER_BAD_HEX_FORMAT, image, number.getOffset(), number.getEndOffset());
-            } else if (isOctal) {
-            	handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
-            } else {
-            	handleProblem(IProblem.SCANNER_BAD_DECIMAL_FORMAT, image, number.getOffset(), number.getEndOffset());
-            }
-            return;
+        if (pos < image.length) {
+	        char c = image[pos];
+	        if (Character.isLetter(c) || c == '_') {
+	        	// check the suffix
+	        	final int suffixStart = pos;
+	            loop: for (; pos < image.length; pos++) {
+	            	c= image[pos];
+	                switch (c) {
+	                case 'u': case 'U': case 'L': case 'l':
+	                	continue;
+	                case 'f': case 'F':
+	                	if (isFloat) {
+	                		continue loop;
+	                	}
+	                
+	    				//$FALL-THROUGH$
+	    			case 'a': case 'b': case 'c': case 'd': case 'e':  case 'g': case 'h': case 'i': 
+	                case 'j': case 'k':  case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': 
+	                case 's': case 't': case 'v': case 'w': case 'x': case 'y': case 'z':
+	                case 'A': case 'B': case 'C': case 'D': case 'E': case 'G': case 'H': case 'I':
+	                case 'J': case 'K':  case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R': 
+	                case 'S': case 'T':case 'V': case 'W': case 'X': case 'Y': case 'Z':
+	                case '0': case '1': case '2': case '3': case '4':
+	                case '5': case '6': case '7': case '8': case '9':
+	                case '_':
+	                	if (fLexOptions.fSupportUserDefinedLiterals) {
+	                		continue loop;
+	                	}
+	                }
+	                for (int i= 0; i < fAdditionalNumericLiteralSuffixes.length; i++) {
+	    				if (fAdditionalNumericLiteralSuffixes[i] == c) {
+	    					continue loop;
+	    				}
+	    				else {
+	    					badSuffix = true;
+	    				}
+	    			}
+	                
+	                if (badSuffix) {
+	                	char[] suffix = CharArrayUtils.subarray(image, suffixStart, -1);
+	                	handleProblem(IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, suffix, number.getOffset(), number.getEndOffset());
+	                	return;
+	                }
+	            }
+	        	return;
+	        }
         }
+        else {
+        	return;
+        }
+        
+        if (isBin) {
+        	// The check for bin has to come before float, otherwise binary integers
+        	// with float components get flagged as BAD_FLOATING_POINT
+        	handleProblem(IProblem.SCANNER_BAD_BINARY_FORMAT, image, number.getOffset(), number.getEndOffset());
+        } else if (isFloat) {
+        	handleProblem(IProblem.SCANNER_BAD_FLOATING_POINT, image, number.getOffset(), number.getEndOffset());
+        } else if (isHex) {
+        	handleProblem(IProblem.SCANNER_BAD_HEX_FORMAT, image, number.getOffset(), number.getEndOffset());
+        } else if (isOctal) {
+        	handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
+        } else {
+        	handleProblem(IProblem.SCANNER_BAD_DECIMAL_FORMAT, image, number.getOffset(), number.getEndOffset());
+        }
+        return;
+        
     }
 
     private <T> T findInclusion(final String includeDirective, final boolean quoteInclude,

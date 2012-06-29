@@ -17,13 +17,9 @@ import java.util.List;
 
 import junit.framework.TestSuite;
 
-import org.eclipse.cdt.core.dom.parser.IScannerExtensionConfiguration;
-import org.eclipse.cdt.core.dom.parser.cpp.GPPScannerExtensionConfiguration;
 import org.eclipse.cdt.core.parser.IProblem;
-import org.eclipse.cdt.core.parser.IScannerInfo;
 import org.eclipse.cdt.core.parser.IToken;
 import org.eclipse.cdt.core.parser.ParserLanguage;
-import org.eclipse.cdt.core.parser.ScannerInfo;
 
 
 /**
@@ -1369,10 +1365,10 @@ public class PreprocessorTests extends PreprocessorTestsBase {
 		fullyTokenize();
 		validateProblemCount(5);
 		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
-		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
-		validateProblem(2, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
-		validateProblem(3, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
-		validateProblem(4, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "b");
+		validateProblem(2, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
+		validateProblem(3, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "p10");
+		validateProblem(4, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
 	}
 	
 	
@@ -1382,19 +1378,21 @@ public class PreprocessorTests extends PreprocessorTestsBase {
 		fullyTokenize();
 		validateProblemCount(5);
 		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
-		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
-		validateProblem(2, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
-		validateProblem(3, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
-		validateProblem(4, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, null);
+		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "b");
+		validateProblem(2, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
+		validateProblem(3, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "p10");
+		validateProblem(4, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
 	}
 	
 	public void testBadBinaryNumbersWithUDL() throws Exception {
+		// First, third, and fift are invalid in c++11
 		String badbinary = "{0b012, 0b01b, 0b1111e01, 0b1111p10, 0b10010.10010}";
 		initializeGPPScanner(badbinary, "4", "7");
 		fullyTokenize();
-		validateProblemCount(2);
+		validateProblemCount(3);
 		validateProblem(0, IProblem.SCANNER_BAD_BINARY_FORMAT, null);
-		validateProblem(1, IProblem.SCANNER_BAD_FLOATING_POINT, null);
+		validateProblem(1, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
+		validateProblem(2, IProblem.SCANNER_BAD_PREFIX_ON_FLOAT, "0b");
 	}
 	// #if 123ASDF
 	// #endif
@@ -1404,7 +1402,7 @@ public class PreprocessorTests extends PreprocessorTestsBase {
 		initializeScanner();
 		validateEOF();
 		validateProblemCount(2);
-		validateProblem(0, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "123ASDF");
-		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "0xU");
+		validateProblem(0, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "ASDF");
+		validateProblem(1, IProblem.SCANNER_BAD_SUFFIX_ON_CONSTANT, "xU");
 	}
 }
