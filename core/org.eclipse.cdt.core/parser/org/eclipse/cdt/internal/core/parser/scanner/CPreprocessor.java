@@ -923,7 +923,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 		}
 	}
 
-	private void checkNumber(Token number, boolean isFloat) {
+	private void checkNumber(Token number, final boolean isFloat) {
         final char[] image= number.getCharImage();
         boolean hasExponent = false;
 
