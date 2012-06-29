@@ -9,6 +9,7 @@
  *    IBM - Initial API and implementation
  *    Anton Leherbauer (Wind River Systems)
  *    Markus Schorn (Wind River Systems)
+ *    Richard Eames
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.parser;
 
