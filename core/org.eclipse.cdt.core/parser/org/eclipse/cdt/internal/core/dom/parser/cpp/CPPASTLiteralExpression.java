@@ -12,8 +12,6 @@
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
 import org.eclipse.cdt.core.dom.ast.ASTVisitor;
-import org.eclipse.cdt.core.dom.ast.IASTImplicitName;
-import org.eclipse.cdt.core.dom.ast.IASTImplicitNameOwner;
 import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
 import org.eclipse.cdt.core.dom.ast.IBasicType;
 import org.eclipse.cdt.core.dom.ast.IBasicType.Kind;
@@ -31,14 +29,12 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
 /**
  * Represents a C++ literal.
  */
-public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralExpression, IASTImplicitNameOwner {
+public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralExpression {
 	public static final CPPASTLiteralExpression INT_ZERO =
 			new CPPASTLiteralExpression(lk_integer_constant, new char[] {'0'});
 	
     private int kind;
     private char[] value = CharArrayUtils.EMPTY;
-    private IASTImplicitName[] implicitNames;
-    private char[] suffix = CharArrayUtils.EMPTY;
 
     public CPPASTLiteralExpression() {
 	}
@@ -48,12 +44,6 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		this.value = value;
 	}
 
-	public CPPASTLiteralExpression(int kind, char[] value, char[] suffix) {
-		this.kind = kind;
-		this.value = value;
-		this.setSuffix(suffix);
-	}
-	
 	@Override
 	public CPPASTLiteralExpression copy() {
 		return copy(CopyStyle.withoutLocations);
@@ -62,8 +52,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 	@Override
 	public CPPASTLiteralExpression copy(CopyStyle style) {
 		CPPASTLiteralExpression copy = new CPPASTLiteralExpression(kind,
-				value == null ? null : value.clone(),
-				getSuffix() == null ? null : getSuffix().clone());
+				value == null ? null : value.clone());
 		copy.setOffsetAndLength(this);
 		if (style == CopyStyle.withLocations) {
 			copy.setCopyLocation(this);
@@ -93,16 +82,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
     	this.value= value;
     }
     
-    public char[] getSuffix() {
-		return suffix;
-	}
-
-	public void setSuffix(char[] suffix) {
-		assertNotFrozen();
-		this.suffix = suffix;
-	}
-
-	@Override
+    @Override
 	public String toString() {
         return new String(value);
     }
@@ -122,14 +102,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 	            case ASTVisitor.PROCESS_SKIP: return true;
 	            default: break;
 	        }
-		}
-        IASTImplicitName[] implicits = action.shouldVisitImplicitNames ? getImplicitNames() : null;
-		if (implicits != null) {
-			for (IASTImplicitName implicit : implicits) {
-				if (!implicit.accept(action))
-					return false;
-			}
-		}
+		}  
         return true;
     }
     
@@ -265,18 +238,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		} 
 		return new CPPBasicType(Kind.eInt, flags, this);
 	}
-	
-	@Override
-	public IASTImplicitName[] getImplicitNames() {
-		if (implicitNames == null) {
-			CPPASTImplicitName isUserDefined = new CPPASTImplicitName("isUserDefined".toCharArray(), this); //$NON-NLS-1$
-			CPPASTImplicitName getNumberType = new CPPASTImplicitName("getNumberType".toCharArray(), this); //$NON-NLS-1$
-			CPPASTImplicitName isMalformed =  new CPPASTImplicitName("isMalformed".toCharArray(), this); //$NON-NLS-1$
-			implicitNames = new CPPASTImplicitName[] { isUserDefined, getNumberType };
-		}
-		return implicitNames;
-	}
-	
+
     /**
      * @deprecated, use {@link #setValue(char[])}, instead.
      */
@@ -294,6 +256,4 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 	public CPPASTLiteralExpression(int kind, String value) {
 		this(kind, value.toCharArray());
 	}
-
-
 }
