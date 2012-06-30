@@ -374,6 +374,10 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 		return fLocationMap;
 	}
 
+	public char[] getAdditionalNumericLiteralSuffixes() {
+		return fAdditionalNumericLiteralSuffixes;
+	}
+
 	private void configureKeywords(ParserLanguage language,	IScannerExtensionConfiguration configuration) {
 		Keywords.addKeywordsPreprocessor(fPPKeywords);
 		if (language == ParserLanguage.C) {

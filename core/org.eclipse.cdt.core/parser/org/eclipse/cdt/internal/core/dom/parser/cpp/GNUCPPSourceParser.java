@@ -148,6 +148,7 @@ import org.eclipse.cdt.internal.core.dom.parser.IASTAmbiguousStatement;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.NameOrTemplateIDVariants.BranchPoint;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.NameOrTemplateIDVariants.Variant;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
+import org.eclipse.cdt.internal.core.parser.scanner.CPreprocessor;
 
 /**
  * This is our implementation of the IParser interface, serving as a parser for
@@ -169,6 +170,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
 
     private int functionBodyCount= 0;
 	private char[] currentClassName;
+	private char[] additionalNumericalSuffixes;
 
 	private final ICPPNodeFactory nodeFactory;
 	private TemplateIdStrategy fTemplateParameterListStrategy;
@@ -200,6 +202,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         this.index= index;
         this.nodeFactory = CPPNodeFactory.getDefault();
         scanner.setSplitShiftROperator(true);
+        additionalNumericalSuffixes = ((CPreprocessor) scanner).getAdditionalNumericLiteralSuffixes();
     }
 
     @Override
@@ -1653,16 +1656,20 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         IToken t = null;
         IASTLiteralExpression literalExpression = null;
         IASTLiteralExpression leWithRange = null;
+        
+        
         switch (LT(1)) {
         // TO DO: we need more literals...
         case IToken.tINTEGER:
             t = consume();
             literalExpression = nodeFactory.newLiteralExpression(IASTLiteralExpression.lk_integer_constant, t.getImage()); 
             leWithRange= setRange(literalExpression, t.getOffset(), t.getEndOffset());
+            ((CPPASTLiteralExpression)literalExpression).calculateSuffix(additionalNumericalSuffixes);
             break;
         case IToken.tFLOATINGPT:
             t = consume();
-            literalExpression = nodeFactory.newLiteralExpression(IASTLiteralExpression.lk_float_constant, t.getImage()); 
+            literalExpression = nodeFactory.newLiteralExpression(IASTLiteralExpression.lk_float_constant, t.getImage());
+            ((CPPASTLiteralExpression)literalExpression).calculateSuffix(additionalNumericalSuffixes);
             leWithRange= setRange(literalExpression, t.getOffset(), t.getEndOffset());
             break;
         case IToken.tSTRING:
@@ -1737,6 +1744,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
 	        	// literal suffix must immediately follow the literal
 				if (loc.getOffset()+loc.getLength() == la.getOffset()) {
 					IToken opName = consume(IToken.tIDENTIFIER);
+					((CPPASTLiteralExpression) leWithRange).setSuffix(opName.getCharImage());
 					setRange(leWithRange, loc.getOffset(), opName.getEndOffset());
 					return leWithRange;
 				}
