@@ -7416,4 +7416,36 @@ public class AST2Tests extends AST2BaseTest {
 		assertEquals("//comment", new String(comment.getComment()));
 		assertEquals("//comment", comment.getRawSignature());
 	}
+	
+	// bool operator "" X(unsigned long long i) { return true; }
+	// bool operator "" X(long double d) { return false; }
+	// bool operator "" L(unsigned long long i) { return false; }
+	// constexpr bool operator "" Y(const char* raw) { return raw[0] == '1'; }
+	//
+	// auto a = 1X;
+	// auto b = 1.0X;
+	// auto c = 1L;
+	// auto d = 123Y;
+	public void testUDLOperatorTypes() throws Exception {
+		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), CPP);
+		IASTDeclaration[] declarations = tu.getDeclarations();
+		int i = 4;
+		{
+			IBasicType t = getTypeForDeclaration(declarations, i++);
+			assertTrue(t.getKind() == Kind.eBoolean);
+		}
+		{
+			IBasicType t = getTypeForDeclaration(declarations, i++);
+			assertTrue(t.getKind() == Kind.eBoolean);
+		}
+		{
+			IBasicType t = getTypeForDeclaration(declarations, i++);
+			assertTrue(t.getKind() == Kind.eInt);
+			assertTrue(t.isLong());
+		}
+		{
+			IBasicType t = getTypeForDeclaration(declarations, i++);
+			assertTrue(t.getKind() == Kind.eBoolean);
+		}
+	}
 }
