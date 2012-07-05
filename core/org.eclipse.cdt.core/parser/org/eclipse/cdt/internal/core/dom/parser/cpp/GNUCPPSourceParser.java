@@ -728,7 +728,9 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
 	    			break;
 	    		}
 	    		
-	    		IASTName name = nodeFactory.newOperatorName(ident.toString().toCharArray());
+	    		String operatorName = firstToken.toString() + str_op.toString() + ident.toString();
+	    		
+	    		IASTName name = nodeFactory.newOperatorName(operatorName.toCharArray());
 	    		setRange(name, firstToken.getOffset(), ident.getEndOffset());
 	    		return name;
         	}

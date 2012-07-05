@@ -7417,53 +7417,86 @@ public class AST2Tests extends AST2BaseTest {
 		assertEquals("//comment", comment.getRawSignature());
 	}
 	
-	// bool operator "" X(unsigned long long i) { return true; }
-	// bool operator "" X(long double d) { return false; }
-	// bool operator "" L(unsigned long long i) { return false; }
-	// constexpr bool operator "" Y(const char* raw) { return raw[0] == '1'; }
-	// bool operator "" _X(unsigned long long i) { return true; }
-	// bool operator "" _X(long double d) { return false; }
-	// constexpr bool operator "" _Y(const char* raw) { return raw[0] == '1'; }
-	//
-	// auto a = 1X;
-	// auto b = 1.0X;
-	// auto c = 1L;
-	// auto d = 123Y;
-	// auto e = 1_X;
-	// auto f = 1.0_X;
-	// auto g = 123_Y;
-	public void testUDLOperatorTypes() throws Exception {
-		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), CPP);
+	private void checkUDLIsRet(String code) throws Exception {
+		IASTTranslationUnit tu = parseAndCheckBindings(code, CPP);
 		IASTDeclaration[] declarations = tu.getDeclarations();
-		int i = 7;
-		{
-			IBasicType t = getTypeForDeclaration(declarations, i++);
-			assertTrue(t.getKind() == Kind.eBoolean);
-		}
-		{
-			IBasicType t = getTypeForDeclaration(declarations, i++);
-			assertTrue(t.getKind() == Kind.eBoolean);
-		}
-		{
-			IBasicType t = getTypeForDeclaration(declarations, i++);
-			assertTrue(t.getKind() == Kind.eInt);
-			assertTrue(t.isLong());
-		}
-		{
-			IBasicType t = getTypeForDeclaration(declarations, i++);
-			assertTrue(t.getKind() == Kind.eBoolean);
-		}
-		{
-			IBasicType t = getTypeForDeclaration(declarations, i++);
-			assertTrue(t.getKind() == Kind.eBoolean);
-		}
-		{
-			IBasicType t = getTypeForDeclaration(declarations, i++);
-			assertTrue(t.getKind() == Kind.eBoolean);
-		}
-		{
-			IBasicType t = getTypeForDeclaration(declarations, i++);
-			assertTrue(t.getKind() == Kind.eBoolean);
-		}
+		IASTDeclaration declaration = declarations[declarations.length - 1];
+		
+		IASTInitializer init = ((IASTSimpleDeclaration) declaration).getDeclarators()[0].getInitializer();
+		IType type = ((IASTExpression)((IASTEqualsInitializer) init).getInitializerClause()).getExpressionType();
+		
+		assertEquals("Ret", type.toString());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(unsigned long long i) { return Ret(); }
+	// auto test = 123X;
+	public void testUDLOperatorTypes1() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(long double i) { return Ret(); }
+	// auto test = 12.3X;
+	public void testUDLOperatorTypes2() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+
+	// class Ret {};
+	// Ret operator "" X(const char* s) { return Ret(); }
+	// auto test = 123X;
+	public void testUDLOperatorTypes1a() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(const char* s) { return Ret(); }
+	// auto test = 12.3X;
+	public void testUDLOperatorTypes2a() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(unsigned long long d) { return Ret(); }
+	// bool operator "" X(const char* s) { return false; }
+	// auto test = 123X;
+	public void testUDLOperatorTypes1b() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(long double d) { return Ret(); }
+	// bool operator "" X(const char* s) { return false; }
+	// auto test = 12.3X;
+	public void testUDLOperatorTypes2b() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(const char* s, unsigned sz) { return Ret(); }
+	// auto test = "123"X;
+	public void testUDLOperatorTypes3() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(const wchar_t* s, unsigned sz) { return Ret(); }
+	// auto test = L"123"X;
+	public void testUDLOperatorTypes3a() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+
+	// class Ret {};
+	// Ret operator "" X(const char16_t* s, unsigned sz) { return Ret(); }
+	// auto test = u"123"X;
+	public void testUDLOperatorTypes3b() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// Ret operator "" X(const char32_t* s, unsigned sz) { return Ret(); }
+	// auto test = U"123"X;
+	public void testUDLOperatorTypes3c() throws Exception {
+		checkUDLIsRet(getAboveComment());
 	}
 }

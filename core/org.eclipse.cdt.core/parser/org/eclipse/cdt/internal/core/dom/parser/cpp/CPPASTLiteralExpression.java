@@ -12,34 +12,23 @@
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 import org.eclipse.cdt.core.dom.ast.ASTVisitor;
-import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
+import org.eclipse.cdt.core.dom.ast.DOMException;
 import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
-import org.eclipse.cdt.core.dom.ast.IASTName;
-import org.eclipse.cdt.core.dom.ast.IASTSimpleDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IBasicType;
 import org.eclipse.cdt.core.dom.ast.IBasicType.Kind;
-import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
+import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IScope;
 import org.eclipse.cdt.core.dom.ast.ISemanticProblem;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.IValue;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTDeclSpecifier;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTDeclarator;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFunctionDeclarator;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFunctionDefinition;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTLiteralExpression;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTOperatorName;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTParameterDeclaration;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTSimpleDeclSpecifier;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.parser.util.CharArrayUtils;
 import org.eclipse.cdt.internal.core.dom.parser.ASTNode;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemType;
 import org.eclipse.cdt.internal.core.dom.parser.Value;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPSemantics;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
 
 /**
@@ -118,8 +107,11 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		try {
 			int udOffset = (value[0] == '.' ? afterDecimalPoint(0) : integerLiteral());
 			if (udOffset > 0) {
+				/*
+				 * 2.14.8.1
+				 * "If a token matches both user-defined-literal and another literal kind, it is treated as the latter"
+				 */
 				setSuffix(CharArrayUtils.subarray(value, udOffset, -1));
-				
 				for (int i = 0; i < suffix.length; i++) {
 					switch (suffix[i]) {
 					case 'l': case 'L': 
@@ -133,8 +125,11 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 						}
 					}
 					isCompilerSuffix = false;
+					// Remove the suffix from the value if it's a UDL
+					setValue(CharArrayUtils.subarray(value, 0, udOffset));
 					break;
 				}
+				
 			}
 		}
 		catch (ArrayIndexOutOfBoundsException e) {
@@ -203,206 +198,25 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		return isLValue() ? ValueCategory.LVALUE : ValueCategory.PRVALUE;
 	}
 	
+	@SuppressWarnings("nls")
+	public char[] getOperatorName() {
+		return CharArrayUtils.concat("operator\"\"".toCharArray(), suffix);
+	}
+	
 	// 13.5.8
 	private IType getUDLOperatorType() {
-		// TODO: literal template operator
-		IASTTranslationUnit tu = getTranslationUnit();
-		IASTDeclaration[] declarations = tu.getDeclarations();
-		List<ICPPASTFunctionDefinition> potentialOperators = new ArrayList<ICPPASTFunctionDefinition>();
-		for (IASTDeclaration declaration : declarations) {
-			if (declaration instanceof ICPPASTFunctionDefinition) {
-				ICPPASTFunctionDeclarator declarator = (ICPPASTFunctionDeclarator) ((ICPPASTFunctionDefinition) declaration).getDeclarator();
-				IASTName name = declarator.getName();
-				if (name instanceof ICPPASTOperatorName) {
-					if (Arrays.equals(name.getSimpleID(), suffix)) {
-						ICPPASTParameterDeclaration[] params = declarator.getParameters();
-						
-						if (params.length > 2) {
-							continue;
-						}
-						
-						if (isRawLiteralOperator(declaration, params)
-							|| isLongLongIntOperator(declaration, params)
-							|| isLongDoubleOperator(declaration, params)
-							|| isCharOperator(declaration, params)
-							|| isCharStringOperator(declaration, params)) {
-							potentialOperators.add((ICPPASTFunctionDefinition) declaration);
-						}
-					}
+		IType ret = new ProblemType(ISemanticProblem.TYPE_UNRESOLVED_NAME);
+		
+		try {
+			IBinding func = CPPSemantics.findUDLOperator(this);
+			if (func != null) {
+				if (func instanceof ICPPFunction) {
+					ret = ((ICPPFunction) func).getType().getReturnType();
 				}
 			}
-		}
+		} catch (DOMException e) { /* pass, return problem type */ }
 		
-		if (potentialOperators.size() > 0) {
-			// TODO: choose best operator
-			ICPPASTFunctionDefinition declaration = potentialOperators.get(0);
-			ICPPASTSimpleDeclSpecifier spec = (ICPPASTSimpleDeclSpecifier) declaration.getDeclSpecifier();
-			CPPBasicType t= new CPPBasicType(spec);
-			t.setFromExpression(this);
-			return t;
-		}
-		
-		return new ProblemType(ISemanticProblem.TYPE_UNRESOLVED_NAME);
-	}
-	
-	private boolean isRawLiteralOperator(IASTDeclaration declaration, ICPPASTParameterDeclaration[] params) {
-		if (params.length != 1) {
-			return false;
-		}
-		ICPPASTParameterDeclaration param = params[0];
-		ICPPASTDeclarator decl = param.getDeclarator();
-		ICPPASTDeclSpecifier spec = (ICPPASTDeclSpecifier) param.getDeclSpecifier();
-		if (decl.getPointerOperators().length != 1) {
-			return false;
-		}
-		CPPASTPointer ptr = (CPPASTPointer) decl.getPointerOperators()[0];
-		if (!ptr.isActive() || ptr.isConst() || ptr.isVolatile()) {
-			return false;
-		}
-		if (!spec.isConst() || !spec.isActive() || spec.isConstexpr()) {
-			return false;
-		}
-		
-		if (!(spec instanceof CPPASTSimpleDeclSpecifier)) {
-			return false;
-		}
-		
-		return ((CPPASTSimpleDeclSpecifier)spec).getType() == IASTSimpleDeclSpecifier.t_char;
-	}
-	
-	private boolean isLongLongIntOperator(IASTDeclaration declaration, ICPPASTParameterDeclaration[] params) {
-		if (params.length != 1) {
-			return false;
-		}
-		ICPPASTParameterDeclaration param = params[0];
-		ICPPASTDeclarator decl = param.getDeclarator();
-		ICPPASTDeclSpecifier spec = (ICPPASTDeclSpecifier) param.getDeclSpecifier();
-		
-		if (!((CPPASTSimpleDeclSpecifier)spec).isLongLong()
-			|| spec.isConst()
-			|| !spec.isActive()
-			|| spec.isVolatile()
-			|| spec.isConstexpr()
-			|| ((CPPASTSimpleDeclSpecifier)spec).isSigned()
-			|| !((CPPASTSimpleDeclSpecifier)spec).isUnsigned()) {
-			return false;
-		}
-		
-		if (decl.getPointerOperators().length > 0) {
-			return false;
-		}
-		
-		return ((CPPASTSimpleDeclSpecifier)spec).getType() == IASTSimpleDeclSpecifier.t_int;
-	}
-	
-	private boolean isLongDoubleOperator(IASTDeclaration declaration, ICPPASTParameterDeclaration[] params) {
-		if (params.length != 1) {
-			return false;
-		}
-		ICPPASTParameterDeclaration param = params[0];
-		ICPPASTDeclarator decl = param.getDeclarator();
-		ICPPASTDeclSpecifier spec = (ICPPASTDeclSpecifier) param.getDeclSpecifier();
-		
-		if (!((CPPASTSimpleDeclSpecifier)spec).isLong()
-				|| spec.isConst()
-				|| !spec.isActive()
-				|| spec.isVolatile()
-				|| spec.isConstexpr()) {
-				return false;
-			}
-			
-			if (decl.getPointerOperators().length > 0) {
-				return false;
-			}
-		
-		return ((CPPASTSimpleDeclSpecifier)spec).getType() == IASTSimpleDeclSpecifier.t_double;
-	}
-	
-	private boolean isCharOperator(IASTDeclaration declaration, ICPPASTParameterDeclaration[] params) {
-		if (params.length != 1) {
-			return false;
-		}
-		ICPPASTParameterDeclaration param = params[0];
-		ICPPASTDeclarator decl = param.getDeclarator();
-		ICPPASTDeclSpecifier spec = (ICPPASTDeclSpecifier) param.getDeclSpecifier();
-		if (decl.getPointerOperators().length != 1) {
-			return false;
-		}
-		CPPASTPointer ptr = (CPPASTPointer) decl.getPointerOperators()[0];
-		if (!ptr.isActive() || ptr.isConst() || ptr.isVolatile()) {
-			return false;
-		}
-		if (!spec.isConst() || !spec.isActive() || spec.isConstexpr()
-			|| ((CPPASTSimpleDeclSpecifier)spec).isSigned()
-			|| ((CPPASTSimpleDeclSpecifier)spec).isUnsigned()) {
-			return false;
-		}
-		
-		if (!(spec instanceof CPPASTSimpleDeclSpecifier)) {
-			return false;
-		}
-		
-		switch (((CPPASTSimpleDeclSpecifier)spec).getType()) {
-		case IASTSimpleDeclSpecifier.t_char:
-		case IASTSimpleDeclSpecifier.t_wchar_t:
-		case IASTSimpleDeclSpecifier.t_char16_t:
-		case IASTSimpleDeclSpecifier.t_char32_t:
-			break;
-		default:
-			return false;
-		}
-		return true;
-	}
-	
-	private boolean isCharStringOperator(IASTDeclaration declaration, ICPPASTParameterDeclaration[] params) {
-		if (params.length != 2) {
-			return false;
-		}
-		ICPPASTParameterDeclaration param1 = params[0];
-		ICPPASTParameterDeclaration param2 = params[1];
-		ICPPASTDeclarator decl1 = param1.getDeclarator();
-		ICPPASTDeclSpecifier spec1 = (ICPPASTDeclSpecifier) param1.getDeclSpecifier();
-		ICPPASTDeclarator decl2 = param2.getDeclarator();
-		ICPPASTDeclSpecifier spec2 = (ICPPASTDeclSpecifier) param2.getDeclSpecifier();
-		
-		if (decl1.getPointerOperators().length != 1) {
-			return false;
-		}
-		CPPASTPointer ptr = (CPPASTPointer) decl1.getPointerOperators()[0];
-		if (!ptr.isActive() || ptr.isConst() || ptr.isVolatile()) {
-			return false;
-		}
-		if (!spec1.isConst() || !spec1.isActive() || spec1.isConstexpr()) {
-			return false;
-		}
-		
-		if (!(spec1 instanceof CPPASTSimpleDeclSpecifier)) {
-			return false;
-		}
-		
-		switch (((CPPASTSimpleDeclSpecifier)spec1).getType()) {
-		case IASTSimpleDeclSpecifier.t_char:
-		case IASTSimpleDeclSpecifier.t_wchar_t:
-		case IASTSimpleDeclSpecifier.t_char16_t:
-		case IASTSimpleDeclSpecifier.t_char32_t:
-			break;
-		default:
-			return false;
-		}
-		
-		if (decl2.getPointerOperators().length != 0) {
-			return false;
-		}
-		if (spec2.isConst()
-			|| spec2.isConstexpr()
-			|| ((CPPASTSimpleDeclSpecifier)spec2).isSigned()
-			|| !((CPPASTSimpleDeclSpecifier)spec2).isUnsigned()
-			|| ((CPPASTSimpleDeclSpecifier)spec2).isLong()
-			|| ((CPPASTSimpleDeclSpecifier)spec2).isLongLong()) {
-			return false;
-		}
-		
-		return ((CPPASTSimpleDeclSpecifier)spec1).getType() == IASTSimpleDeclSpecifier.t_char;
+		return ret;
 	}
 	
 	private IValue getStringLiteralSize() {
@@ -446,7 +260,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		return (suffix.length > 0 ? getUDLOperatorType() : new CPPBasicType(getBasicCharKind(), 0, this));
     }
 	
-	private Kind getBasicCharKind() {
+	public Kind getBasicCharKind() {
 		switch (getValue()[0]) {
     	case 'L':
     		return Kind.eWChar;
