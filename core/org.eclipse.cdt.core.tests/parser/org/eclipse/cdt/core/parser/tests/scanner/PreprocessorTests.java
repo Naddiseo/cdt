@@ -223,8 +223,22 @@ public class PreprocessorTests extends PreprocessorTestsBase {
 	// #define tp(x,y) #x##y
 	// tp(a, );
 	// tp(a,b);
-	public void testStringifyAndPaste() throws Exception {
-		initializeScanner();
+	public void testStringifyAndPasteCPP() throws Exception {
+		initializeScanner(getAboveComment(), ParserLanguage.CPP);
+		validateString("a");
+		validateToken(IToken.tSEMI);
+
+		validateUDLString("a", "b");
+		validateToken(IToken.tSEMI);
+		validateEOF();
+		validateProblemCount(0);
+	}
+	
+	// #define tp(x,y) #x##y
+	// tp(a, );
+	// tp(a,b);
+	public void testStringifyAndPasteC() throws Exception {
+		initializeScanner(getAboveComment(), ParserLanguage.C);
 		validateString("a");
 		validateToken(IToken.tSEMI);
 

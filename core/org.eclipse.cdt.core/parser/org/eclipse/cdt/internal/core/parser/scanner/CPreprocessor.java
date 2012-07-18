@@ -689,11 +689,12 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
      */
     @Override
 	public IToken nextToken() throws EndOfFileException {
-        if (isCancelled) {
+    	if (isCancelled) {
             throw new ParseError(ParseError.ParseErrorKind.TIMEOUT_OR_CANCELLED);
         }
 
     	Token t1= fetchToken();
+    	String udl_suffix = null;
     	
     	final int tt1= t1.getType();
     	switch (tt1) {
@@ -715,24 +716,34 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     	case IToken.t_PRAGMA:
     		handlePragmaOperator(t1);
     		return nextToken();
-    		
+    	case IToken.tUSER_DEFINED_STRING_LITERAL:
+    		udl_suffix = StringType.getUDLSuffix(t1);
+    		//$FALL-THROUGH$
     	case IToken.tSTRING:
     	case IToken.tLSTRING:
         case IToken.tUTF16STRING:
         case IToken.tUTF32STRING:
-    		StringType st = StringType.fromToken(tt1);
+     		StringType st = StringType.fromToken(t1);
     		Token t2;
     		StringBuilder buf= null;
-    		int endOffset= 0;
+    		int endOffset= t1.getEndOffset();
     		loop: while (true) {
     			t2= fetchToken();
     			final int tt2= t2.getType();
     			switch (tt2) {
-    			case IToken.tLSTRING:
+    			case IToken.tUSER_DEFINED_STRING_LITERAL:
+    				if (udl_suffix == null) {
+    					udl_suffix = StringType.getUDLSuffix(t2);
+    				}
+    				else if (!udl_suffix.equals(StringType.getUDLSuffix(t2))) {
+    					handleProblem(IProblem.PREPROCESSOR_MULTIPLE_USERDEFINED_SUFFIXES_IN_CONCATENATION, udl_suffix.toCharArray(), t2.getOffset(), endOffset);
+    				}
+					//$FALL-THROUGH$
+				case IToken.tLSTRING:
     			case IToken.tSTRING:
     		    case IToken.tUTF16STRING:
     		    case IToken.tUTF32STRING:
-    				st = StringType.max(st, StringType.fromToken(tt2));
+    				st = StringType.max(st, StringType.fromToken(t2));
     				if (buf == null) {
     					buf= new StringBuilder();
     					appendStringContent(buf, t1);
@@ -747,23 +758,30 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     		    case IToken.t_PRAGMA:
     		    	handlePragmaOperator(t2);
     		    	continue loop;
-    			default:
+				default:
     				break loop;
     			}
     		}
     		pushbackToken(t2);
     		if (buf != null) {
     			char[] prefix = st.getPrefix();
-    			char[] image= new char[buf.length() + prefix.length + 2];
+    			final int imageLength = buf.length() + prefix.length + 2 + (udl_suffix == null ? 0 : udl_suffix.length()); 
+    			char[] image= new char[imageLength];
     			int off= -1;
+    			int tokenType = st.getTokenValue();
     			
     			for (char c : prefix)
     				image[++off] = c;
     			
     			image[++off]= '"';
     			buf.getChars(0, buf.length(), image, ++off);
-    			image[image.length - 1]= '"';
-    			t1= new TokenWithImage(st.getTokenValue(), null, t1.getOffset(), endOffset, image);
+    			off += buf.length();
+    			image[off]= '"';
+    			if (udl_suffix != null) {
+    				udl_suffix.getChars(0, udl_suffix.length(), image, ++off);
+    				tokenType = IToken.tUSER_DEFINED_STRING_LITERAL;
+    			}
+    			t1= new TokenWithImage(tokenType, null, t1.getOffset(), endOffset, image);
     		}
     		break;
     		
@@ -815,7 +833,13 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     	}
     	
     	if (length > 1) {
-    		final int diff= image[length - 1] == '"' ? length - start - 1 : length - start;
+    		int diff = 0;
+    		if (t1.getType() == IToken.tUSER_DEFINED_STRING_LITERAL) {
+    			diff = t1.getImage().lastIndexOf('"') - start;
+    		}
+    		else {
+    			diff= image[length - 1] == '"' ? length - start - 1 : length - start;
+    		}
     		if (diff > 0) {
     			buf.append(image, start, diff);
     		}
@@ -1962,7 +1986,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         fCurrentContext= new ScannerContext(ctx, fCurrentContext, replacement);
         return true;
 	}
-
+	
 	@Override
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public Object getAdapter(Class adapter) {

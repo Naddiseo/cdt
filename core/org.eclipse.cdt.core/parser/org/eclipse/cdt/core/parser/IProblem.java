@@ -339,6 +339,12 @@ public interface IProblem {
 	public final static int PREPROCESSOR_EXCEEDS_MAXIMUM_INCLUSION_DEPTH= PREPROCESSOR_RELATED | 0x00F;
 	
 	/**
+	 * During concatentation of string literals, at least two were found with
+	 * more than one type of UDL suffix
+	 * @since 5.4 
+	 */
+	public final static int PREPROCESSOR_MULTIPLE_USERDEFINED_SUFFIXES_IN_CONCATENATION = PREPROCESSOR_RELATED | 0x010;
+	/**
 	 * Syntax error, detected by the parser.
 	 */
 	public final static int SYNTAX_ERROR = SYNTAX_RELATED | 0x001;

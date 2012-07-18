@@ -8,7 +8,7 @@
  * Contributors:
  *     John Camelon (IBM) - Initial API and implementation
  *     Markus Schorn (Wind River Systems)
- *     Richard
+ *     Richard Eames
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -103,39 +103,70 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
 		this.suffix = suffix;
 	}
 	
+	public void calculateSuffix() {
+		this.calculateSuffix(CharArrayUtils.EMPTY);
+	}
+	
+	/**
+	 * Get the suffix of a userdefined literal integer or float
+	 * @param compilerSuffixes
+	 */
 	public void calculateSuffix(char[] compilerSuffixes) {
 		try {
-			int udOffset = (value[0] == '.' ? afterDecimalPoint(0) : integerLiteral());
-			if (udOffset > 0) {
-				/*
-				 * 2.14.8.1
-				 * "If a token matches both user-defined-literal and another literal kind, it is treated as the latter"
-				 */
-				setSuffix(CharArrayUtils.subarray(value, udOffset, -1));
-				for (int i = 0; i < suffix.length; i++) {
-					switch (suffix[i]) {
-					case 'l': case 'L': 
-					case 'u': case 'U':
-					case 'f': case 'F':
-						continue;
-					}
-					for (int j = 0; j < compilerSuffixes.length; j++) {
-						if (suffix[i] == compilerSuffixes[j]) {
+			switch (kind) {
+			case lk_float_constant:
+			case lk_integer_constant:
+				int udOffset = (value[0] == '.' ? afterDecimalPoint(0) : integerLiteral());
+				if (udOffset > 0) {
+					/*
+					 * 2.14.8.1
+					 * "If a token matches both user-defined-literal and another literal kind, it is treated as the latter"
+					 */
+					setSuffix(CharArrayUtils.subarray(value, udOffset, -1));
+					for (int i = 0; i < suffix.length; i++) {
+						switch (suffix[i]) {
+						case 'l': case 'L': 
+						case 'u': case 'U':
+						case 'f': case 'F':
 							continue;
 						}
+						for (int j = 0; j < compilerSuffixes.length; j++) {
+							if (suffix[i] == compilerSuffixes[j]) {
+								continue;
+							}
+						}
+						isCompilerSuffix = false;
+						// Remove the suffix from the value if it's a UDL
+						setValue(CharArrayUtils.subarray(value, 0, udOffset));
+						break;
 					}
-					isCompilerSuffix = false;
-					// Remove the suffix from the value if it's a UDL
-					setValue(CharArrayUtils.subarray(value, 0, udOffset));
-					break;
+					
 				}
-				
+				break;
+			case lk_string_literal: {
+				final int offset = CharArrayUtils.lastIndexOf('"', value, CharArrayUtils.indexOf('"', value) + 1);
+				if (offset > 0) {
+					setSuffix(CharArrayUtils.subarray(value, offset + 1, -1));
+				}
+			}
+				break;
+			case lk_char_constant: {
+				final int offset = CharArrayUtils.lastIndexOf('\'', value, CharArrayUtils.indexOf('\'', value) + 1);
+				if (offset > 0) {
+					setSuffix(CharArrayUtils.subarray(value, offset + 1, -1));
+				}
+			}
+				break;
+			default:
+				// do nothing
+				break;
 			}
 		}
 		catch (ArrayIndexOutOfBoundsException e) {
 			// pass
 		}
 	}
+	
 	@Override
 	public String toString() {
         return new String(value);

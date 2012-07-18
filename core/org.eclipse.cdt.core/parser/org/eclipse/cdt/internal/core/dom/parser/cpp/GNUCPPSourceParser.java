@@ -1659,7 +1659,6 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         IASTLiteralExpression literalExpression = null;
         IASTLiteralExpression leWithRange = null;
         
-        
         switch (LT(1)) {
         // TO DO: we need more literals...
         case IToken.tINTEGER:
@@ -1678,15 +1677,23 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         case IToken.tLSTRING:
         case IToken.tUTF16STRING:
         case IToken.tUTF32STRING:
-        	leWithRange= stringLiteral();
+        case IToken.tUSER_DEFINED_STRING_LITERAL:
+        	leWithRange = stringLiteral();
+        	if (supportUserDefinedLiterals) {
+        		((CPPASTLiteralExpression) leWithRange).calculateSuffix();
+        	}
         	break;
         case IToken.tCHAR:
         case IToken.tLCHAR:
         case IToken.tUTF16CHAR:
         case IToken.tUTF32CHAR:
+        case IToken.tUSER_DEFINED_CHAR_LITERAL:
             t = consume();
             literalExpression = nodeFactory.newLiteralExpression(IASTLiteralExpression.lk_char_constant, t.getImage()); 
             leWithRange= setRange(literalExpression, t.getOffset(), t.getEndOffset());
+            if (supportUserDefinedLiterals) {
+        		((CPPASTLiteralExpression) leWithRange).calculateSuffix();
+        	}
             break;
         case IToken.t_false:
             t = consume();
@@ -1743,13 +1750,12 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
 	        IToken la = LA(1);
 	        ASTNode loc = (ASTNode) leWithRange.getOriginalNode();
 	        if (la.getType() == IToken.tIDENTIFIER && loc != null) {
-	        	// literal suffix must immediately follow the literal
-				if (loc.getOffset()+loc.getLength() == la.getOffset()) {
-					IToken opName = consume(IToken.tIDENTIFIER);
-					((CPPASTLiteralExpression) leWithRange).setSuffix(opName.getCharImage());
-					setRange(leWithRange, loc.getOffset(), opName.getEndOffset());
-					return leWithRange;
-				}
+	        	if (loc.getOffset()+loc.getLength() != la.getOffset()) {
+	        		return leWithRange;
+	        	}
+				IToken opName = consume(IToken.tIDENTIFIER);
+				((CPPASTLiteralExpression) leWithRange).setSuffix(opName.getCharImage());
+				setRange(leWithRange, loc.getOffset(), opName.getEndOffset());
 	        }
         }
         
@@ -1762,6 +1768,7 @@ public class GNUCPPSourceParser extends AbstractGNUSourceCodeParser {
         case IToken.tLSTRING:
         case IToken.tUTF16STRING:
         case IToken.tUTF32STRING:
+        case IToken.tUSER_DEFINED_STRING_LITERAL:
         	break;
         default:
         	throwBacktrack(LA(1));

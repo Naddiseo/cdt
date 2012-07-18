@@ -335,7 +335,7 @@ final public class Lexer implements ITokenSequence {
 				if (fInsideIncludeDirective) {
 					return headerName(start, true);
 				}
-				return stringLiteral(start, 1, IToken.tSTRING);
+ 				return stringLiteral(start, 1, IToken.tSTRING);
 
 			case '\'':
 				return charLiteral(start, IToken.tCHAR);
@@ -708,8 +708,17 @@ final public class Lexer implements ITokenSequence {
 			c= nextCharPhase3();
 		}
 	}
-
-	private Token stringLiteral(final int start, int length, final int tokenType) throws OffsetLimitReachedException {
+	
+	private boolean isIdentifierStart(int c) {
+		return (
+			Character.isLetter((char)c) || Character.isDigit((char)c) || Character.isUnicodeIdentifierPart(c) ||
+			(fOptions.fSupportDollarInIdentifiers && c == '$') ||
+			(fOptions.fSupportAtSignInIdentifiers && c == '@') ||
+			c == '_'
+		);
+	}
+	
+	private Token stringLiteral(final int start, int length, int tokenType) throws OffsetLimitReachedException {
 		boolean escaped = false;
 		boolean done = false;
 		
@@ -742,10 +751,17 @@ final public class Lexer implements ITokenSequence {
 			length++;
 			c= nextCharPhase3();
 		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart(c)) {
+			Token t = identifier(start+length, 0);
+			tokenType = IToken.tUSER_DEFINED_STRING_LITERAL;
+			length += t.getLength();
+		}
+		
 		return newToken(tokenType, start, length);
 	}
 
-	private Token rawStringLiteral(final int start, int length, final int tokenType) throws OffsetLimitReachedException {
+	private Token rawStringLiteral(final int start, int length, int tokenType) throws OffsetLimitReachedException {
 		final int delimOffset= fOffset;
 		int delimEndOffset = delimOffset;
 		int offset;
@@ -789,10 +805,17 @@ final public class Lexer implements ITokenSequence {
 		fEndOffset= offset;
 		fCharPhase3=  0;
 		nextCharPhase3();
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart(fCharPhase3)) {
+			Token t = identifier(offset, 0);
+			tokenType = IToken.tUSER_DEFINED_STRING_LITERAL;
+			offset += t.getLength();
+		}
+		
 		return newToken(tokenType, start, offset-start);
 	}
 
-	private Token charLiteral(final int start, final int tokenType) throws OffsetLimitReachedException {
+	private Token charLiteral(final int start, int tokenType) throws OffsetLimitReachedException {
 		boolean escaped = false;
 		boolean done = false;
 		int length= tokenType == IToken.tCHAR ? 1 : 2;
@@ -824,6 +847,13 @@ final public class Lexer implements ITokenSequence {
 			length++;
 			c= nextCharPhase3();
 		}
+		
+		if (fOptions.fSupportUserDefinedLiterals && isIdentifierStart(c)) {
+			Token t = identifier(start+length, 0);
+			tokenType = IToken.tUSER_DEFINED_CHAR_LITERAL;
+			length += t.getLength();
+		}
+		
 		return newToken(tokenType, start, length);
 	}
 	
