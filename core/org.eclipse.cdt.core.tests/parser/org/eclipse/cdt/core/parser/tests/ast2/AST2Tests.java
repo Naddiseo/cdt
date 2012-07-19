@@ -95,6 +95,7 @@ import org.eclipse.cdt.core.dom.ast.IMacroBinding;
 import org.eclipse.cdt.core.dom.ast.IParameter;
 import org.eclipse.cdt.core.dom.ast.IPointerType;
 import org.eclipse.cdt.core.dom.ast.IProblemBinding;
+import org.eclipse.cdt.core.dom.ast.IProblemType;
 import org.eclipse.cdt.core.dom.ast.IQualifierType;
 import org.eclipse.cdt.core.dom.ast.IScope;
 import org.eclipse.cdt.core.dom.ast.IType;
@@ -122,6 +123,7 @@ import org.eclipse.cdt.internal.core.dom.parser.ASTNode;
 import org.eclipse.cdt.internal.core.dom.parser.c.CFunction;
 import org.eclipse.cdt.internal.core.dom.parser.c.CVisitor;
 import org.eclipse.cdt.internal.core.dom.parser.c.ICInternalBinding;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPVariable;
 import org.eclipse.cdt.internal.core.model.ASTStringUtil;
 import org.eclipse.cdt.internal.core.parser.ParserException;
 
@@ -7418,7 +7420,7 @@ public class AST2Tests extends AST2BaseTest {
 		assertEquals("//comment", comment.getRawSignature());
 	}
 	
-	private void checkUDLIsRet(String code) throws Exception {
+	private void checkUDLIsType(String code, String type_name) throws Exception {
 		IASTTranslationUnit tu = parseAndCheckBindings(code, CPP);
 		IASTDeclaration[] declarations = tu.getDeclarations();
 		IASTDeclaration declaration = declarations[declarations.length - 1];
@@ -7426,7 +7428,11 @@ public class AST2Tests extends AST2BaseTest {
 		IASTInitializer init = ((IASTSimpleDeclaration) declaration).getDeclarators()[0].getInitializer();
 		IType type = ((IASTExpression)((IASTEqualsInitializer) init).getInitializerClause()).getExpressionType();
 		
-		assertEquals("Ret", type.toString());
+		assertEquals(type_name, type.toString());
+	}
+	
+	private void checkUDLIsRet(String code) throws Exception {
+		checkUDLIsType(code, "Ret");
 	}
 	
 	// class Ret {};
@@ -7498,6 +7504,20 @@ public class AST2Tests extends AST2BaseTest {
 	// Ret operator "" X(const char32_t* s, unsigned sz) { return Ret(); }
 	// auto test = U"123"X;
 	public void testUDLOperatorTypes3c() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// template<char... Chars> Ret operator "" X() { return Ret(); }
+	// auto test = 123X;
+	public void testUDLOperatorTypes4a() throws Exception {
+		checkUDLIsRet(getAboveComment());
+	}
+	
+	// class Ret {};
+	// template<char... Chars> Ret operator "" X() { return Ret(); }
+	// auto test = 123.123X;
+	public void testUDLOperatorTypes4b() throws Exception {
 		checkUDLIsRet(getAboveComment());
 	}
 	
@@ -7685,6 +7705,42 @@ public class AST2Tests extends AST2BaseTest {
 			IASTDeclaration decl = decls[i];
 			assertTrue(decl instanceof IASTProblemDeclaration);
 			assertEquals(IProblem.SYNTAX_ERROR, ((IASTProblemDeclaration)decl).getProblem().getID());
+		}
+	}
+	
+	// class RetA {}; 
+	// class RetB {};
+	// template<char... Chars> RetA operator "" X() { return RetA(); }
+	// RetB operator "" X(unsigned long long i) { return RetB(); }
+	// auto a = 123X;
+	public void testUDLResolution1() throws Exception {
+		checkUDLIsType(getAboveComment(), "RetB");
+	}
+	
+	// class RetA {}; 
+	// class RetB {};
+	// template<char... Chars> RetA operator "" X() { return RetA(); }
+	// RetB operator "" X(long double i) { return RetB(); }
+	// auto a = 123.123X;
+	public void testUDLResolution2() throws Exception {
+		checkUDLIsType(getAboveComment(), "RetB");
+	}
+	
+	// class RetA {}; 
+	// class RetB {};
+	// template<char... Chars> RetA operator "" X() { return RetA(); }
+	// RetB operator "" X(const char * c) { return RetB(); }
+	// auto test = 123X;
+	public void testUDLResolution3() throws Exception {
+		IASTTranslationUnit tu = parse(getAboveComment(), CPP, true, false);
+		CNameCollector col = new CNameCollector();
+		tu.accept(col);
+		
+		for (Object obj: col.nameList) {
+			IBinding binding = ((IASTName) obj).resolveBinding();
+			if (binding.getName().equals("test")) {
+				assertTrue(((CPPVariable)binding).getType() instanceof IProblemType);
+			}
 		}
 	}
 }

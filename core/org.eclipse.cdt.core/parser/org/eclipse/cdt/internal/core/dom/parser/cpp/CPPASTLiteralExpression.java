@@ -296,7 +296,7 @@ public class CPPASTLiteralExpression extends ASTNode implements ICPPASTLiteralEx
     	case 'L':
     		return Kind.eWChar;
     	case 'u':
-    		return  Kind.eChar16;
+    		return Kind.eChar16;
     	case 'U':
     		return Kind.eChar32;
     	default:

@@ -115,6 +115,7 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTIfStatement;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTInitializerList;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTLambdaExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTLinkageSpecification;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTLiteralExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNamedTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNamespaceAlias;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNamespaceDefinition;
@@ -189,6 +190,7 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTLiteralExpression;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTName;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTNameBase;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTQualifiedName;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTTemplateId;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTTranslationUnit;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTTypeIdExpression;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTUnaryExpression;
@@ -196,6 +198,8 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPBasicType;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPBuiltinParameter;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPCompositeBinding;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPFunction;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPFunctionInstance;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPFunctionTemplate;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPFunctionType;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPImplicitFunction;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPNamespace;
@@ -3026,19 +3030,24 @@ public class CPPSemantics {
 		 */
 		IBinding[] bindings = findBindings(exp.getTranslationUnit().getScope(), ((CPPASTLiteralExpression) exp).getOperatorName(), false);
 		ICPPFunction[] funcs = new ICPPFunction[bindings.length];
+		ICPPFunctionTemplate[] tplFunctions = new ICPPFunctionTemplate[bindings.length];
 		LookupData data = new LookupData();
 		
-		int i = 0;
+		int i = 0, j = 0;
 		for (IBinding binding : bindings) {
 			if (binding instanceof PDOMNode) {
 				continue;
 			}
 			if (binding instanceof CPPFunction || binding instanceof ICPPFunctionTemplate) {
 				funcs[i++] = (ICPPFunction) binding;
+				if (binding instanceof ICPPFunctionTemplate) {
+					tplFunctions[j++] = (ICPPFunctionTemplate) binding;
+				}
 			}
 		}
 		
 		funcs = ArrayUtil.trim(funcs);
+		tplFunctions = ArrayUtil.trim(tplFunctions);
 		
 		int kind = exp.getKind();
 		
@@ -3085,7 +3094,33 @@ public class CPPSemantics {
 			data.setFunctionArguments(false, createArgForType(exp, charArray));
 			ret = resolveFunction(data, funcs, true);
 			
-			//  TODO: check for literal operator template
+			
+			//  TODO: This is a mess, but I don't know a better way to do it
+			
+			IBinding[] tplBindings = new IBinding[j];
+			for (ICPPFunctionTemplate func : tplFunctions) {
+				// Get an instance of each template given the char literals as
+				// template arguments, then resolve.
+				CPPASTTemplateId tplName = new CPPASTTemplateId(((CPPFunctionTemplate)func).getTemplateName().copy());
+				for (char c : exp.getValue()) {
+					tplName.addTemplateArgument(new CPPASTLiteralExpression(ICPPASTLiteralExpression.lk_char_constant, new char[]{ '\'', c, '\'' }));
+				}
+				data = new LookupData(tplName);
+				tplBindings[--j] = resolveFunction(data, tplFunctions, true);
+			}
+			
+			// Do we have valid template and non-template bindings?
+			if (ret != null && tplBindings.length == 1) {
+				if (!(ret instanceof IProblemBinding) && tplBindings[0] instanceof CPPFunctionInstance) {
+					// Ambiguity? It has two valid options, and the spec says it shouldn't
+					ret = null;
+				}
+				
+				if ((ret instanceof IProblemBinding) && tplBindings[0] instanceof CPPFunctionInstance) {
+					// Only the template binding is valid
+					ret = tplBindings[0];
+				}
+			}
 		}
 		
 		else if (kind == IASTLiteralExpression.lk_string_literal) {
