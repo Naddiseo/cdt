@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2012 Wind River Systems, Inc. and others.
+ * Copyright (c) 2006, 2014 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,7 +8,7 @@
  * Contributors:
  *     Markus Schorn - initial API and implementation
  *     Sergey Prigogin (Google)
- *******************************************************************************/ 
+ *******************************************************************************/
 package org.eclipse.cdt.internal.ui.callhierarchy;
 
 import java.util.ArrayList;
@@ -40,7 +40,7 @@ import org.eclipse.cdt.internal.ui.viewsupport.AsyncTreeContentProvider;
 import org.eclipse.cdt.internal.ui.viewsupport.IndexUI;
 import org.eclipse.cdt.internal.ui.viewsupport.WorkingSetFilterUI;
 
-/** 
+/**
  * This is the content provider for the call hierarchy.
  */
 public class CHContentProvider extends AsyncTreeContentProvider {
@@ -80,10 +80,9 @@ public class CHContentProvider extends AsyncTreeContentProvider {
 				if (node.isInitializer()) {
 					return NO_CHILDREN;
 				}
-			} else if (node.isVariableOrEnumerator() || node.isMacro()) { 
+			} else if (node.isVariableOrEnumerator() || node.isMacro()) {
 				return NO_CHILDREN;
 			}
-			
 		}
 		// Allow for async computation
 		return null;
@@ -110,12 +109,17 @@ public class CHContentProvider extends AsyncTreeContentProvider {
 		}
 		return NO_CHILDREN;
 	}
-	
+
 	private Object[] asyncComputeRoot(final ICElement input) throws CoreException, InterruptedException {
 		IIndex index= CCorePlugin.getIndexManager().getIndex(input.getCProject(), CallHierarchyUI.INDEX_SEARCH_OPTION);
 		index.acquireReadLock();
 		try {
 			ICElement element= input;
+            if (CHQueries.isExternal(element)) {
+              ITranslationUnit tu= CModelUtil.getTranslationUnit(element);
+              return new Object[] { new CHNode(null, tu, 0, element, -1) };
+            }
+
 			if (!IndexUI.isIndexed(index, input)) {
 				getDisplay().asyncExec(new Runnable() {
 					@Override
@@ -203,7 +207,7 @@ public class CHContentProvider extends AsyncTreeContentProvider {
 		}
 		return nodes.toArray(new CHNode[nodes.size()]);
 	}
-	
+
 	private CHNode createRefbyNode(CHNode parent, ICElement element, IIndexName[] refs) throws CoreException {
 		ITranslationUnit tu= CModelUtil.getTranslationUnit(element);
 		final IIndexFile file = refs[0].getFile();
@@ -247,14 +251,14 @@ public class CHContentProvider extends AsyncTreeContentProvider {
 		final IIndexFile file = references[0].getFile();
 		final long timestamp= file.getTimestamp();
 		final int linkageID= file.getLinkageID();
-		
+
 		CHNode node;
 		if (elements.length == 1) {
 			node= new CHNode(parent, tu, timestamp, elements[0], linkageID);
 		} else {
 			node= new CHMultiDefNode(parent, tu, timestamp, elements, linkageID);
 		}
-		
+
 		boolean readAccess= false;
 		boolean writeAccess= false;
 		for (IIndexName reference : references) {

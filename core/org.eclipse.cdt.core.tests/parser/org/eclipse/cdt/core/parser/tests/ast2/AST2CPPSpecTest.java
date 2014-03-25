@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2009 IBM Corporation and others.
+ * Copyright (c) 2005, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,8 @@
  * Contributors:
  *     Devin Steffler (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.ast2;
 
@@ -45,7 +47,7 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
 /**
  * Examples taken from the c++-specification.
  */
-public class AST2CPPSpecTest extends AST2SpecBaseTest {
+public class AST2CPPSpecTest extends AST2SpecTestBase {
 
 	public AST2CPPSpecTest() {
 	}
@@ -856,6 +858,12 @@ public class AST2CPPSpecTest extends AST2SpecBaseTest {
 	// int x=new float[n][5];
 	// int y=new float[5][n];
 	public void test5_3_4s6() throws Exception {
+		parse(getAboveComment(), ParserLanguage.CPP, true, 0);
+	}
+
+	// const char* strchr(const char* s, int c);
+	// bool b = noexcept (strchr("abc", 'b'));
+	public void test5_3_7() throws Exception {
 		parse(getAboveComment(), ParserLanguage.CPP, true, 0);
 	}
 
@@ -1845,7 +1853,7 @@ public class AST2CPPSpecTest extends AST2SpecBaseTest {
 	// S<int(1)> y; // expression (illformed)
 	public void test8_2s4() throws Exception {
 		IASTTranslationUnit tu= parse(getAboveComment(), ParserLanguage.CPP, true, 1);
-		CPPNameCollector col = new CPPNameCollector();
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		assertInstance(col.getName(4), ICPPASTTemplateId.class);
@@ -5747,7 +5755,7 @@ public class AST2CPPSpecTest extends AST2SpecBaseTest {
 	//		g<C>(0); // The N member of C is not a non-type
 	//		h<D>(0); // The TT member of D is not a template
 	//	}
-	public void _test14_8_2s8d() throws Exception {
+	public void test14_8_2s8d() throws Exception {
 		final String content= getAboveComment();
 		BindingAssertionHelper bh= new BindingAssertionHelper(content, true);
 		bh.assertProblem("f<A>", 0);
@@ -6053,14 +6061,14 @@ public class AST2CPPSpecTest extends AST2SpecBaseTest {
 		BindingAssertionHelper bh= new BindingAssertionHelper(code, true);
 		ICPPTemplateInstance inst;
 		inst= bh.assertNonProblem("f1(v)", 2);
-		assertEquals("<20>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<int20>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 		inst= bh.assertNonProblem("f1<20>(v)", -3);
-		assertEquals("<20>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<int20>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 		bh.assertProblem("f2(v)", 2);
 		inst= bh.assertNonProblem("f2<10>(v)", -3);
-		assertEquals("<10>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<int10>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 		inst= bh.assertNonProblem("f3(v)", 2);
-		assertEquals("<10>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<int10>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 	}
 
 	//	template <int i> class A { };
@@ -6079,9 +6087,9 @@ public class AST2CPPSpecTest extends AST2SpecBaseTest {
 		ICPPTemplateInstance inst;
 		bh.assertProblem("g(a1)", 1);
 		inst= bh.assertNonProblem("g<0>(a1)", -4);
-		assertEquals("<0>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<int0>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 		inst= bh.assertNonProblem("f(a1, a2)", 1);
-		assertEquals("<1>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<int1>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 	}
 
 	//	template<typename T> class A {
@@ -6127,9 +6135,9 @@ public class AST2CPPSpecTest extends AST2SpecBaseTest {
 		ICPPTemplateInstance inst;
 		bh.assertProblem("f(a)", 1);
 		inst= bh.assertNonProblem("f<1>(a)", -3);
-		assertEquals("<1>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<short int1>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 		inst= bh.assertNonProblem("g(b)", 1);
-		assertEquals("<1>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
+		assertEquals("<short int1>", ASTTypeUtil.getArgumentListString(inst.getTemplateArguments(), true));
 	}
 
 	//	template<class T> void f(void(*)(T,int));
@@ -6383,6 +6391,21 @@ public class AST2CPPSpecTest extends AST2SpecBaseTest {
 
 	// typedef int (*pf)() throw(int); // illformed
 	public void test15_4s1b() throws Exception {
+		parse(getAboveComment(), ParserLanguage.CPP, true, 0);
+	}
+
+	//	template <typename T>
+	//	void f(T p);
+	//
+	//	template <typename T>
+	//	void g(T p) noexcept;
+	//
+	//	template <typename T>
+	//	void fg(T a) noexcept (noexcept(f(a)) && noexcept(g(a))) {
+	//	  f(a);
+	//	  g(a);
+	//	}
+	public void test15_4s1c() throws Exception {
 		parse(getAboveComment(), ParserLanguage.CPP, true, 0);
 	}
 

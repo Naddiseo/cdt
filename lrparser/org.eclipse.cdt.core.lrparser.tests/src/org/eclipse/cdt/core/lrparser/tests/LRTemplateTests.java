@@ -62,7 +62,7 @@ public class LRTemplateTests extends AST2TemplateTests {
 	
 	//the below test case are for C++0x features which are not included in XLC++ yet
 	@Override
-	public void testRValueReferences_1_294730() throws Exception {}	
+	public void testRValueReferences_294730() throws Exception {}	
 	@Override
 	public void testVariadicTemplateExamples_280909a() throws Exception {}
 	@Override
@@ -103,10 +103,10 @@ public class LRTemplateTests extends AST2TemplateTests {
 	public void testFunctionParameterPacksInNonFinalPosition_324096() throws Exception {}
 	//decltype related
 	@Override
-	public void testFunctionCallOnDependentName_Bug337686() throws Exception {}
+	public void testFunctionCallOnDependentName_337686() throws Exception {}
 	//variadic template 
 	@Override
-	public void testVariadicFunctionTemplate_Bug333389() throws Exception {}
+	public void testVariadicFunctionTemplate_333389() throws Exception {}
 	//auto
 	@Override	
 	public void testRRefVsRef_351927() throws Exception {}
@@ -116,12 +116,12 @@ public class LRTemplateTests extends AST2TemplateTests {
 	
 	@Override
 	@SuppressWarnings("unused")
-	protected IASTTranslationUnit parse( String code, ParserLanguage lang,  boolean useGNUExtensions, boolean expectNoProblems, boolean skipTrivialInitializers) throws ParserException {
+	protected IASTTranslationUnit parse( String code, ParserLanguage lang,  boolean useGNUExtensions, boolean expectNoProblems, int limitTrivialInitializers) throws ParserException {
     	ILanguage language = lang.isCPP() ? getCPPLanguage() : getCLanguage();
     	ParseHelper.Options options = new ParseHelper.Options();
     	options.setCheckSyntaxProblems(expectNoProblems);
     	options.setCheckPreprocessorProblems(expectNoProblems);
-    	options.setSkipTrivialInitializers(skipTrivialInitializers);
+    	options.setLimitTrivialInitializers(limitTrivialInitializers);
     	return ParseHelper.parse(code, language, options);
     }
     

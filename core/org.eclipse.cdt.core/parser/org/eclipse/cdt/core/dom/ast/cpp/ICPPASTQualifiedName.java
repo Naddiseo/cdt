@@ -20,27 +20,68 @@ import org.eclipse.cdt.core.dom.ast.IASTNameOwner;
  * @noextend This interface is not intended to be extended by clients.
  * @noimplement This interface is not intended to be implemented by clients.
  */
-public interface ICPPASTQualifiedName extends IASTName, IASTNameOwner {
+public interface ICPPASTQualifiedName extends ICPPASTName, IASTNameOwner {
 	/**
-	 * Each IASTName segment has property being <code>SEGMENT_NAME</code>.
+	 * Each ICPPASTNameSpecifier segment has property being <code>SEGMENT_NAME</code>.
 	 */
 	public static final ASTNodeProperty SEGMENT_NAME = new ASTNodeProperty(
-			"ICPPASTQualifiedName.SEGMENT_NAME - An IASTName segment"); //$NON-NLS-1$
+			"ICPPASTQualifiedName.SEGMENT_NAME - An ICPPASTNameSpecifier segment"); //$NON-NLS-1$
 
 	/**
-	 * Add a subname.
+	 * Adds a name segment.
 	 *
-	 * @param name <code>IASTName</code>
+	 * @param name {@code IASTName}
 	 */
 	public void addName(IASTName name);
+	
+	/**
+	 * Adds a segment to the end of the qualifier.
+	 * 
+	 * @since 5.6
+	 */
+	public void addNameSpecifier(ICPPASTNameSpecifier nameSpecifier);
+	
+	/**
+	 * Sets the last name.
+	 * 
+	 * @since 5.6
+	 */
+	public void setLastName(ICPPASTName name);
 
 	/**
-	 * Get all subnames.
+	 * Returns all name segments.
 	 *
 	 * @return <code>IASTName []</code>
+	 * 
+	 * @deprecated This cannot represent all qualified names in C++11,
+	 * where the first segment of a qualifier name may be a decltype-specifier.
+	 * Use {@link #getLastName()} and {@link #getQualifier()} instead.
+	 * If called on a name where a segment is a decltype-specifier,
+	 * UnsupportedOperationException is thrown.
 	 */
+	@Deprecated
 	public IASTName[] getNames();
 
+	/**
+	 * Returns all segments of the name but the last.
+	 * 
+	 * @since 5.6
+	 */
+	public ICPPASTNameSpecifier[] getQualifier();
+	
+	/**
+	 * Returns all segments of the name.
+	 * 
+	 * This method is less efficient than calling getQualifier() and 
+	 * getLastName() separately, because it constructs a new array.
+	 * It is provided mainly to ease transition of client code from
+	 * getNames() to getQualifier() and getLastName(). 
+	 * 
+	 * @noreference This method is not intended to be referenced by clients.
+	 * @since 5.6
+	 */
+	public ICPPASTNameSpecifier[] getAllSegments();
+	
 	/**
 	 * The last name is often semantically significant.
 	 */
@@ -55,15 +96,14 @@ public interface ICPPASTQualifiedName extends IASTName, IASTNameOwner {
 	public boolean isFullyQualified();
 
 	/**
-	 * Set this name to be fully qualified or not (true/false).
+	 * Sets this name to be fully qualified or not (true/false).
 	 *
 	 * @param value boolean
 	 */
 	public void setFullyQualified(boolean value);
 
 	/**
-	 * This is used to check if the ICPPASTQualifiedName's last segment is
-	 * an ICPPASTConversionName or an ICPPASTOperatorName.
+	 * Returns {@code true} if last segment is an ICPPASTConversionName or an ICPPASTOperatorName.
 	 */
 	public boolean isConversionOrOperator();
 

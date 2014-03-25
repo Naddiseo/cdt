@@ -63,17 +63,17 @@ public class CallHierarchyUI {
 	static final int INDEX_SEARCH_OPTION = IIndexManager.ADD_DEPENDENCIES | IIndexManager.ADD_DEPENDENT
 			| IIndexManager.ADD_EXTENSION_FRAGMENTS_CALL_HIERARCHY;
 	private static final ICElement[] NO_ELEMENTS = {};
-	private static boolean sIsJUnitTest= false;
+	private static boolean sIsJUnitTest;
 
 	/**
 	 * List of the Call Hierarchy views in LRU order, where the most recently used view is at index 0.
 	 */
 	private static List<CHViewPart> fLRUCallHierarchyViews= new ArrayList<CHViewPart>();
-	private static int fViewCount = 0;
-	
+	private static int fViewCount;
+
 	private static final int MAX_HISTORY_SIZE = 10;
 	private static List<ICElement> fHistoryEntries= new ArrayList<ICElement>(MAX_HISTORY_SIZE);
-	
+
 	public static void setIsJUnitTest(boolean val) {
 		sIsJUnitTest= val;
 	}
@@ -113,7 +113,7 @@ public class CallHierarchyUI {
 			} else {
 				secondaryId = viewPart.getViewSite().getSecondaryId();
 			}
-        	
+
 			viewPart = (CHViewPart) page.showView(CUIPlugin.ID_CALL_HIERARCHY, secondaryId, IWorkbenchPage.VIEW_ACTIVATE);
 			viewPart.setInput(input);
             return viewPart;
@@ -321,7 +321,7 @@ public class CallHierarchyUI {
 				binding instanceof IEnumerator ||
 				binding instanceof IFunction)
 			return true;
-		
+
 		if (binding instanceof IVariable) {
 			try {
 				final IScope scope = binding.getScope();
@@ -356,11 +356,11 @@ public class CallHierarchyUI {
 		}
 		return false;
 	}
-	
-		
+
+
 	/**
 	 * Adds the activated view part to the head of the list.
-	 * 
+	 *
 	 * @param view the Call Hierarchy view part
 	 */
 	static void callHierarchyViewActivated(CHViewPart view) {
@@ -370,26 +370,26 @@ public class CallHierarchyUI {
 
 	/**
 	 * Removes the closed view part from the list.
-	 * 
+	 *
 	 * @param view the closed view part
 	 */
 	static void callHierarchyViewClosed(CHViewPart view) {
 		fLRUCallHierarchyViews.remove(view);
 	}
-	
+
 	/**
 	 * Clears the history and updates all the open views.
 	 */
 	static void clearHistory() {
-		setHistoryEntries(new ICElement[0]);
+		setHistoryEntries(ICElement.EMPTY_ARRAY);
 		for (CHViewPart part : fLRUCallHierarchyViews) {
 			part.setInput(null);
 		}
 	}
-	
+
 	/**
 	 * Finds the first Call Hierarchy view part instance that is not pinned.
-	 * 
+	 *
 	 * @param page the active page
 	 * @return the Call Hierarchy view part to open or <code>null</code> if none found
 	 */
@@ -404,7 +404,7 @@ public class CallHierarchyUI {
 			}
 		}
 		if (!viewFoundInPage) {
-			// find unresolved views
+			// Find unresolved views
 			IViewReference[] viewReferences= page.getViewReferences();
 			for (IViewReference curr : viewReferences) {
 				if (CUIPlugin.ID_CALL_HIERARCHY.equals(curr.getId()) && page.equals(curr.getPage())) {
@@ -417,16 +417,16 @@ public class CallHierarchyUI {
 		}
 		return null;
 	}
-	
+
 	static public ICElement[] getHistoryEntries() {
 		return fHistoryEntries.toArray(new ICElement[fHistoryEntries.size()]);
 	}
-	
+
 	static public void setHistoryEntries(ICElement[] remaining) {
 		fHistoryEntries.clear();
 		fHistoryEntries.addAll(Arrays.asList(remaining));
 	}
-	
+
 	static public void updateHistory(ICElement input) {
     	if (input != null) {
     		fHistoryEntries.remove(input);
@@ -436,5 +436,4 @@ public class CallHierarchyUI {
     		}
     	}
 	}
-
 }

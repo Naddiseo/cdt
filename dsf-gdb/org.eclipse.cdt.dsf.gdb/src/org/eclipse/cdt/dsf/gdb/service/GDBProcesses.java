@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2012 Ericsson and others.
+ * Copyright (c) 2008, 2013 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -245,13 +245,43 @@ public class GDBProcesses extends MIProcesses implements IGDBProcesses {
 							protected void handleSuccess() {
 								// For an attach, we actually know the pid, so let's remember it
 								fProcId = ((IMIProcessDMContext)procCtx).getProcId();
-								IDMContext containerDmc = getData();
-								rm.setData(containerDmc);
+								final IDMContext ctx = getData();
+								rm.setData(ctx);
 
-								// Start tracking breakpoints.
-								MIBreakpointsManager bpmService = getServicesTracker().getService(MIBreakpointsManager.class);
-								IBreakpointsTargetDMContext bpTargetDmc = DMContexts.getAncestorOfType(containerDmc, IBreakpointsTargetDMContext.class);
-								bpmService.startTrackingBreakpoints(bpTargetDmc, rm);
+								ImmediateExecutor.getInstance().execute(
+									new Sequence(getExecutor(), rm) {
+										
+										private Step[] fSteps = new Step[] {
+											// Initialize memory data for this process
+											new Step() {
+												@Override
+												public void execute(RequestMonitor memoryDataRm) {
+													IGDBMemory memory = getServicesTracker().getService(IGDBMemory.class);
+													IMemoryDMContext memContext = DMContexts.getAncestorOfType(ctx, IMemoryDMContext.class);
+													if (memory == null || memContext == null) {
+														memoryDataRm.done();
+														return;
+													}
+													memory.initializeMemoryData(memContext, memoryDataRm);
+												};
+											},
+												
+											// Start tracking breakpoints.
+											new Step() {
+												@Override
+												public void execute(RequestMonitor trackBpRm) {
+													MIBreakpointsManager bpmService = getServicesTracker().getService(MIBreakpointsManager.class);
+													IBreakpointsTargetDMContext bpTargetDmc = DMContexts.getAncestorOfType(ctx, IBreakpointsTargetDMContext.class);
+													bpmService.startTrackingBreakpoints(bpTargetDmc, trackBpRm);
+												};
+											}
+										};
+										@Override
+										public Step[] getSteps() {
+											return fSteps;
+										}
+										
+									});
 							}
 						});
 			}
@@ -360,15 +390,9 @@ public class GDBProcesses extends MIProcesses implements IGDBProcesses {
 	
 	@Override
     public void terminate(IThreadDMContext thread, final RequestMonitor rm) {
-		// If we will terminate GDB as soon as the inferior terminates, then let's
-		// just terminate GDB itself.  This is more robust since we actually monitor
-		// the success of terminating GDB.
-		// Also, for a core session, there is no concept of killing the inferior,
+		// For a core session, there is no concept of killing the inferior,
 		// so lets kill GDB
-   		if (fBackend.getSessionType() == SessionType.CORE ||
-   			Platform.getPreferencesService().getBoolean(GdbPlugin.PLUGIN_ID,
-				IGdbDebugPreferenceConstants.PREF_AUTO_TERMINATE_GDB,
-				true, null)) {
+   		if (fBackend.getSessionType() == SessionType.CORE) {
 			fGdb.terminate(rm);
 		} else if (thread instanceof IMIProcessDMContext) {
 			getDebuggingContext(
@@ -483,6 +507,7 @@ public class GDBProcesses extends MIProcesses implements IGDBProcesses {
     		// These types always use a PTY
     		try {
     			fPty = new PTY();
+				fPty.validateSlaveName();
 
     			// Tell GDB to use this PTY
     			fGdb.queueCommand(

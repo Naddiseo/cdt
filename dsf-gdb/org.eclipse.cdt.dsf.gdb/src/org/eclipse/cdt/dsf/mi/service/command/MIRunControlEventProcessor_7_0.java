@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2010 Wind River Systems and others.
+ * Copyright (c) 2006, 2013 Wind River Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
  *     Wind River Systems - initial API and implementation
  *     Ericsson			  - Version 7.0	
  *     Mikhail Khodjaiants (Mentor Graphics) - Refactor common code in GDBControl* classes (bug 372795)
+ *     Marc Khouzam (Ericsson) - Display exit code in process console (Bug 402054)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.mi.service.command;
 
@@ -43,6 +44,7 @@ import org.eclipse.cdt.dsf.mi.service.command.events.MIInferiorExitEvent;
 import org.eclipse.cdt.dsf.mi.service.command.events.MIInferiorSignalExitEvent;
 import org.eclipse.cdt.dsf.mi.service.command.events.MILocationReachedEvent;
 import org.eclipse.cdt.dsf.mi.service.command.events.MIRunningEvent;
+import org.eclipse.cdt.dsf.mi.service.command.events.MISharedLibEvent;
 import org.eclipse.cdt.dsf.mi.service.command.events.MISignalEvent;
 import org.eclipse.cdt.dsf.mi.service.command.events.MISteppingRangeEvent;
 import org.eclipse.cdt.dsf.mi.service.command.events.MIStoppedEvent;
@@ -264,7 +266,7 @@ public class MIRunControlEventProcessor_7_0
     					IContainerDMContext containerDmc = procService.createContainerContextFromGroupId(fControlDmc, groupId);
     					IProcessDMContext procDmc = DMContexts.getAncestorOfType(containerDmc, IProcessDMContext.class);
 
-    					MIEvent<?> event = new MIThreadGroupExitedEvent(procDmc, exec.getToken(), groupId);
+    					MIEvent<?> event = new MIThreadGroupExitedEvent(procDmc, exec.getToken(), exec.getMIResults());
    						fCommandControl.getSession().dispatchEvent(event, fCommandControl.getProperties());
     				}
     			}
@@ -352,6 +354,8 @@ public class MIRunControlEventProcessor_7_0
     			event = MILocationReachedEvent.parse(execDmc, exec.getToken(), exec.getMIResults());
     		} else if ("function-finished".equals(reason)) { //$NON-NLS-1$
     			event = MIFunctionFinishedEvent.parse(execDmc, exec.getToken(), exec.getMIResults());
+    		} else if ("solib-event".equals(reason)) { //$NON-NLS-1$
+    			event = MISharedLibEvent.parse(execDmc, exec.getToken(), exec.getMIResults(), null);
     		} else if (STOPPED_REASON.equals(reason)) {
     			event = MIStoppedEvent.parse(execDmc, exec.getToken(), exec.getMIResults());
     		} else if (RUNNING_REASON.equals(reason)) {

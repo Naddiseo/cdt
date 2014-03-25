@@ -6,9 +6,11 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Markus Schorn - initial API and implementation
+ *     Markus Schorn - initial API and implementation
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.ui.callhierarchy;
+
+import java.util.Objects;
 
 import org.eclipse.cdt.core.model.ICElement;
 import org.eclipse.cdt.core.model.ITranslationUnit;
@@ -16,15 +18,15 @@ import org.eclipse.cdt.core.model.ITranslationUnit;
 import org.eclipse.cdt.internal.ui.util.CoreUtility;
 
 public class CHMultiDefNode extends CHNode {
-
 	private CHNode[] fChildren;
 
-	public CHMultiDefNode(CHNode parent, ITranslationUnit tu, long timestamp, ICElement[] elements, int linkageID) {
+	public CHMultiDefNode(CHNode parent, ITranslationUnit tu, long timestamp, ICElement[] elements,
+			int linkageID) {
 		super(parent, tu, timestamp, null, linkageID);
 		if (elements.length == 0) {
 			throw new IllegalArgumentException();
 		}
-		fHashCode+= elements[0].hashCode();
+		fHashCode += elements[0].hashCode();
 		fChildren= new CHNode[elements.length];
 		for (int i = 0; i < elements.length; i++) {
 			ICElement element = elements[i];
@@ -63,7 +65,6 @@ public class CHMultiDefNode extends CHNode {
     		return false;
 
     	final CHMultiDefNode rhs = (CHMultiDefNode) o;
-		return CoreUtility.safeEquals(getOneRepresentedDeclaration(), rhs.getOneRepresentedDeclaration());
+		return Objects.equals(getOneRepresentedDeclaration(), rhs.getOneRepresentedDeclaration());
     }
-
 }

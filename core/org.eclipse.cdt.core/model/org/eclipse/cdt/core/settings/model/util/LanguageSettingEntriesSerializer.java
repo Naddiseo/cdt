@@ -1,12 +1,12 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2010 Intel Corporation and others.
+ * Copyright (c) 2007, 2013 Intel Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- * Intel Corporation - Initial API and implementation
+ *     Intel Corporation - Initial API and implementation
  *******************************************************************************/
 package org.eclipse.cdt.core.settings.model.util;
 
@@ -45,6 +45,8 @@ public class LanguageSettingEntriesSerializer {
 	public static final String SOURCE_PATH = "sourcePath"; //$NON-NLS-1$
 	public static final String OUTPUT_PATH = "outputPath"; //$NON-NLS-1$
 
+	/** @since 5.6 */
+	public static final String NONE = "NONE"; //$NON-NLS-1$
 	public static final String BUILTIN = "BUILTIN"; //$NON-NLS-1$
 	public static final String READONLY = "READONLY"; //$NON-NLS-1$
 	public static final String LOCAL = "LOCAL"; //$NON-NLS-1$
@@ -52,6 +54,7 @@ public class LanguageSettingEntriesSerializer {
 	public static final String RESOLVED = "RESOLVED"; //$NON-NLS-1$
 	private static final String UNDEFINED = "UNDEFINED"; //$NON-NLS-1$
 	private static final String FRAMEWORK = "FRAMEWORK"; //$NON-NLS-1$
+	private static final String EXPORTED = "EXPORTED"; //$NON-NLS-1$
 
 	public static final String FLAGS_SEPARATOR = "|"; //$NON-NLS-1$
 
@@ -225,7 +228,10 @@ public class LanguageSettingEntriesSerializer {
 	}
 
 	public static String composeFlagsString(int flags) {
-		StringBuffer buf = new StringBuffer();
+		if (flags == ICSettingEntry.NONE) {
+			return NONE;
+		}
+		StringBuilder buf = new StringBuilder();
 		if ((flags & ICSettingEntry.BUILTIN) != 0) {
 			buf.append(BUILTIN);
 		}
@@ -265,6 +271,12 @@ public class LanguageSettingEntriesSerializer {
 
 			buf.append(FRAMEWORK);
 		}
+		if ((flags & ICLanguageSettingEntry.EXPORTED) != 0) {
+			if (buf.length() != 0)
+				buf.append(FLAGS_SEPARATOR);
+			
+			buf.append(EXPORTED);
+		}
 		return buf.toString();
 	}
 
@@ -272,7 +284,7 @@ public class LanguageSettingEntriesSerializer {
 	 * @since 5.4
 	 */
 	public static int composeFlags(String flagsString) {
-		if (flagsString == null || flagsString.length() == 0)
+		if (flagsString == null || flagsString.isEmpty() || flagsString.equals(NONE))
 			return 0;
 
 		StringTokenizer tokenizer = new StringTokenizer(flagsString, FLAGS_SEPARATOR);
@@ -294,9 +306,10 @@ public class LanguageSettingEntriesSerializer {
 				flags |= ICSettingEntry.UNDEFINED;
 			if (FRAMEWORK.equals(f))
 				flags |= ICSettingEntry.FRAMEWORKS_MAC;
+			if (EXPORTED.equals(f))
+				flags |= ICSettingEntry.EXPORTED;
 		}
 
 		return flags;
 	}
-
 }

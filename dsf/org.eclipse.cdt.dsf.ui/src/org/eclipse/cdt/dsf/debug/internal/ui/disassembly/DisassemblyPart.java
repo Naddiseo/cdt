@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2012 Wind River Systems and others.
+ * Copyright (c) 2007, 2013 Wind River Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -13,6 +13,7 @@
  *     Patrick Chuong (Texas Instruments) - Pin and Clone Supports (331781)
  *     Patrick Chuong (Texas Instruments) - Bug 364405
  *     Patrick Chuong (Texas Instruments) - Bug 369998
+ *     Patrick Chuong (Texas Instruments) - Bug 337851
  *******************************************************************************/
 package org.eclipse.cdt.dsf.debug.internal.ui.disassembly;
 
@@ -31,6 +32,7 @@ import java.util.Map;
 
 import org.eclipse.cdt.core.IAddress;
 import org.eclipse.cdt.core.model.ITranslationUnit;
+import org.eclipse.cdt.debug.internal.ui.CDebugUIUtils;
 import org.eclipse.cdt.debug.internal.ui.disassembly.dsf.AbstractDisassemblyBackend;
 import org.eclipse.cdt.debug.internal.ui.disassembly.dsf.AddressRangePosition;
 import org.eclipse.cdt.debug.internal.ui.disassembly.dsf.DisassemblyPosition;
@@ -276,6 +278,7 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
     private volatile int fUpdateCount;
 	private BigInteger fPCAddress;
 	private BigInteger fGotoAddressPending= PC_UNKNOWN;
+	private boolean fGotoAddressOnTop;
 	private BigInteger fFocusAddress= PC_UNKNOWN;
 	private int fBufferZone;
 	private String fDebugSessionId;
@@ -414,7 +417,8 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 		private IBreakpoint fBreakpoint;
 		public ActionToggleBreakpointEnablement() {
 			super(DisassemblyPart.this);
-			setText(DisassemblyMessages.Disassembly_action_EnableBreakpoint_label);
+			setText(DisassemblyMessages.Disassembly_action_EnableBreakpoint_label + "\t" +  //$NON-NLS-1$
+	            CDebugUIUtils.formatKeyBindingString(SWT.MOD2, DisassemblyMessages.Disassembly_action_ToggleBreakpoint_accelerator));
 		}
 		@Override
 		public void run() {
@@ -436,9 +440,11 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 					fBreakpoint = bps[0];
 					try {
 						if (fBreakpoint.isEnabled()) {
-							setText(DisassemblyMessages.Disassembly_action_DisableBreakpoint_label);
+							setText(DisassemblyMessages.Disassembly_action_DisableBreakpoint_label + "\t" +  //$NON-NLS-1$
+				                CDebugUIUtils.formatKeyBindingString(SWT.MOD2, DisassemblyMessages.Disassembly_action_ToggleBreakpoint_accelerator));
 						} else {
-							setText(DisassemblyMessages.Disassembly_action_EnableBreakpoint_label);
+							setText(DisassemblyMessages.Disassembly_action_EnableBreakpoint_label + "\t" +  //$NON-NLS-1$
+				                CDebugUIUtils.formatKeyBindingString(SWT.MOD2, DisassemblyMessages.Disassembly_action_ToggleBreakpoint_accelerator));
 						}
 					} catch (CoreException e) {
 						setEnabled(false);
@@ -1409,10 +1415,13 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 		AddressRangePosition pos = getPositionOfAddress(address);
 		if (pos != null) {
 			if (pos.fValid) {
+				boolean onTop = false;
 				if (fGotoAddressPending.equals(address)) {
                 	fGotoAddressPending = PC_UNKNOWN;
+                	onTop = fGotoAddressOnTop;
+                	fGotoAddressOnTop = false;
                 }
-                gotoPosition(pos, false);
+                gotoPosition(pos, onTop);
 			} else {
 				int lines = fBufferZone+3;
 				BigInteger endAddress = pos.fAddressOffset.add(pos.fAddressLength).min(
@@ -1503,7 +1512,7 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 		if (!fActive || fUpdatePending || fViewer == null || fDebugSessionId == null) {
 			return;
 		}
-		if (fBackend == null || !fBackend.hasDebugContext() || !fBackend.isSuspended() || fFrameAddress == PC_UNKNOWN) {
+		if (fBackend == null || !fBackend.hasDebugContext() || !fBackend.canDisassemble() || fFrameAddress == PC_UNKNOWN) {
 			return;
 		}
 		StyledText styledText = fViewer.getTextWidget();
@@ -1916,32 +1925,30 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 	private void startUpdate(final Runnable update) {
 		if (fViewer == null)
 			return;
-			
-	    final int updateCount = fUpdateCount;
-	    final SafeRunnable safeUpdate = new SafeRunnable() {
-	        @Override
+
+		final int updateCount = fUpdateCount;
+		final SafeRunnable safeUpdate = new SafeRunnable() {
+			@Override
 			public void run() {
-	            if (updateCount == fUpdateCount) {
-	                update.run();
-	            }
-	        }
-	        @Override
-	        public void handleException(Throwable e) {
-	            internalError(e);
-	        }
-	    };
-	    if (fUpdatePending) {
-	        invokeLater(new Runnable() {
-	            @Override
+				if (updateCount == fUpdateCount && fViewer != null) {
+					update.run();
+				}
+			}
+			@Override
+			public void handleException(Throwable e) {
+				internalError(e);
+			}
+		};
+		if (fUpdatePending) {
+			invokeLater(new Runnable() {
+				@Override
 				public void run() {
-	                if (updateCount == fUpdateCount) {
-	                    SafeRunner.run(safeUpdate);
-	                }
-	            }
-	        });
-	    } else {
-	        SafeRunner.run(safeUpdate);
-	    }
+					SafeRunner.run(safeUpdate);
+				}
+			});
+		} else {
+			SafeRunner.run(safeUpdate);
+		}
 	}
 
 	private void debugContextChanged() {
@@ -2031,6 +2038,7 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 					fTargetFrame = targetFrame;
 					fFrameAddress = frameAddress;
 					fPCAddress = pcAddress;
+					fGotoAddressOnTop = true;
 					gotoAddress(topAddress);
 				} else {
 					refreshView((int)(refreshViewScheduled - now));
@@ -2240,7 +2248,7 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 		fFrameAddress = address;
 		if (fTargetFrame == -1) {
 			fTargetFrame = getActiveStackFrame();
-			if (fTargetFrame < 0 && fBackend != null && fBackend.isSuspended()) {
+			if (fTargetFrame < 0 && fBackend != null && fBackend.canDisassemble()) {
 				fTargetFrame= 0;
 			}
 			if (fTargetFrame == -1) {
@@ -2255,7 +2263,7 @@ public abstract class DisassemblyPart extends WorkbenchPart implements IDisassem
 		if (fFrameAddress.compareTo(PC_UNKNOWN) == 0) {
 			if (!fUpdatePending) {
 				fGotoFramePending = false;
-				if (fBackend != null && fBackend.hasDebugContext() && fBackend.isSuspended()) {
+				if (fBackend != null && fBackend.hasDebugContext() && fBackend.canDisassemble()) {
 					if (DEBUG) System.out.println("retrieveFrameAddress "+frame); //$NON-NLS-1$
 					fUpdatePending = true;
 					fBackend.retrieveFrameAddress(fTargetFrame);

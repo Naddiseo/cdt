@@ -2,7 +2,7 @@
 <?eclipse version="3.0"?>
 <plugin>
 
-    
+
 <!-- =================================================================================== -->
 <!-- Obsolete extension point no longer in use, will be remove.                          -->
 <!-- =================================================================================== -->
@@ -42,6 +42,8 @@
    <extension-point id="projectConverter" name="%projectConverter.name" schema="schema/projectConverter.exsd"/>
    <extension-point id="CIndex" name="%CIndex.name" schema="schema/CIndex.exsd"/>
    <extension-point id="externalSettingsProvider" name="%externalSettingsProvider.name" schema="schema/externalSettingsProvider.exsd"/>
+   <extension-point id="tagger" name="%tagger.name" schema="schema/tagger.exsd"/>
+   <extension-point id="PDOMASTProcessor" name="%PDOMASTProcessor.name" schema="schema/PDOMASTProcessor.exsd"/>
 <!-- =================================================================================== -->
 <!-- CProjectDescriptionStorage provides addition types of project description storage      -->
 <!-- =================================================================================== -->
@@ -268,7 +270,7 @@
          <pattern description-expr="make: $3" eat-processed-line="true" file-expr="$1" line-expr="$2" regex="(.*):(\d*): (\*\*\* .*)" severity="Error"/>
          <pattern description-expr="$0" eat-processed-line="true" file-expr="" line-expr="" regex=".*make.*: \*\*\* .*" severity="Error"/>
          <pattern description-expr="$0" eat-processed-line="true" file-expr="" line-expr="" regex=".*make.*: Target (.*) not remade because of errors." severity="Error"/>
-         <pattern description-expr="$0" eat-processed-line="true" file-expr="" line-expr="" regex=".*command not found.*" severity="Error"/>
+         <pattern description-expr="$0" eat-processed-line="true" file-expr="" line-expr="" regex=".*[Cc]ommand not found.*" severity="Error"/>
          <pattern description-expr="$1" eat-processed-line="true" file-expr="" line-expr="" regex="Error:\s*(.*)" severity="Error"/>
          <pattern description-expr="make: $3" eat-processed-line="true" file-expr="$1" line-expr="$2" regex="(.*[Mm]akefile):(\d*): warning: (.*)" severity="Warning"/>
          <pattern description-expr="$0" eat-processed-line="true" file-expr="" line-expr="" regex=".*make.*\[.*\] Error [-]{0,1}\d*.*" severity="Warning"/>
@@ -673,6 +675,7 @@
    <extension-point id="RefreshExclusionFactory" name="%refreshExclusionFactory.name" schema="schema/RefreshExclusionFactory.exsd"/>
    <extension-point id="LanguageSettingsProvider" name="%LanguageSettingsProvider.name" schema="schema/LanguageSettingsProvider.exsd"/>
    <extension-point id="UNCPathConverter" name="%uncPathConverter.name" schema="schema/UNCPathConverter.exsd"/>
+   <extension-point id="ProblemMarkerFilter" name="%problemMarkerFilter.name" schema="schema/ProblemMarkerFilter.exsd"/>
 
    <extension
          point="org.eclipse.cdt.core.templateProcessTypes">
@@ -757,6 +760,41 @@
          <simple name="valueName"/>
          <simple name="appName"/>
       </processType>
+      <processType
+            name="AddFiles2"
+            processRunner="org.eclipse.cdt.core.templateengine.process.processes.AddFiles">
+         <simple name="projectName"/>
+         <simple name="startPattern"/>
+         <simple name="endPattern"/>
+         <complexArray name="files">
+            <baseType>
+               <simple name="source"/>
+               <simple name="target"/>
+               <simple name="replaceable"/>
+            </baseType>
+         </complexArray>
+      </processType>
+      <processType
+            name="AddNature"
+            processRunner="org.eclipse.cdt.core.templateengine.process.processes.AddNature">
+         <simple
+               name="projectName">
+         </simple>
+         <simple
+               name="natureId">
+         </simple>
+      </processType>
+        <processType
+            name="SetEnvironmentVariable"
+            processRunner="org.eclipse.cdt.core.templateengine.process.processes.SetEnvironmentVariable">
+            <simple name="projectName"/>
+            <complexArray name="variables">
+                <baseType>
+                    <simple name="name"/>
+                    <simple name="value"/>
+                </baseType>
+            </complexArray>
+        </processType>
    </extension>
    <extension
          point="org.eclipse.cdt.core.CProjectDescriptionStorage">
@@ -781,6 +819,24 @@
             exclusionClass="org.eclipse.cdt.internal.core.resources.ResourceExclusion"
             factoryClass="org.eclipse.cdt.internal.core.resources.ResourceExclusionFactory">
       </exclusionFactory>
+   </extension>
+   <extension
+         point="org.eclipse.cdt.core.LanguageSettingsProvider">
+      <provider
+            class="org.eclipse.cdt.internal.core.language.settings.providers.ScannerInfoExtensionLanguageSettingsProvider"
+            id="org.eclipse.cdt.core.LegacyScannerInfoLanguageSettingsProvider"
+            name="%ScannerInfoExtensionLanguageSettingsProvider.name">
+      </provider>
+      <provider
+            class="org.eclipse.cdt.internal.core.language.settings.providers.PathEntryScannerInfoLanguageSettingsProvider"
+            id="org.eclipse.cdt.core.PathEntryScannerInfoLanguageSettingsProvider"
+            name="%PathEntryScannerInfoLanguageSettingsProvider.name">
+      </provider>
+      <provider
+            class="org.eclipse.cdt.internal.core.language.settings.providers.ReferencedProjectsLanguageSettingsProvider"
+            id="org.eclipse.cdt.core.ReferencedProjectsLanguageSettingsProvider"
+            name="%ReferencedProjectsLanguageSettingsProvider.name">
+      </provider>
    </extension>
 
 </plugin>

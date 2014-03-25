@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2012 Ericsson and others.
+ * Copyright (c) 2011, 2013 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -28,6 +28,7 @@ import org.eclipse.cdt.dsf.concurrent.RequestMonitor;
 import org.eclipse.cdt.dsf.datamodel.DMContexts;
 import org.eclipse.cdt.dsf.datamodel.IDMContext;
 import org.eclipse.cdt.dsf.debug.service.IBreakpoints.IBreakpointsTargetDMContext;
+import org.eclipse.cdt.dsf.debug.service.IMemory.IMemoryDMContext;
 import org.eclipse.cdt.dsf.debug.service.IRunControl.IContainerDMContext;
 import org.eclipse.cdt.dsf.gdb.IGDBLaunchConfigurationConstants;
 import org.eclipse.cdt.dsf.gdb.internal.GdbPlugin;
@@ -106,6 +107,7 @@ public class DebugNewProcessSequence extends ReflectionSequence {
 					// For post-mortem launch only
 					"stepSpecifyCoreFile",   //$NON-NLS-1$
 					
+					"stepInitializeMemory", //$NON-NLS-1$
 					"stepStartTrackingBreakpoints", //$NON-NLS-1$
 					"stepStartExecution",   //$NON-NLS-1$
 					"stepCleanupBaseSequence",   //$NON-NLS-1$
@@ -200,9 +202,13 @@ public class DebugNewProcessSequence extends ReflectionSequence {
 	@Execute
 	public void stepSetArguments(RequestMonitor rm) {
 		try {
-			String args = fBackend.getProgramArguments();
+			String args = CDebugUtils.getAttribute(
+					fAttributes,
+					ICDTLaunchConfigurationConstants.ATTR_PROGRAM_ARGUMENTS,
+					""); //$NON-NLS-1$
 
-			if (args != null) {
+			if (args.length() != 0) {
+				args = VariablesPlugin.getDefault().getStringVariableManager().performStringSubstitution(args);
 				String[] argArray = CommandLineUtil.argumentsToArray(args);
 				fCommandControl.queueCommand(
 						fCommandFactory.createMIGDBSetArgs(getContainerContext(), argArray), 
@@ -437,6 +443,21 @@ public class DebugNewProcessSequence extends ReflectionSequence {
 		} else {
 			rm.done();
 		}
+	}
+
+	/**
+	 * Initialize the memory service with the data for given process.
+	 * @since 4.2
+	 */
+	@Execute
+	public void stepInitializeMemory(final RequestMonitor rm) {
+		IGDBMemory memory = fTracker.getService(IGDBMemory.class);
+		IMemoryDMContext memContext = DMContexts.getAncestorOfType(getContainerContext(), IMemoryDMContext.class);
+		if (memory == null || memContext == null) {
+			rm.done();
+			return;
+		}
+		memory.initializeMemoryData(memContext, rm);
 	}
 
 	/**

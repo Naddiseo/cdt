@@ -12,6 +12,7 @@
  *     Andrew Gvozdev (Quoin Inc)
  *     Dmitry Kozlov (CodeSourcery) - Build error highlighting and navigation
  *     Alex Ruiz (Google)
+ *     Serge Beauchamp (Freescale Semiconductor) - Bug 417926
  *******************************************************************************/
 package org.eclipse.cdt.core;
 
@@ -29,6 +30,7 @@ import org.eclipse.cdt.core.language.settings.providers.IWorkingDirectoryTracker
 import org.eclipse.cdt.core.resources.ACBuilder;
 import org.eclipse.cdt.internal.core.Cygwin;
 import org.eclipse.cdt.internal.core.IErrorMarkeredOutputStream;
+import org.eclipse.cdt.internal.core.ProblemMarkerFilterManager;
 import org.eclipse.cdt.internal.core.resources.ResourceLookup;
 import org.eclipse.cdt.internal.errorparsers.ErrorParserExtensionManager;
 import org.eclipse.cdt.utils.EFSExtensionManager;
@@ -71,7 +73,7 @@ public class ErrorParserManager extends OutputStream implements IConsoleParser, 
 	 * @since 5.4
 	 */
 	public static final String BUILD_CONTEXT = "build"; //$NON-NLS-1$
-	
+
 	private int nOpens;
 	private int lineCounter=0;
 
@@ -221,16 +223,7 @@ public class ErrorParserManager extends OutputStream implements IConsoleParser, 
 	 */
 	public void pushDirectory(IPath dir) {
 		if (dir != null) {
-			URI uri;
-			URI workingDirectoryURI = getWorkingDirectoryURI();
-			if (!dir.isAbsolute()) {
-				uri = URIUtil.append(workingDirectoryURI, dir.toString());
-			} else {
-				uri = toURI(dir);
-				if (uri == null) {
-					return;
-				}
-			}
+			URI uri = toURI(dir);
 			pushDirectoryURI(uri);
 		}
 	}
@@ -485,18 +478,9 @@ outer:
 	 * @return - file in the workspace or {@code null} if such a file doesn't exist
 	 */
 	protected IFile findFileInWorkspace(IPath path) {
-		URI uri;
-		if (!path.isAbsolute()) {
-			URI workingDirectoryURI = getWorkingDirectoryURI();
-			uri = EFSExtensionManager.getDefault().append(workingDirectoryURI, path.toString());
-		}
-		else {
-			uri = toURI(path);
-			if (uri == null) {
-				return null;
-			}
-		}
-		return findFileInWorkspace(uri);
+		URI uri = toURI(path);
+		IFile file = findFileInWorkspace(uri);
+		return file;
 	}
 
 	/**
@@ -592,6 +576,8 @@ outer:
 	 * @param externalPath - external path pointing to a file outside the workspace.
 	 */
 	public void generateExternalMarker(IResource file, int lineNumber, String desc, int severity, String varName, IPath externalPath) {
+		if (file == null)
+			file = fProject;
 		ProblemMarkerInfo problemMarkerInfo = new ProblemMarkerInfo(file, lineNumber, desc, severity, varName, externalPath);
 		this.addProblemMarker(problemMarkerInfo);
 	}
@@ -603,6 +589,8 @@ outer:
 	 * @since 5.4
 	 */
 	public void addProblemMarker(ProblemMarkerInfo problemMarkerInfo){
+		if ( ! ProblemMarkerFilterManager.getInstance().acceptMarker(problemMarkerInfo) )
+			return;
 		fErrors.add(problemMarkerInfo);
 		fMarkerGenerator.addMarker(problemMarkerInfo);
 		if (problemMarkerInfo.severity == IMarkerGenerator.SEVERITY_ERROR_RESOURCE) {
@@ -728,10 +716,7 @@ outer:
 	}
 
 	/**
-     * Converts a location {@link IPath} to an {@link URI}. Contrary to
-     * {@link URIUtil#toURI(IPath)} this method does not assume that the path belongs
-     * to local file system.
-     *
+     * Converts a location {@link IPath} to an {@link URI}.
      * The returned URI uses the scheme and authority of the current working directory
      * as returned by {@link #getWorkingDirectoryURI()}
      *
@@ -740,16 +725,15 @@ outer:
 	 * @since 5.1
 	 */
 	private URI toURI(IPath path) {
-//		try {
-			URI baseURI = getWorkingDirectoryURI();
-			String uriString = path.toString();
+		URI uri = null;
+		URI workingDirectoryURI = getWorkingDirectoryURI();
+		if (path.isAbsolute()) {
+			uri = EFSExtensionManager.getDefault().createNewURIFromPath(workingDirectoryURI, path.toString());
+		} else {
+			uri = EFSExtensionManager.getDefault().append(workingDirectoryURI, path.toString());
+		}
 
-			// On Windows "C:/folder/" -> "/C:/folder/"
-			if (path.isAbsolute() && uriString.charAt(0) != IPath.SEPARATOR) {
-				uriString = IPath.SEPARATOR + uriString;
-			}
-
-			return EFSExtensionManager.getDefault().createNewURIFromPath(baseURI, uriString);
+		return uri;
 	}
 
 	/**
@@ -828,7 +812,7 @@ outer:
 	public static String[] getErrorParserAvailableIdsInContext(String context) {
 		return ErrorParserExtensionManager.getErrorParserAvailableIdsInContext(context);
 	}
-	
+
 	/**
 	 * @return IDs of error parsers contributed through error parser extension point.
 	 * @since 5.2

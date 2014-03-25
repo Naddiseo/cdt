@@ -167,7 +167,7 @@ public abstract class ASTNode implements IASTNode {
         if (floc != null && ast != null) {
         	ILocationResolver lr= (ILocationResolver) ast.getAdapter(ILocationResolver.class);
         	if (lr != null) {
-        		return lr.getUnpreprocessedSignature(getFileLocation());
+        		return lr.getUnpreprocessedSignature(floc);
         	}
         }
         return CharArrayUtils.EMPTY;
@@ -369,12 +369,12 @@ public abstract class ASTNode implements IASTNode {
 	protected <T extends ASTNode> T copy(T copy, CopyStyle style) {
 		copy.setOffsetAndLength(this);
 		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
+			((ASTNode) copy).setCopyLocation(this);
 		}
 		return copy;
 	}
 
-	protected void setCopyLocation(IASTNode originalNode) {
+	private void setCopyLocation(IASTNode originalNode) {
 		locations = new IASTNodeLocation[] { new ASTCopyLocation(originalNode) };
 	}
 

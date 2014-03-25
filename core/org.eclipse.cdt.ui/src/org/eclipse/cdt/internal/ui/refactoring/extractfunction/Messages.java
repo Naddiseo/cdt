@@ -14,10 +14,11 @@ package org.eclipse.cdt.internal.ui.refactoring.extractfunction;
 
 import org.eclipse.osgi.util.NLS;
 
-public final class Messages extends NLS {
+final class Messages extends NLS {
 	public static String ExtractFunctionRefactoring_ExtractFunction;
 	public static String ExtractFunctionRefactoring_NoStmtSelected;
-	public static String ExtractFunctionRefactoring_TooManySelected;
+	public static String ExtractFunctionRefactoring_TooManyDeclarations;
+	public static String ExtractFunctionRefactoring_no_declaration_of_surrounding_method;
 	public static String ExtractFunctionRefactoring_name_in_use;
 	public static String ExtractFunctionRefactoring_parameter_name_in_use;
 	public static String ExtractFunctionRefactoring_duplicate_parameter;

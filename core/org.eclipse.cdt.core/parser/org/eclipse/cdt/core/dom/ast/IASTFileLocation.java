@@ -1,12 +1,12 @@
 /*******************************************************************************
- *  Copyright (c) 2004, 2009 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2004, 2009 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
- *      Doug Schaefer (IBM) - Initial API and implementation
+ * Contributors:
+ *     Doug Schaefer (IBM) - Initial API and implementation
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.ast;
 
@@ -37,25 +37,25 @@ public interface IASTFileLocation extends IASTNodeLocation {
 	public int getNodeLength();
 
     /**
-     * Get the starting line number. Locations obtained via the index do not have line numbers
-     * and return <code>0</code>.
+     * Returns the starting line number. Locations obtained via the index do not have line numbers
+     * and return {@code 0}.
      * 
-     * @return int representing line number or <code>0</code> if not applicable
+     * @return the 1-based line number, or {@code 0} if not applicable
      */
     public int getStartingLineNumber();
     
     /**
-     * Get the ending line number. Locations obtained via the index do not have line numbers
-     * and return <code>0</code>.
+     * Returns the ending line number. Locations obtained via the index do not have line numbers
+     * and return {@code 0}.
      * 
-     * @return int representing line number or <code>0</code> if not applicable
+     * @return the 1-based line number, or {@code 0} if not applicable
      */
     public int getEndingLineNumber();
 
 	/**
 	 * Returns the inclusion statement that included this file, or <code>null</code> for
 	 * a top-level file.
-	 * Also <code>null</code> when the file location does not belong to an AST node, e.g.
+	 * Also {@code null} when the file location does not belong to an AST node, e.g.
 	 * if it is obtained from a name in the index.
 	 * @since 5.4
 	 */

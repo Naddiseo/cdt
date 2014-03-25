@@ -18,6 +18,7 @@ import junit.framework.TestSuite;
 import org.eclipse.cdt.build.core.scannerconfig.CfgInfoContext;
 import org.eclipse.cdt.build.core.scannerconfig.ICfgScannerConfigBuilderInfo2Set;
 import org.eclipse.cdt.build.internal.core.scannerconfig2.CfgScannerConfigProfileManager;
+import org.eclipse.cdt.core.language.settings.providers.ScannerDiscoveryLegacySupport;
 import org.eclipse.cdt.core.model.CoreModel;
 import org.eclipse.cdt.core.settings.model.ICConfigurationDescription;
 import org.eclipse.cdt.core.settings.model.ICProjectDescription;
@@ -58,6 +59,7 @@ public class CfgScannerConfigProfileManagerTests extends BaseTestCase {
 	 * @throws CoreException
 	 */
 	public void testBasicCfgScannerConfigProfileChanges() throws CoreException {
+		ScannerDiscoveryLegacySupport.setLanguageSettingsProvidersFunctionalityEnabled(fProject, false);
 		ICProjectDescription prjDesc = CoreModel.getDefault().getProjectDescription(fProject);
 		ICConfigurationDescription[] cfgDescs = prjDesc.getConfigurations();
 		assertTrue(cfgDescs.length > 0);

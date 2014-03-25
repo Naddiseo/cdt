@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     John Camelon (IBM) - Initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -41,14 +42,15 @@ public class CPPASTSimpleDeclSpecifier extends CPPASTBaseDeclSpecifier
 	}
 
 	protected <T extends CPPASTSimpleDeclSpecifier> T copy(T copy, CopyStyle style) {
-    	copy.type = type;
-    	copy.isSigned = isSigned;
-    	copy.isUnsigned = isUnsigned;
-    	copy.isShort = isShort;
-    	copy.isLong = isLong;
-    	copy.isLonglong= isLonglong;
-    	copy.isComplex= isComplex;
-    	copy.isImaginary= isImaginary;
+		CPPASTSimpleDeclSpecifier target = copy;
+    	target.type = type;
+    	target.isSigned = isSigned;
+    	target.isUnsigned = isUnsigned;
+    	target.isShort = isShort;
+    	target.isLong = isLong;
+    	target.isLonglong= isLonglong;
+    	target.isComplex= isComplex;
+    	target.isImaginary= isImaginary;
     	if (fDeclTypeExpression != null) {
 			copy.setDeclTypeExpression(fDeclTypeExpression.copy(style));
     	}
@@ -90,8 +92,12 @@ public class CPPASTSimpleDeclSpecifier extends CPPASTBaseDeclSpecifier
 			return t_double;
 		case eFloat:
 			return t_float;
+		case eFloat128:
+			return t_float128;
 		case eInt:
 			return t_int;
+		case eInt128:
+			return t_int128;
 		case eUnspecified:
 			return t_unspecified;
 		case eVoid:
@@ -206,6 +212,9 @@ public class CPPASTSimpleDeclSpecifier extends CPPASTBaseDeclSpecifier
 		}
 
 		if (fDeclTypeExpression != null && !fDeclTypeExpression.accept(action))
+			return false;
+
+		if (!acceptByAttributeSpecifiers(action))
 			return false;
 
         if (action.shouldVisitDeclSpecifiers) {

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2012 Google, Inc and others.
+ * Copyright (c) 2009, 2013 Google, Inc and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -17,13 +17,17 @@ import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.ICompositeType;
 import org.eclipse.cdt.core.dom.ast.IProblemBinding;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPAliasTemplateInstance;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPBase;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassScope;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassSpecialization;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassTemplatePartialSpecialization;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMember;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPScope;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPSpecialization;
 import org.eclipse.cdt.core.parser.util.ArrayUtil;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ClassTypeHelper;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPDeferredClassInstance;
@@ -88,8 +92,22 @@ public class AccessContext {
 		if (binding instanceof ICPPMember) {
 			bindingVisibility = ((ICPPMember) binding).getVisibility();
 		} else {
-			// TODO(sprigogin): Handle visibility of nested types
-			bindingVisibility = v_public;
+	        while (binding instanceof ICPPSpecialization) {
+	            binding = ((ICPPSpecialization) binding).getSpecializedBinding();
+	        }
+	        if (binding instanceof ICPPClassTemplatePartialSpecialization) {
+	        	// A class template partial specialization inherits the visibility of its primary class template. 
+	        	binding = ((ICPPClassTemplatePartialSpecialization) binding).getPrimaryClassTemplate();
+	        }
+	        if (binding instanceof ICPPAliasTemplateInstance) {
+	        	binding = ((ICPPAliasTemplateInstance) binding).getTemplateDefinition();
+	        }
+			IBinding owner = binding.getOwner();
+			if (owner instanceof ICPPClassType) {
+				bindingVisibility = ((ICPPClassType) owner).getVisibility(binding);
+			} else {
+				bindingVisibility = v_public;
+			}
 		}
 		return isAccessible(binding, bindingVisibility);
 	}
@@ -148,11 +166,13 @@ public class AccessContext {
 			return false;
 
 		accessLevel = getMemberAccessLevel(derivedClass, accessLevel);
-		if (owner.isSameType(derivedClass)) {
+		if (owner.isSameType(derivedClass) ||
+				(derivedClass instanceof ICPPClassSpecialization &&
+						owner.equals(((ICPPClassSpecialization) derivedClass).getSpecializedBinding()))) {
 			return isAccessible(bindingVisibility, accessLevel);
 		}
 
-		ICPPBase[] bases = derivedClass.getBases();
+		ICPPBase[] bases = ClassTypeHelper.getBases(derivedClass, name);
 		if (bases != null) {
 			for (ICPPBase base : bases) {
 				IBinding baseBinding = base.getBaseClass();
@@ -177,9 +197,10 @@ public class AccessContext {
 
 	/**
 	 * Returns access level to the members of a class.
+	 *
 	 * @param classType A class
-	 * @param inheritedAccessLevel Access level inherited from derived class. One of: v_public, v_protected,
-	 * v_private.
+	 * @param inheritedAccessLevel Access level inherited from derived class.
+	 *     One of: v_public, v_protected, v_private.
 	 * @return One of: v_public, v_protected, v_private.
 	 */
 	private int getMemberAccessLevel(ICPPClassType classType, int inheritedAccessLevel) {
@@ -197,14 +218,14 @@ public class AccessContext {
 		return accessLevel;
 	}
 
-	private boolean isAccessibleBaseClass(ICPPClassType classType, ICPPClassType defived, int depth) {
+	private boolean isAccessibleBaseClass(ICPPClassType classType, ICPPClassType derived, int depth) {
 		if (depth > CPPSemantics.MAX_INHERITANCE_DEPTH)
 			return false;
 
-		if (defived.isSameType(classType))
+		if (derived.isSameType(classType))
 			return true;
 
-		ICPPBase[] bases = defived.getBases();
+		ICPPBase[] bases = ClassTypeHelper.getBases(derived, name);
 		if (bases != null) {
 			for (ICPPBase base : bases) {
 				IBinding baseClass = base.getBaseClass();

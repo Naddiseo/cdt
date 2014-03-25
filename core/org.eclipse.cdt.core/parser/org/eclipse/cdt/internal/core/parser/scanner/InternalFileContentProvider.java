@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2011 Wind River Systems, Inc. and others.
+ * Copyright (c) 2009, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     Markus Schorn - initial API and implementation
  *     Sergey Prigogin (Google)
+ *     Marc-Andre Laperle (Ericsson)
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.parser.scanner;
 
@@ -28,6 +29,10 @@ import org.eclipse.cdt.internal.core.dom.IIncludeFileResolutionHeuristics;
 import org.eclipse.cdt.internal.core.index.IIndexFragmentFile;
 import org.eclipse.cdt.internal.core.parser.IMacroDictionary;
 import org.eclipse.cdt.internal.core.parser.scanner.InternalFileContent.InclusionKind;
+import org.eclipse.cdt.utils.UNCPathConverter;
+import org.eclipse.core.filesystem.EFS;
+import org.eclipse.core.filesystem.IFileStore;
+import org.eclipse.core.runtime.CoreException;
 
 /**
  * Internal implementation of the file content providers
@@ -49,7 +54,16 @@ public abstract class InternalFileContentProvider extends IncludeFileContentProv
 	/**
 	 * Checks whether the specified inclusion exists.
 	 */
-	public boolean getInclusionExists(String path) {
+	public boolean getInclusionExists(final String path) {
+		if (UNCPathConverter.isUNC(path)) {
+			try {
+				IFileStore store = EFS.getStore(UNCPathConverter.getInstance().toURI(path));
+				return store.fetchInfo().exists();
+			} catch (CoreException e) {
+				return false;
+			}
+		}
+
 		return new File(path).exists();
 	}
 
@@ -141,5 +155,12 @@ public abstract class InternalFileContentProvider extends IncludeFileContentProv
 	 */
 	public String getContextPath() {
 		return null;
-	}		
+	}
+
+	/**
+	 * Returns whether or not the header file should be indexed for all versions
+	 */
+	public boolean shouldIndexAllHeaderVersions(String headerFileName) {
+		return false;
+	}
 }

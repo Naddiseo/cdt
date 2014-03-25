@@ -7,28 +7,56 @@
  *
  * Contributors:
  *     Markus Schorn - initial API and implementation
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp.semantics;
 
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_assign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_binaryAndAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_binaryOrAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_binaryXorAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_divideAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_equals;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_greaterEqual;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_greaterThan;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_lessEqual;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_lessThan;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_logicalAnd;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_logicalOr;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_minus;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_minusAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_moduloAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_multiplyAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_notequals;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_plus;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_plusAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_pmarrow;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_pmdot;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_shiftLeftAssign;
+import static org.eclipse.cdt.core.dom.ast.IASTBinaryExpression.op_shiftRightAssign;
 import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.LVALUE;
 import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.PRVALUE;
-import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.ExpressionTypes.*;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.ExpressionTypes.glvalueType;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.ExpressionTypes.prvalueType;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.ExpressionTypes.prvalueTypeWithResolvedTypedefs;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.ExpressionTypes.typeFromFunctionCall;
 import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.CVTYPE;
 import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.REF;
 import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.TDEF;
 
-import org.eclipse.cdt.core.dom.ast.IASTBinaryExpression;
 import org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
+import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IPointerType;
 import org.eclipse.cdt.core.dom.ast.ISemanticProblem;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.IValue;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTBinaryExpression;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassSpecialization;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunctionType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPPointerToMemberType;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameterMap;
 import org.eclipse.cdt.internal.core.dom.parser.ISerializableEvaluation;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeMarshalBuffer;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemType;
@@ -43,7 +71,7 @@ import org.eclipse.core.runtime.CoreException;
 /**
  * Performs evaluation of an expression.
  */
-public class EvalBinary extends CPPEvaluation {
+public class EvalBinary extends CPPDependentEvaluation {
 	public final static int op_arrayAccess= Byte.MAX_VALUE;
 	private final int fOperator;
 
@@ -53,7 +81,12 @@ public class EvalBinary extends CPPEvaluation {
 	private ICPPFunction fOverload= CPPFunction.UNINITIALIZED_FUNCTION;
 	private IType fType;
 
-	public EvalBinary(int operator, ICPPEvaluation arg1, ICPPEvaluation arg2) {
+	public EvalBinary(int operator, ICPPEvaluation arg1, ICPPEvaluation arg2, IASTNode pointOfDefinition) {
+		this(operator, arg1, arg2, findEnclosingTemplate(pointOfDefinition));
+	}
+
+	public EvalBinary(int operator, ICPPEvaluation arg1, ICPPEvaluation arg2, IBinding templateDefinition) {
+		super(templateDefinition);
 		fOperator= operator;
 		fArg1= arg1;
 		fArg2= arg2;
@@ -102,7 +135,43 @@ public class EvalBinary extends CPPEvaluation {
 
 	@Override
 	public IValue getValue(IASTNode point) {
-		return Value.create(this, point);
+		if (getOverload(point) != null) {
+			// TODO(sprigogin): Simulate execution of a function call.
+			return Value.create(this);
+		}
+
+		IValue v1 = fArg1.getValue(point);
+		if (v1 == null || v1 == Value.UNKNOWN)
+			return Value.UNKNOWN;
+		IValue v2 = fArg2.getValue(point);
+		if (v2 == null || v2 == Value.UNKNOWN)
+			return Value.UNKNOWN;
+
+		switch (fOperator) {
+		case op_equals:
+			if (v1.equals(v2))
+				return Value.create(1);
+			break;
+		case op_notequals:
+			if (v1.equals(v2))
+				return Value.create(0);
+			break;
+		}
+
+		Long num1 = v1.numericalValue();
+		if (num1 != null) {
+			if (num1 == 0) {
+				if (fOperator == op_logicalAnd)
+					return v1;
+			} else if (fOperator == op_logicalOr) {
+				return v1;
+			}
+			Long num2 = v2.numericalValue();
+			if (num2 != null) {
+				return Value.evaluateBinaryExpression(fOperator, num1, num2);
+			}
+		}
+		return Value.create(this);
 	}
 
 	@Override
@@ -117,6 +186,13 @@ public class EvalBinary extends CPPEvaluation {
 	public boolean isValueDependent() {
 		return fArg1.isValueDependent() || fArg2.isValueDependent();
 	}
+	
+	@Override
+	public boolean isConstantExpression(IASTNode point) {
+		return fArg1.isConstantExpression(point)
+			&& fArg2.isConstantExpression(point)
+			&& isConstexprFuncOrNull(getOverload(point));
+	}
 
 	@Override
 	public ValueCategory getValueCategory(IASTNode point) {
@@ -129,25 +205,25 @@ public class EvalBinary extends CPPEvaluation {
 
 		switch (fOperator) {
 		case op_arrayAccess:
-		case IASTBinaryExpression.op_assign:
-		case IASTBinaryExpression.op_binaryAndAssign:
-		case IASTBinaryExpression.op_binaryOrAssign:
-		case IASTBinaryExpression.op_binaryXorAssign:
-		case IASTBinaryExpression.op_divideAssign:
-		case IASTBinaryExpression.op_minusAssign:
-		case IASTBinaryExpression.op_moduloAssign:
-		case IASTBinaryExpression.op_multiplyAssign:
-		case IASTBinaryExpression.op_plusAssign:
-		case IASTBinaryExpression.op_shiftLeftAssign:
-		case IASTBinaryExpression.op_shiftRightAssign:
+		case op_assign:
+		case op_binaryAndAssign:
+		case op_binaryOrAssign:
+		case op_binaryXorAssign:
+		case op_divideAssign:
+		case op_minusAssign:
+		case op_moduloAssign:
+		case op_multiplyAssign:
+		case op_plusAssign:
+		case op_shiftLeftAssign:
+		case op_shiftRightAssign:
 			return LVALUE;
 
-		case IASTBinaryExpression.op_pmdot:
+		case op_pmdot:
 			if (!(getTypeOrFunctionSet(point) instanceof ICPPFunctionType))
 				return fArg1.getValueCategory(point);
 			break;
 
-		case IASTBinaryExpression.op_pmarrow:
+		case op_pmarrow:
 			if (!(getTypeOrFunctionSet(point) instanceof ICPPFunctionType))
 				return LVALUE;
 			break;
@@ -171,12 +247,14 @@ public class EvalBinary extends CPPEvaluation {
 			IType type = fArg1.getTypeOrFunctionSet(point);
 			type= SemanticUtil.getNestedType(type, TDEF | REF | CVTYPE);
     		if (type instanceof ICPPClassType) {
-    			return CPPSemantics.findOverloadedBinaryOperator(point, OverloadableOperator.BRACKET, fArg1, fArg2);
+    			return CPPSemantics.findOverloadedBinaryOperator(point, getTemplateDefinitionScope(), 
+    					OverloadableOperator.BRACKET, fArg1, fArg2);
     		}
 		} else {
 			final OverloadableOperator op = OverloadableOperator.fromBinaryExpression(fOperator);
 			if (op != null) {
-				return CPPSemantics.findOverloadedBinaryOperator(point, op, fArg1, fArg2);
+				return CPPSemantics.findOverloadedBinaryOperator(point, getTemplateDefinitionScope(),
+						op, fArg1, fArg2);
 			}
 		}
     	return null;
@@ -215,17 +293,17 @@ public class EvalBinary extends CPPEvaluation {
     		}
     		return ProblemType.UNKNOWN_FOR_EXPRESSION;
 
-    	case IASTBinaryExpression.op_lessEqual:
-    	case IASTBinaryExpression.op_lessThan:
-    	case IASTBinaryExpression.op_greaterEqual:
-    	case IASTBinaryExpression.op_greaterThan:
-    	case IASTBinaryExpression.op_logicalAnd:
-    	case IASTBinaryExpression.op_logicalOr:
-    	case IASTBinaryExpression.op_equals:
-    	case IASTBinaryExpression.op_notequals:
+    	case op_lessEqual:
+    	case op_lessThan:
+    	case op_greaterEqual:
+    	case op_greaterThan:
+    	case op_logicalAnd:
+    	case op_logicalOr:
+    	case op_equals:
+    	case op_notequals:
     		return CPPBasicType.BOOLEAN;
 
-    	case IASTBinaryExpression.op_plus:
+    	case op_plus:
     		if (type1 instanceof IPointerType) {
         		return ExpressionTypes.restoreTypedefs(type1, originalType1);
     		}
@@ -234,7 +312,7 @@ public class EvalBinary extends CPPEvaluation {
     		}
     		break;
 
-    	case IASTBinaryExpression.op_minus:
+    	case op_minus:
     		if (type1 instanceof IPointerType) {
     			if (type2 instanceof IPointerType) {
     				return CPPVisitor.getPointerDiffType(point);
@@ -243,13 +321,13 @@ public class EvalBinary extends CPPEvaluation {
     		}
     		break;
 
-    	case ICPPASTBinaryExpression.op_pmarrow:
-    	case ICPPASTBinaryExpression.op_pmdot:
+    	case op_pmarrow:
+    	case op_pmdot:
     		if (type2 instanceof ICPPPointerToMemberType) {
     			IType t= ((ICPPPointerToMemberType) type2).getType();
     			if (t instanceof ICPPFunctionType)
     				return t;
-    			if (fOperator == ICPPASTBinaryExpression.op_pmdot && fArg1.getValueCategory(point) == PRVALUE) {
+    			if (fOperator == op_pmdot && fArg1.getValueCategory(point) == PRVALUE) {
     				return prvalueType(t);
     			}
     			return glvalueType(t);
@@ -261,16 +339,48 @@ public class EvalBinary extends CPPEvaluation {
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer, boolean includeValue) throws CoreException {
-		buffer.putByte(ITypeMarshalBuffer.EVAL_BINARY);
+		buffer.putShort(ITypeMarshalBuffer.EVAL_BINARY);
 		buffer.putByte((byte) fOperator);
 		buffer.marshalEvaluation(fArg1, includeValue);
 		buffer.marshalEvaluation(fArg2, includeValue);
+		marshalTemplateDefinition(buffer);
 	}
 
-	public static ISerializableEvaluation unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
+	public static ISerializableEvaluation unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
 		int op= buffer.getByte();
 		ICPPEvaluation arg1= (ICPPEvaluation) buffer.unmarshalEvaluation();
 		ICPPEvaluation arg2= (ICPPEvaluation) buffer.unmarshalEvaluation();
-		return new EvalBinary(op, arg1, arg2);
+		IBinding templateDefinition= buffer.unmarshalBinding();
+		return new EvalBinary(op, arg1, arg2, templateDefinition);
+	}
+
+	@Override
+	public ICPPEvaluation instantiate(ICPPTemplateParameterMap tpMap, int packOffset,
+			ICPPClassSpecialization within, int maxdepth, IASTNode point) {
+		ICPPEvaluation arg1 = fArg1.instantiate(tpMap, packOffset, within, maxdepth, point);
+		ICPPEvaluation arg2 = fArg2.instantiate(tpMap, packOffset, within, maxdepth, point);
+		if (arg1 == fArg1 && arg2 == fArg2)
+			return this;
+		return new EvalBinary(fOperator, arg1, arg2, getTemplateDefinition());
+	}
+
+	@Override
+	public ICPPEvaluation computeForFunctionCall(CPPFunctionParameterMap parameterMap,
+			int maxdepth, IASTNode point) {
+		ICPPEvaluation arg1 = fArg1.computeForFunctionCall(parameterMap, maxdepth, point);
+		ICPPEvaluation arg2 = fArg2.computeForFunctionCall(parameterMap, maxdepth, point);
+		if (arg1 == fArg1 && arg2 == fArg2)
+			return this;
+		return new EvalBinary(fOperator, arg1, arg2, getTemplateDefinition());
+	}
+
+	@Override
+	public int determinePackSize(ICPPTemplateParameterMap tpMap) {
+		return CPPTemplates.combinePackSize(fArg1.determinePackSize(tpMap), fArg2.determinePackSize(tpMap));
+	}
+
+	@Override
+	public boolean referencesTemplateParameter() {
+		return fArg1.referencesTemplateParameter() || fArg2.referencesTemplateParameter();
 	}
 }

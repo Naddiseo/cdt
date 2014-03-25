@@ -40,7 +40,8 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPBinding;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPConstructor;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
-import org.eclipse.cdt.internal.core.dom.parser.cpp.ClassTypeHelper;
+import org.eclipse.cdt.core.dom.ast.cpp.SemanticQueries;
+import org.eclipse.cdt.core.parser.util.StringUtil;
 
 /**
  * Reports a problem if object of a class cannot be created because
@@ -170,13 +171,7 @@ public class AbstractClassInstantiationChecker extends AbstractIndexAstChecker {
 		private String resolveName(ICPPBinding binding) {
 			try {
 				if (binding.isGloballyQualified()) {
-					StringBuilder buf = new StringBuilder();
-					for (String item : binding.getQualifiedName()) {
-						if (buf.length() != 0)
-							buf.append("::"); //$NON-NLS-1$
-						buf.append(item);
-					}
-					return buf.toString();
+					return StringUtil.join(binding.getQualifiedName(), "::"); //$NON-NLS-1$
 				}
 			} catch (DOMException e) {
 				CodanCheckersActivator.log(e);
@@ -188,7 +183,7 @@ public class AbstractClassInstantiationChecker extends AbstractIndexAstChecker {
 		 *  Checks whether specified type (class or typedef to the class) is an abstract class.
 		 *  If it is, reports violations on each pure virtual method 
 		 */
-		private void reportProblemsIfAbstract(IType typeToCheck, IASTNode problemNode ) {
+		private void reportProblemsIfAbstract(IType typeToCheck, IASTNode problemNode) {
 			IType unwindedType = CxxAstUtils.unwindTypedef(typeToCheck);
 			if (!(unwindedType instanceof ICPPClassType) || unwindedType instanceof IProblemBinding) {
 				return;
@@ -196,7 +191,7 @@ public class AbstractClassInstantiationChecker extends AbstractIndexAstChecker {
 			ICPPClassType classType = (ICPPClassType) unwindedType;
 			ICPPMethod[] pureVirtualMethods = pureVirtualMethodsCache.get(classType);
 			if (pureVirtualMethods == null) {
-				pureVirtualMethods = ClassTypeHelper.getPureVirtualMethods(classType);
+				pureVirtualMethods = SemanticQueries.getPureVirtualMethods(classType, problemNode);
 				pureVirtualMethodsCache.put(classType, pureVirtualMethods);
 			}
 			

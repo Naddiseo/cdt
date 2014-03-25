@@ -10,6 +10,8 @@
  *     Jens Elmenthaler (Verigy) - Added Full GDB pretty-printing support (bug 302121)
  *     Sergey Prigogin (Google)
  *     Anton Gorenkov - A preference to use RTTI for variable types determination (Bug 377536)
+ *     IBM Corporation
+ *     Marc Khouzam (Ericsson) - Add preference for aggressive breakpoint filtering (Bug 360735)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.internal.ui.preferences;
 
@@ -537,17 +539,17 @@ public class GdbDebugPreferencePage extends FieldEditorPreferencePage implements
 
 		final StringFieldEditor stringFieldEditorCommand = new StringFieldEditor(
 				IGdbDebugPreferenceConstants.PREF_DEFAULT_GDB_COMMAND,
-				"GDB debugger:", //$NON-NLS-1$
+				MessagesForPreferences.GdbDebugPreferencePage_GDB_debugger,
 				group1);
 
 		stringFieldEditorCommand.fillIntoGrid(group1, 2);
 		addField(stringFieldEditorCommand);
 		Button browsebutton = new Button(group1, SWT.PUSH);
-		browsebutton.setText("&Browse..."); //$NON-NLS-1$
+		browsebutton.setText(MessagesForPreferences.GdbDebugPreferencePage_Browse_button);
 		browsebutton.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
-				handleBrowseButtonSelected("GDB Debugger",  //$NON-NLS-1$
+				handleBrowseButtonSelected(MessagesForPreferences.GdbDebugPreferencePage_GDB_debugger_dialog_title,
 						stringFieldEditorCommand);
 			}
 		});
@@ -555,17 +557,17 @@ public class GdbDebugPreferencePage extends FieldEditorPreferencePage implements
 
 		final StringFieldEditor stringFieldEditorGdbInit = new StringFieldEditor(
 				IGdbDebugPreferenceConstants.PREF_DEFAULT_GDB_INIT,
-				"GDB command file:", //$NON-NLS-1$
+				MessagesForPreferences.GdbDebugPreferencePage_GDB_command_file,
 				group1);
 
 		stringFieldEditorGdbInit.fillIntoGrid(group1, 2);
 		addField(stringFieldEditorGdbInit);
 		browsebutton = new Button(group1, SWT.PUSH);
-		browsebutton.setText("&Browse..."); //$NON-NLS-1$
+		browsebutton.setText(MessagesForPreferences.GdbDebugPreferencePage_Browse_button);
 		browsebutton.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
-				handleBrowseButtonSelected("GDB Command File", //$NON-NLS-1$
+				handleBrowseButtonSelected(MessagesForPreferences.GdbDebugPreferencePage_GDB_command_file_dialog_title,
 						stringFieldEditorGdbInit);
 			}
 		});
@@ -574,24 +576,10 @@ public class GdbDebugPreferencePage extends FieldEditorPreferencePage implements
 		final StringWithBooleanFieldEditor enableStopAtMain = new StringWithBooleanFieldEditor(
 				IGdbDebugPreferenceConstants.PREF_DEFAULT_STOP_AT_MAIN,
 				IGdbDebugPreferenceConstants.PREF_DEFAULT_STOP_AT_MAIN_SYMBOL,
-				"Stop on startup at:", //$NON-NLS-1$
+				MessagesForPreferences.GdbDebugPreferencePage_Stop_on_startup_at,
 				group1);
 		enableStopAtMain.fillIntoGrid(group1, 3);
 		addField(enableStopAtMain);
-
-//		final StringFieldEditor stopAtMainSymbol = new StringFieldEditor(
-//				IGdbDebugPreferenceConstants.PREF_DEFAULT_STOP_AT_MAIN_SYMBOL,
-//				"",	group1); //$NON-NLS-1$
-//		stopAtMainSymbol.fillIntoGrid(group1, 2);
-//		addField(stopAtMainSymbol);
-//
-//		enableStopAtMain.getChangeControl(group1).addSelectionListener(new SelectionAdapter() {
-//			@Override
-//			public void widgetSelected(SelectionEvent e) {
-//				boolean enabled = enableStopAtMain.getBooleanValue();
-//				stopAtMainSymbol.setEnabled(enabled, group1);
-//			}
-//		});
 
 		fCommandTimeoutField = new IntegerWithBooleanFieldEditor( 
 				IGdbDebugPreferenceConstants.PREF_COMMAND_TIMEOUT, 
@@ -608,14 +596,14 @@ public class GdbDebugPreferencePage extends FieldEditorPreferencePage implements
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				handleAdvancedButtonSelected(
-						"GDB Debugger");  //$NON-NLS-1$
+						MessagesForPreferences.GdbDebugPreferencePage_GDB_debugger_dialog_title);
 			}
 		});
 		setButtonLayoutData( fTimeoutAdvancedButton );
 
 		final ListenableBooleanFieldEditor enableNonStop= new ListenableBooleanFieldEditor(
 				IGdbDebugPreferenceConstants.PREF_DEFAULT_NON_STOP,
-				"Non-stop mode (Note: Requires non-stop GDB)", //$NON-NLS-1$
+				MessagesForPreferences.GdbDebugPreferencePage_Non_stop_mode,
 				SWT.NONE, group1);
 		enableNonStop.fillIntoGrid(group1, 3);
 		addField(enableNonStop);
@@ -658,34 +646,38 @@ public class GdbDebugPreferencePage extends FieldEditorPreferencePage implements
 		// Need to set layout again.
 		group2.setLayout(groupLayout);
 
-		final ListenableBooleanFieldEditor enableGdbTracesField = new ListenableBooleanFieldEditor(
+		boolField= new BooleanFieldEditor(
+				IGdbDebugPreferenceConstants.PREF_AGGRESSIVE_BP_FILTER,
+				MessagesForPreferences.GdbDebugPreferencePage_useAggressiveBpFilter,
+				group2);
+
+		boolField.fillIntoGrid(group2, 3);
+		addField(boolField);
+		// Need to set layout again.
+		group2.setLayout(groupLayout);
+		
+		final IntegerWithBooleanFieldEditor enableGdbTracesField = new IntegerWithBooleanFieldEditor(
 				IGdbDebugPreferenceConstants.PREF_TRACES_ENABLE,
-				MessagesForPreferences.GdbDebugPreferencePage_enableTraces_label,
-				SWT.NONE, group2);
-
-		enableGdbTracesField.fillIntoGrid(group2, 3);
-		addField(enableGdbTracesField);
-
-		final IntegerFieldEditor maxCharactersField = new IntegerFieldEditor(
 				IGdbDebugPreferenceConstants.PREF_MAX_GDB_TRACES,
-				MessagesForPreferences.GdbDebugPreferencePage_maxGdbTraces_label,
+				MessagesForPreferences.GdbDebugPreferencePage_enableTraces_label,
 				group2);
 		// Instead of using Integer.MAX_VALUE which is some obscure number,
 		// using 2 billion is nice and readable.
-		maxCharactersField.setValidRange(10000, 2000000000);
-
-		maxCharactersField.fillIntoGrid(group2, 3);
-		addField(maxCharactersField);
-
-		enableGdbTracesField.getChangeControl(group2).addSelectionListener(new SelectionAdapter() {
-			@Override
-			public void widgetSelected(SelectionEvent e) {
-				boolean enabled = enableGdbTracesField.getBooleanValue();
-				maxCharactersField.setEnabled(enabled, group2);
-			}
-		});
-
+		enableGdbTracesField.setValidRange(10000, 2000000000);
+		enableGdbTracesField.fillIntoGrid(group2, 2);
+		addField(enableGdbTracesField);
 		// Need to set layout again.
+		group2.setLayout(groupLayout);
+
+		boolField= new BooleanFieldEditor(
+				IGdbDebugPreferenceConstants.PREF_USE_RTTI,
+				MessagesForPreferences.GdbDebugPreferencePage_use_rtti_label1 + "\n" //$NON-NLS-1$
+				+ MessagesForPreferences.GdbDebugPreferencePage_use_rtti_label2,
+				group2);
+
+		boolField.fillIntoGrid(group2, 3);
+		addField(boolField);
+		// need to set layout again
 		group2.setLayout(groupLayout);
 
 		Group group = new Group(parent, SWT.NONE);
@@ -731,23 +723,6 @@ public class GdbDebugPreferencePage extends FieldEditorPreferencePage implements
 				childCountLimitField.setEnabled(enabled, indentHelper);
 			}
 		});
-
-		group= new Group(parent, SWT.NONE);
-		group.setText(MessagesForPreferences.GdbDebugPreferencePage_rtti_label);
-		groupLayout= new GridLayout(3, false);
-		group.setLayout(groupLayout);
-		group.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
-
-		boolField= new BooleanFieldEditor(
-				IGdbDebugPreferenceConstants.PREF_USE_RTTI,
-				MessagesForPreferences.GdbDebugPreferencePage_use_rtti_label1 + "\n" //$NON-NLS-1$
-				+ MessagesForPreferences.GdbDebugPreferencePage_use_rtti_label2,
-				group);
-
-		boolField.fillIntoGrid(group, 3);
-		addField(boolField);
-		// need to set layout again
-		group.setLayout(groupLayout);
 
 		// need to set layouts again
 		indentHelper.setLayout(helperLayout);

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2012 Symbian Software Systems and others.
+ * Copyright (c) 2007, 2013 Symbian Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,15 +7,17 @@
  *
  * Contributors:
  *     Andrew Ferguson (Symbian) - Initial implementation
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.index.tests;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import junit.framework.Test;
@@ -46,6 +48,59 @@ import org.eclipse.core.runtime.Path;
  * Tests the behavior of the IIndex API when dealing with multiple projects
  */
 public class IndexCompositeTests extends BaseTestCase {
+	Set<IProject> createdProjects = new HashSet<IProject>();
+
+	/*
+	 * Convenience class for setting up projects.
+	 */
+	private class ProjectBuilder {
+		private final String name;
+		private final boolean cpp;
+		private List<IProject> dependencies = new ArrayList<IProject>();
+		private Map<String, String> path2content = new HashMap<String, String>();
+	
+		ProjectBuilder(String name, boolean cpp) {
+			this.name = name;
+			this.cpp = cpp;
+		}
+	
+		ProjectBuilder addDependency(IProject project) {
+			dependencies.add(project);
+			return this;
+		}
+	
+		ProjectBuilder addFile(String relativePath, CharSequence content) {
+			path2content.put(relativePath, content.toString());
+			return this;
+		}
+	
+		ICProject create() throws Exception {
+			ICProject result = cpp ?
+					CProjectHelper.createCCProject(name, "bin", IPDOMManager.ID_NO_INDEXER) :
+					CProjectHelper.createCProject(name, "bin", IPDOMManager.ID_NO_INDEXER);
+			createdProjects.add(result.getProject());
+	
+			IFile lastFile= null;
+			for (Map.Entry<String, String> entry : path2content.entrySet()) {
+				lastFile= TestSourceReader.createFile(result.getProject(), new Path(entry.getKey()), entry.getValue());
+			}
+	
+			IProjectDescription desc = result.getProject().getDescription();
+			desc.setReferencedProjects(dependencies.toArray(new IProject[dependencies.size()]));
+			result.getProject().setDescription(desc, new NullProgressMonitor());
+	
+			IIndexManager indexManager = CCorePlugin.getIndexManager();
+			indexManager.setIndexerId(result, IPDOMManager.ID_FAST_INDEXER);
+			if (lastFile != null) {
+				// Call reindex explicitly since setting indexer ID doesn't trigger reindexing.
+				indexManager.reindex(result);
+				IIndex index= indexManager.getIndex(result);
+				TestSourceReader.waitUntilFileIsIndexed(index, lastFile, INDEXER_TIMEOUT_SEC * 1000);
+			} 
+			BaseTestCase.waitForIndexer(result);
+			return result;
+		}
+	}
 
 	public static Test suite() {
 		return suite(IndexCompositeTests.class);
@@ -81,12 +136,12 @@ public class IndexCompositeTests extends BaseTestCase {
 		List<ICProject> projects = new ArrayList<ICProject>();
 
 		try {
-			ProjectBuilder pb = new ProjectBuilder("projB" + System.currentTimeMillis(), true);
+			ProjectBuilder pb = new ProjectBuilder("projB_" + getName(), true);
 			pb.addFile("h1.h", contents[0]);
 			ICProject cprojB = pb.create();
 			projects.add(cprojB);
 
-			pb = new ProjectBuilder("projA" + System.currentTimeMillis(), true);
+			pb = new ProjectBuilder("projA_" + getName(), true);
 			pb.addFile("h2.h", contents[1]).addDependency(cprojB.getProject());
 			ICProject cprojA = pb.create();
 			projects.add(cprojA);
@@ -101,8 +156,9 @@ public class IndexCompositeTests extends BaseTestCase {
 			setIndex(cprojA, REFD);	assertBCount(1, 1);
 			setIndex(cprojA, BOTH);	assertBCount(2, 2);
 		} finally {
-			for (ICProject project : projects)
+			for (ICProject project : projects) {
 				project.getProject().delete(true, true, new NullProgressMonitor());
+			}
 		}
 	}
 
@@ -128,17 +184,17 @@ public class IndexCompositeTests extends BaseTestCase {
 		List<ICProject> projects = new ArrayList<ICProject>();
 
 		try {
-			ProjectBuilder pb = new ProjectBuilder("projC" + System.currentTimeMillis(), true);
+			ProjectBuilder pb = new ProjectBuilder("projC_" + getName(), true);
 			pb.addFile("h3.h", contents[0]);
 			ICProject cprojC = pb.create();
 			projects.add(cprojC);
 
-			pb = new ProjectBuilder("projB" + System.currentTimeMillis(), true);
+			pb = new ProjectBuilder("projB_" + getName(), true);
 			pb.addFile("h2.h", contents[1]).addDependency(cprojC.getProject());
 			ICProject cprojB = pb.create();
 			projects.add(cprojB);
 
-			pb = new ProjectBuilder("projA" + System.currentTimeMillis(), true);
+			pb = new ProjectBuilder("projA_" + getName(), true);
 			pb.addFile("h1.h", contents[2]).addDependency(cprojB.getProject());
 			ICProject cprojA = pb.create();
 			projects.add(cprojA);
@@ -175,7 +231,6 @@ public class IndexCompositeTests extends BaseTestCase {
 			assertNamespaceXMemberCount(5);
 			assertFieldCount("C1", 1);
 
-			
 			setIndex(cprojB, NONE);
 			assertBCount(gBC, aBC);
 			assertNamespaceXMemberCount(2);
@@ -195,7 +250,6 @@ public class IndexCompositeTests extends BaseTestCase {
 			assertBCount(gABC, aABC);
 			assertNamespaceXMemberCount(5);
 			assertFieldCount("C1", 1);
-
 			
 			setIndex(cprojA, NONE);
 			assertBCount(gABC, aABC);
@@ -217,8 +271,9 @@ public class IndexCompositeTests extends BaseTestCase {
 			assertNamespaceXMemberCount(5);
 			assertFieldCount("C1", 1);
 		} finally {
-			for (ICProject project : projects)
+			for (ICProject project : projects) {
 				project.getProject().delete(true, true, new NullProgressMonitor());
+			}
 		}
 	}
 
@@ -244,21 +299,20 @@ public class IndexCompositeTests extends BaseTestCase {
 		List<ICProject> projects = new ArrayList<ICProject>();
 		
 		try {
-			ProjectBuilder pb = new ProjectBuilder("projB" + System.currentTimeMillis(), true);
+			ProjectBuilder pb = new ProjectBuilder("projB_" + getName(), true);
 			pb.addFile("h2.h", contents[0]);
 			ICProject cprojB = pb.create();
 			projects.add(cprojB);
 
-			pb = new ProjectBuilder("projA" + System.currentTimeMillis(), true);
+			pb = new ProjectBuilder("projA_" + getName(), true);
 			pb.addFile("h1.h", contents[1]).addDependency(cprojB.getProject());
 			ICProject cprojA = pb.create();
 			projects.add(cprojA);
 
-			pb = new ProjectBuilder("projC" + System.currentTimeMillis(), true);
+			pb = new ProjectBuilder("projC_" + getName(), true);
 			pb.addFile("h3.h", contents[2]).addDependency(cprojB.getProject());
 			ICProject cprojC = pb.create();
 			projects.add(cprojC);
-
 
 			/*  A   C    |
 		     *   \ /     | Depends On / References
@@ -277,7 +331,6 @@ public class IndexCompositeTests extends BaseTestCase {
 			final int gBC= gB + gC - 1, aBC= aB + aC - 1;
 			final int gAB= gA + gB - 1, aAB= aA + aB - 1;
 			final int gABC= gA + gBC - 1, aABC= aA + aBC - 1;
-
 
 			setIndex(cprojC, NONE);
 			assertBCount(gBC, aBC);
@@ -318,8 +371,9 @@ public class IndexCompositeTests extends BaseTestCase {
 			assertBCount(gABC, aABC);
 			assertNamespaceXMemberCount(4);
 		} finally {
-			for (ICProject project : projects)
+			for (ICProject project : projects) {
 				project.getProject().delete(true, true, new NullProgressMonitor());
+			}
 		}
 	}
 
@@ -343,17 +397,17 @@ public class IndexCompositeTests extends BaseTestCase {
 		List<ICProject> projects = new ArrayList<ICProject>();
 
 		try {
-			ProjectBuilder pb = new ProjectBuilder("projC" + System.currentTimeMillis(), true);
+			ProjectBuilder pb = new ProjectBuilder("projC_" + getName(), true);
 			pb.addFile("h3.h", contents[0]);
 			ICProject cprojC = pb.create();
 			projects.add(cprojC);
 
-			pb = new ProjectBuilder("projA" + System.currentTimeMillis(), true);
+			pb = new ProjectBuilder("projA_" + getName(), true);
 			pb.addFile("h1.h", contents[2]);
 			ICProject cprojA = pb.create();
 			projects.add(cprojA);
 
-			pb = new ProjectBuilder("projB" + System.currentTimeMillis(), true);
+			pb = new ProjectBuilder("projB_" + getName(), true);
 			pb.addFile("h2.h", contents[1]).addDependency(cprojC.getProject()).addDependency(cprojA.getProject());
 			ICProject cprojB = pb.create();
 			projects.add(cprojB);
@@ -415,8 +469,9 @@ public class IndexCompositeTests extends BaseTestCase {
 			assertBCount(gABC, aABC);
 			assertNamespaceXMemberCount(4);
 		} finally {
-			for (ICProject project : projects)
+			for (ICProject project : projects) {
 				project.getProject().delete(true, true, new NullProgressMonitor());
+			}
 		}
 	}
 	
@@ -438,13 +493,13 @@ public class IndexCompositeTests extends BaseTestCase {
 	private void assertNamespaceXMemberCount(int count) throws CoreException, DOMException {
 		IBinding[] bindings = index.findBindings(Pattern.compile("X"), true, FILTER, new NullProgressMonitor());
 		assertEquals(1, bindings.length);
-		assertEquals(count, ((ICPPNamespace)bindings[0]).getMemberBindings().length);
+		assertEquals(count, ((ICPPNamespace) bindings[0]).getMemberBindings().length);
 	}
 	
 	private void assertFieldCount(String qnPattern, int count) throws CoreException, DOMException {
 		IBinding[] bindings = index.findBindings(Pattern.compile(qnPattern), true, FILTER, new NullProgressMonitor());
 		assertEquals(1, bindings.length);
-		assertEquals(count, ((ICompositeType)bindings[0]).getFields().length);
+		assertEquals(count, ((ICompositeType) bindings[0]).getFields().length);
 	}
 	
 	private void setIndex(ICProject project, int options) throws CoreException, InterruptedException {
@@ -459,57 +514,12 @@ public class IndexCompositeTests extends BaseTestCase {
 	protected void tearDown() throws Exception {
 		if (index != null) {
 			index.releaseReadLock();
+			index = null;
 		}
+		for (IProject project : createdProjects) {
+			project.delete(true, npm());
+		}
+		createdProjects.clear();
 		super.tearDown();
-	}
-}
-
-/*
- * Convenience class for setting up projects.
- */
-class ProjectBuilder {
-	private static final int INDEXER_TIMEOUT_SEC = 5;
-	private final String name;
-	private final boolean cpp;
-	private List dependencies = new ArrayList();
-	private Map path2content = new HashMap();
-
-	ProjectBuilder(String name, boolean cpp) {
-		this.name = name;
-		this.cpp = cpp;
-	}
-
-	ProjectBuilder addDependency(IProject project) {
-		dependencies.add(project);
-		return this;
-	}
-
-	ProjectBuilder addFile(String relativePath, CharSequence content) {
-		path2content.put(relativePath, content.toString());
-		return this;
-	}
-
-	ICProject create() throws Exception {
-		ICProject result = cpp ?
-				CProjectHelper.createCCProject(name, "bin", IPDOMManager.ID_NO_INDEXER) :
-				CProjectHelper.createCCProject(name, "bin", IPDOMManager.ID_NO_INDEXER);
-
-		IFile lastFile= null;
-		for (Iterator i = path2content.entrySet().iterator(); i.hasNext();) {
-			Map.Entry entry = (Map.Entry) i.next();
-			lastFile= TestSourceReader.createFile(result.getProject(), new Path((String)entry.getKey()), (String) entry.getValue());
-		}
-
-		IProjectDescription desc = result.getProject().getDescription();
-		desc.setReferencedProjects((IProject[]) dependencies.toArray(new IProject[dependencies.size()]));
-		result.getProject().setDescription(desc, new NullProgressMonitor());
-
-		CCorePlugin.getIndexManager().setIndexerId(result, IPDOMManager.ID_FAST_INDEXER);
-		if (lastFile != null) {
-			IIndex index= CCorePlugin.getIndexManager().getIndex(result);
-			TestSourceReader.waitUntilFileIsIndexed(index, lastFile, INDEXER_TIMEOUT_SEC * 1000);
-		} 
-		BaseTestCase.waitForIndexer(result);
-		return result;
 	}
 }

@@ -1,14 +1,15 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    John Camelon (IBM) - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
- *    Mike Kucera (IBM)
+ *     John Camelon (IBM) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Mike Kucera (IBM)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -27,18 +28,19 @@ import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IASTPointerOperator;
 import org.eclipse.cdt.core.dom.ast.IASTTypeId;
 import org.eclipse.cdt.core.dom.ast.IArrayType;
+import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConstructorInitializer;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTInitializerClause;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNewExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.internal.core.dom.parser.ASTNode;
 import org.eclipse.cdt.internal.core.dom.parser.ASTQueries;
 import org.eclipse.cdt.internal.core.dom.parser.IASTAmbiguityParent;
-import org.eclipse.cdt.internal.core.dom.parser.Value;
 import org.eclipse.cdt.internal.core.dom.parser.c.CASTExpressionList;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPSemantics;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
-import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.EvalFixed;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.EvalTypeId;
 import org.eclipse.core.runtime.Assert;
 
 
@@ -46,7 +48,7 @@ public class CPPASTNewExpression extends ASTNode implements ICPPASTNewExpression
     private IASTInitializerClause[] placement;
     private IASTTypeId typeId;
     private IASTInitializer initializer;
-    private IASTImplicitName[] implicitNames = null;
+    private IASTImplicitName[] implicitNames;
     private boolean isGlobal;
     private boolean isNewTypeId;
 	
@@ -81,11 +83,7 @@ public class CPPASTNewExpression extends ASTNode implements ICPPASTNewExpression
 		}
 		copy.setTypeId(typeId == null ? null : typeId.copy(style));
 		copy.setInitializer(initializer == null ? null : initializer.copy(style));
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -163,15 +161,35 @@ public class CPPASTNewExpression extends ASTNode implements ICPPASTNewExpression
     @Override
 	public IASTImplicitName[] getImplicitNames() {
     	if (implicitNames == null) {
+    		CPPASTImplicitName operatorName = null;
 			ICPPFunction operatorFunction = CPPSemantics.findOverloadedOperator(this);
-			if (operatorFunction == null || operatorFunction instanceof CPPImplicitFunction) {
-				implicitNames = IASTImplicitName.EMPTY_NAME_ARRAY;
-			} else {
-				CPPASTImplicitName operatorName = new CPPASTImplicitName(operatorFunction.getNameCharArray(), this);
+			if (operatorFunction != null && !(operatorFunction instanceof CPPImplicitFunction)) {
+				operatorName = new CPPASTImplicitName(operatorFunction.getNameCharArray(), this);
 				operatorName.setOperator(true);
 				operatorName.setBinding(operatorFunction);
 				operatorName.setOffsetAndLength(getOffset(), 3);
-				implicitNames = new IASTImplicitName[] { operatorName };
+			}
+
+			CPPASTImplicitName constructorName = null;
+			IBinding constructor = CPPSemantics.findImplicitlyCalledConstructor(this);
+			if (constructor != null) {
+				constructorName = new CPPASTImplicitName(constructor.getNameCharArray(), this);
+				constructorName.setBinding(constructor);
+				constructorName.setOffsetAndLength((ASTNode) getTypeId());
+			}
+
+			if (operatorName != null) {
+				if (constructorName != null) {
+					implicitNames = new IASTImplicitName[] { operatorName, constructorName };
+				} else {
+					implicitNames = new IASTImplicitName[] { operatorName };
+				}
+			} else {
+				if (constructorName != null) {
+					implicitNames = new IASTImplicitName[] { constructorName };
+				} else {
+					implicitNames = IASTImplicitName.EMPTY_NAME_ARRAY;
+				}
 			}
     	}
     	
@@ -249,11 +267,19 @@ public class CPPASTNewExpression extends ASTNode implements ICPPASTNewExpression
 	@Override
 	public ICPPEvaluation getEvaluation() {
 		if (fEvaluation == null) {
-			IType t= CPPVisitor.createType(getTypeId());
+			IType t = CPPVisitor.createType(getTypeId());
 			if (t instanceof IArrayType) {
-				t= ((IArrayType) t).getType();
+				t = ((IArrayType) t).getType();
 			}
-			fEvaluation= new EvalFixed(new CPPPointerType(t), PRVALUE, Value.UNKNOWN);
+			ICPPEvaluation[] arguments = ICPPEvaluation.EMPTY_ARRAY;
+			if (initializer instanceof ICPPASTConstructorInitializer) {
+				IASTInitializerClause[] args = ((ICPPASTConstructorInitializer) initializer).getArguments();
+				arguments= new ICPPEvaluation[args.length];
+				for (int i = 0; i < arguments.length; i++) {
+					arguments[i] = ((ICPPASTInitializerClause) args[i]).getEvaluation();
+				}
+			}
+			fEvaluation = EvalTypeId.createForNewExpression(t, this, arguments);
 		}
 		return fEvaluation;
 	}

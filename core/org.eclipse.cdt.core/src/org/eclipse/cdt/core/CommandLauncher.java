@@ -25,6 +25,7 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.osgi.util.NLS;
 
@@ -184,12 +185,18 @@ public class CommandLauncher implements ICommandLauncher {
 		}
 
 		File dir = workingDirectory != null ? workingDirectory.toFile() : null;
+		if (dir != null && !dir.isDirectory()) {
+			CCorePlugin.logStackTrace(IStatus.ERROR, NLS.bind(Messages.CommandLauncher_InvalidWorkingDirectory, dir));
+			dir = null;
+		}
 
 		try {
 			fProcess = ProcessFactory.getFactory().exec(fCommandArgs, env, dir);
 			fCommandArgs[0] = command; // to print original command on the console
 			fErrorMessage = ""; //$NON-NLS-1$
 		} catch (IOException e) {
+			CCorePlugin.log(e);
+
 			if (isFound == null) {
 				IPath location = PathUtil.findProgramLocation(command, envPathValue);
 				isFound = location != null;

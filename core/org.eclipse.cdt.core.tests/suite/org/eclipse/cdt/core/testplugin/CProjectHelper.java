@@ -12,6 +12,7 @@
  *     Anton Leherbauer (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.core.testplugin;
+
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -84,7 +85,6 @@ public class CProjectHelper {
 		final IWorkspace ws = ResourcesPlugin.getWorkspace();
 		final ICProject newProject[] = new ICProject[1];
 		ws.run(new IWorkspaceRunnable() {
-
 			@Override
 			public void run(IProgressMonitor monitor) throws CoreException {
 				IWorkspaceRoot root = ws.getRoot();
@@ -166,7 +166,6 @@ public class CProjectHelper {
 		
 		final String finalCfgProviderId = cfgProviderId;
 		ws.run(new IWorkspaceRunnable() {
-
 			@Override
 			public void run(IProgressMonitor monitor) throws CoreException {
 				IWorkspaceRoot root = ws.getRoot();
@@ -221,7 +220,6 @@ public class CProjectHelper {
 		final IWorkspace ws = ResourcesPlugin.getWorkspace();
 		final ICProject newProject[] = new ICProject[1];
 		ws.run(new IWorkspaceRunnable() {
-
 			@Override
 			public void run(IProgressMonitor monitor) throws CoreException {
 				ICProject cproject = createCProject(projectName, binFolderName, indexerID);
@@ -309,12 +307,12 @@ public class CProjectHelper {
 		archCont = testProject.getArchiveContainer();
 		myArchives = archCont.getArchives();
 		if (myArchives.length < 1)
-			return (null);
+			return null;
 		for (x = 0; x < myArchives.length; x++) {
 			if (myArchives[x].getElementName().equals(name))
 				return (myArchives[x]);
 		}
-		return (null);
+		return null;
 	}
 
 	/**
@@ -327,12 +325,12 @@ public class CProjectHelper {
 		binCont = testProject.getBinaryContainer();
 		myBinaries = binCont.getBinaries();
 		if (myBinaries.length < 1)
-			return (null);
+			return null;
 		for (x = 0; x < myBinaries.length; x++) {
 			if (myBinaries[x].getElementName().equals(name))
 				return (myBinaries[x]);
 		}
-		return (null);
+		return null;
 	}
 
 	/**

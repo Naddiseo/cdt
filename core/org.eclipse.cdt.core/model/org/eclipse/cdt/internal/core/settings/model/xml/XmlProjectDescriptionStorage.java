@@ -1,15 +1,16 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2010 Intel Corporation and others.
+ * Copyright (c) 2007, 2013 Intel Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- * Intel Corporation - Initial API and implementation
- * Markus Schorn (Wind River Systems)
- * IBM Corporation
- * James Blackburn (Broadcom Corp.)
+ *     Intel Corporation - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     IBM Corporation
+ *     James Blackburn (Broadcom Corp.)
+ *     Marc-Andre Laperle (Ericsson)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.settings.model.xml;
 
@@ -43,6 +44,7 @@ import org.eclipse.cdt.core.settings.model.util.CDataUtil;
 import org.eclipse.cdt.internal.core.XmlUtil;
 import org.eclipse.cdt.internal.core.envvar.ContributedEnvironment;
 import org.eclipse.cdt.internal.core.language.settings.providers.LanguageSettingsProvidersSerializer;
+import org.eclipse.cdt.internal.core.model.Util;
 import org.eclipse.cdt.internal.core.settings.model.AbstractCProjectDescriptionStorage;
 import org.eclipse.cdt.internal.core.settings.model.CProjectDescription;
 import org.eclipse.cdt.internal.core.settings.model.CProjectDescriptionManager;
@@ -243,7 +245,10 @@ public class XmlProjectDescriptionStorage extends AbstractCProjectDescriptionSto
 							context = new SettingsContext(project);
 							des = getConvertedDescription(context);
 						} catch (CoreException e) {
-							CCorePlugin.log(e);
+							// log the error except if the project got closed in another thread which is OK
+							if (project.isOpen()) {
+								CCorePlugin.log(e);
+							}
 						}
 					}
 
@@ -490,9 +495,9 @@ public class XmlProjectDescriptionStorage extends AbstractCProjectDescriptionSto
 				CProjectDescription des = new CProjectDescription(project, new XmlStorage(storage), storage, true, false);
 				try {
 					setThreadLocalProjectDesc(des);
-					des.loadDatas();
 
 					LanguageSettingsProvidersSerializer.loadLanguageSettings(des);
+					des.loadDatas();
 					des.doneLoading();
 				} finally {
 					setThreadLocalProjectDesc(null);
@@ -567,6 +572,8 @@ public class XmlProjectDescriptionStorage extends AbstractCProjectDescriptionSto
 				// Get the ProjectDescription as a utf-8 string
 				stream = write(element);
 				utfString = stream.toString("UTF-8"); //$NON-NLS-1$
+				String eol = Util.getLineSeparator(projectFile);
+				utfString = XmlUtil.replaceLineSeparatorInternal(utfString, eol);
 			} finally {
 				if (stream != null)
 					stream.close(); // Cleanup the stream

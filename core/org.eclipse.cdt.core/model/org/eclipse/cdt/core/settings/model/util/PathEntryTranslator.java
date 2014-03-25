@@ -993,9 +993,7 @@ public class PathEntryTranslator {
 		}
 
 		public List<IPathEntry> getEntries(int peKind, List<IPathEntry> list, int flags, ICConfigurationDescription cfgDescription) {
-			if (list == null) {
-				list = new ArrayList<IPathEntry>();
-			}
+			Set<IPathEntry> set = new LinkedHashSet<IPathEntry>();
 
 			int sKind = peKindToSettingKind(peKind);
 			List<PathEntryComposer> composerList = null;
@@ -1032,11 +1030,16 @@ public class PathEntryTranslator {
 							pe = cs.toPathEntry(cfgDescription, true);
 						}
 						if (pe != null)
-							list.addAll(Arrays.asList(pe));
+							set.addAll(Arrays.asList(pe));
 					}
 				}
 			}
 
+			if (list == null) {
+				list = new ArrayList<IPathEntry>(set);
+			} else {
+				list.addAll(set);
+			}
 			return list;
 		}
 
@@ -2018,9 +2021,9 @@ public class PathEntryTranslator {
 				if (rcData != null) {
 					PathEntryCollector child = collector.createChild(container.getPath());
 					for (int kind : kinds) {
-						List<ICLanguageSettingEntry> list = new ArrayList<ICLanguageSettingEntry>();
-						if (collectResourceDataEntries(cfgDescription, kind, rcData, list)) {
-							ICLanguageSettingEntry[] entries = list.toArray(new ICLanguageSettingEntry[list.size()]);
+						Set<ICLanguageSettingEntry> set = new LinkedHashSet<ICLanguageSettingEntry>();
+						if (collectResourceDataEntries(cfgDescription, kind, rcData, set)) {
+							ICLanguageSettingEntry[] entries = set.toArray(new ICLanguageSettingEntry[set.size()]);
 							child.setEntries(kind, entries, exportedSettings);
 						}
 					}
@@ -2031,7 +2034,7 @@ public class PathEntryTranslator {
 		return collector;
 	}
 
-	private static boolean collectResourceDataEntries(ICConfigurationDescription cfgDescription, int kind, CResourceData rcData, List<ICLanguageSettingEntry> list) {
+	private static boolean collectResourceDataEntries(ICConfigurationDescription cfgDescription, int kind, CResourceData rcData, Set<ICLanguageSettingEntry> list) {
 		CLanguageData[] lDatas = null;
 		if (rcData instanceof CFolderData) {
 			lDatas = ((CFolderData)rcData).getLanguageDatas();
@@ -2051,13 +2054,19 @@ public class PathEntryTranslator {
 		IProject project = cfgDescription.getProjectDescription().getProject();
 		if (ScannerDiscoveryLegacySupport.isLanguageSettingsProvidersFunctionalityEnabled(project)) {
 			IResource rc = findResourceInWorkspace(project, rcData.getPath());
+			if (rc == null) {
+				// If resource does not exist make a handle to be able to supply the path.
+				// This does not create actual resource.
+				// Gotta be a folder so language settings provider won't filter out languages.
+				rc = project.getFolder(rcData.getPath());
+			}
 			for (CLanguageData lData : lDatas) {
 				list.addAll(LanguageSettingsProvidersSerializer.getSettingEntriesByKind(cfgDescription, rc, lData.getLanguageId(), kind));
 			}
-			return list.size()>0;
+			return list.size() > 0;
 
 		}
-		// Legacy logic
+		// Legacy logic (before Language Settings Providers)
 		boolean supported = false;
 		for (CLanguageData lData : lDatas) {
 			if (collectLanguageDataEntries(kind, lData, list))
@@ -2066,7 +2075,7 @@ public class PathEntryTranslator {
 		return supported;
 	}
 
-	private static boolean collectLanguageDataEntries(int kind, CLanguageData lData, List<ICLanguageSettingEntry> list) {
+	private static boolean collectLanguageDataEntries(int kind, CLanguageData lData, Set<ICLanguageSettingEntry> list) {
 		if ((kind & lData.getSupportedEntryKinds()) != 0) {
 			ICLanguageSettingEntry[] entries = lData.getEntries(kind);
 			if (entries != null && entries.length != 0) {

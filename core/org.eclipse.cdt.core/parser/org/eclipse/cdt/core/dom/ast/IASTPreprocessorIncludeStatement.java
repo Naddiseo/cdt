@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2012 IBM Corporation and others.
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -23,16 +23,14 @@ import org.eclipse.cdt.core.parser.ISignificantMacros;
  */
 public interface IASTPreprocessorIncludeStatement extends IASTPreprocessorStatement, IFileNomination {
 	/**
-	 * <code>INCLUDE_NAME</code> describes the relationship between an include directive and
-	 * it's name.
+	 * {@code INCLUDE_NAME} describes the relationship between an include directive and its name.
 	 */
 	public static final ASTNodeProperty INCLUDE_NAME = new ASTNodeProperty(
 			"IASTPreprocessorMacroDefinition.INCLUDE_NAME - Include Name"); //$NON-NLS-1$
 
-
 	/**
-	 * Returns the absolute location of the file found through #include.
-	 * Only valid if {@link #isResolved()} returns <code>true</code>.
+	 * Returns the absolute location of the file found through #include, or an empty string if
+	 * include was not resolved.
 	 */
 	public String getPath();
 	
@@ -109,14 +107,22 @@ public interface IASTPreprocessorIncludeStatement extends IASTPreprocessorStatem
 	public boolean isErrorInIncludedFile();
 
 	/**
-	 * Returns true, if an attempt will be or has been made to create AST for the target
+	 * Returns {@code true} if the included file is exported by the including header.
+	 * 
+	 * @see "https://code.google.com/p/include-what-you-use/wiki/IWYUPragmas"
+	 * @since 5.5
+	 */
+	public boolean isIncludedFileExported();
+
+	/**
+	 * Returns {@code true}, if an attempt will be or has been made to create AST for the target
 	 * of this inclusion.
 	 * @since 5.4
 	 */
 	public boolean createsAST();
 	
 	/**
-	 * Returns the file from the index that this include statement has pulled in, or <code>null</code>
+	 * Returns the file from the index that this include statement has pulled in, or {@code null}
 	 * if the include creates AST or is unresolved or skipped.
 	 * @since 5.4
 	 */

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2012 IBM Corporation and others.
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,10 +10,12 @@
  *     Anton Leherbauer (Wind River Systems)
  *     Markus Schorn (Wind River Systems)
  *     Sergey Prigogin (Google)
+ *     Marc-Andre Laperle (Ericsson)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.parser.scanner;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.cdt.core.CCorePlugin;
-import org.eclipse.cdt.core.dom.ast.IASTFileLocation;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IFileNomination;
@@ -31,6 +32,7 @@ import org.eclipse.cdt.core.dom.parser.IScannerExtensionConfiguration;
 import org.eclipse.cdt.core.index.IIndexMacro;
 import org.eclipse.cdt.core.parser.AbstractParserLogService;
 import org.eclipse.cdt.core.parser.EndOfFileException;
+import org.eclipse.cdt.core.parser.ExtendedScannerInfo;
 import org.eclipse.cdt.core.parser.FileContent;
 import org.eclipse.cdt.core.parser.IExtendedScannerInfo;
 import org.eclipse.cdt.core.parser.IMacro;
@@ -41,6 +43,7 @@ import org.eclipse.cdt.core.parser.IScanner;
 import org.eclipse.cdt.core.parser.IScannerInfo;
 import org.eclipse.cdt.core.parser.ISignificantMacros;
 import org.eclipse.cdt.core.parser.IToken;
+import org.eclipse.cdt.core.parser.IncludeExportPatterns;
 import org.eclipse.cdt.core.parser.IncludeFileContentProvider;
 import org.eclipse.cdt.core.parser.Keywords;
 import org.eclipse.cdt.core.parser.OffsetLimitReachedException;
@@ -67,8 +70,8 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IAdaptable;
 
 /**
- * C-Preprocessor providing tokens for the parsers. The class should not be used directly, rather than that
- * you should be using the {@link IScanner} interface.
+ * C-Preprocessor providing tokens for the parsers. The class should not be used directly,
+ * rather than that you should be using the {@link IScanner} interface.
  * @since 5.0
  */
 public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
@@ -86,10 +89,10 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 	
     private static final char[] ONE = "1".toCharArray(); //$NON-NLS-1$
 
-
-    // standard built-ins
+    // Standard built-ins
     private static final ObjectStyleMacro __CDT_PARSER__= new ObjectStyleMacro("__CDT_PARSER__".toCharArray(), ONE);   //$NON-NLS-1$
-    private static final ObjectStyleMacro __cplusplus = new ObjectStyleMacro("__cplusplus".toCharArray(), ONE);   //$NON-NLS-1$
+    private static final ObjectStyleMacro __cplusplus =
+    		new ObjectStyleMacro("__cplusplus".toCharArray(), "201103L".toCharArray());   //$NON-NLS-1$ //$NON-NLS-2$
     private static final ObjectStyleMacro __STDC__ = new ObjectStyleMacro("__STDC__".toCharArray(), ONE);  //$NON-NLS-1$
     private static final ObjectStyleMacro __STDC_HOSTED__ = new ObjectStyleMacro("__STDC_HOSTED__".toCharArray(), ONE);  //$NON-NLS-1$
     private static final ObjectStyleMacro __STDC_VERSION__ =
@@ -225,7 +228,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     final private AbstractParserLogService fLog;
     final private InternalFileContentProvider fFileContentProvider;
 
-    private IIncludeFileResolutionHeuristics fIncludeFileResolutionHeuristics;
+    private final IIncludeFileResolutionHeuristics fIncludeFileResolutionHeuristics;
     private final ExpressionEvaluator fExpressionEvaluator;
 	private final MacroDefinitionParser fMacroDefinitionParser;
 	private final MacroExpander fMacroExpander;
@@ -235,7 +238,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     final private char[] fAdditionalNumericLiteralSuffixes;
     final private CharArrayIntMap fKeywords;
     final private CharArrayIntMap fPPKeywords;
-    private IncludeSearchPathElement[] fIncludeSearchPath;
+    private final IncludeSearchPath fIncludeSearchPath;
     private String[][] fPreIncludedFiles= null;
 
     private int fContentAssistLimit= -1;
@@ -269,6 +272,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     public CPreprocessor(FileContent fileContent, IScannerInfo info, ParserLanguage language,
     		IParserLogService log, IScannerExtensionConfiguration configuration,
     		IncludeFileContentProvider readerFactory) {
+		Token.resetCounterFor(info);
     	if (readerFactory instanceof InternalFileContentProvider) {
         	fFileContentProvider= (InternalFileContentProvider) readerFactory;
     	} else if (readerFactory == null) {
@@ -289,6 +293,9 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         fLexOptions.fSupportMinAndMax = configuration.supportMinAndMaxOperators();
         fLexOptions.fSupportSlashPercentComments= configuration.supportSlashPercentComments();
         fLexOptions.fSupportUTFLiterals = configuration.supportUTFLiterals();
+        fLexOptions.fSupportRawStringLiterals = configuration.supportRawStringLiterals();
+        if (info instanceof ExtendedScannerInfo)
+        	fLexOptions.fIncludeExportPatterns = ((ExtendedScannerInfo) info).getIncludeExportPatterns();
         fLocationMap= new LocationMap(fLexOptions);
         fKeywords= new CharArrayIntMap(40, -1);
         fPPKeywords= new CharArrayIntMap(40, -1);
@@ -317,16 +324,19 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     }
     
 	private char[] detectIncludeGuard(String filePath, AbstractCharArray source, ScannerContext ctx) {
-		final char[] guard = IncludeGuardDetection.detectIncludeGuard(source, fLexOptions, fPPKeywords);
-		if (guard != null) {
-			IFileNomination nom= fLocationMap.reportPragmaOnceSemantics(ctx.getLocationCtx());
- 			fFileContentProvider.reportPragmaOnceSemantics(filePath, nom);
-			ctx.internalModification(guard);
-			ctx.setPragmaOnce(true);
-			return guard;
-		} else {
-			ctx.trackSignificantMacros();
+		if (!fFileContentProvider.shouldIndexAllHeaderVersions(filePath)) {
+			final char[] guard = IncludeGuardDetection.detectIncludeGuard(source, fLexOptions, fPPKeywords);
+			if (guard != null) {
+				IFileNomination nom= fLocationMap.reportPragmaOnceSemantics(ctx.getLocationCtx());
+				fFileContentProvider.reportPragmaOnceSemantics(filePath, nom);
+				ctx.internalModification(guard);
+				ctx.setPragmaOnce(true);
+				return guard;
+			}
 		}
+
+		ctx.trackSignificantMacros();
+
 		if (ctx != fRootContext) {
 			if (fLog.isTracing(TRACE_NO_GUARD)) {
 				if (fTracedGuards == null)
@@ -346,6 +356,11 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 	@Override
 	public void setComputeImageLocations(boolean val) {
     	fLexOptions.fCreateImageLocations= val;
+    }
+
+	@Override
+	public void setTrackIncludeExport(IncludeExportPatterns patterns) {
+    	fLexOptions.fIncludeExportPatterns= patterns;
     }
 
 	@Override
@@ -372,7 +387,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 		return fLocationMap;
 	}
 
-	private void configureKeywords(ParserLanguage language,	IScannerExtensionConfiguration configuration) {
+	private void configureKeywords(ParserLanguage language, IScannerExtensionConfiguration configuration) {
 		Keywords.addKeywordsPreprocessor(fPPKeywords);
 		if (language == ParserLanguage.C) {
         	Keywords.addKeywordsC(fKeywords);
@@ -397,27 +412,44 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 		return array == null ? CharArrayUtils.EMPTY_CHAR_ARRAY : array;
 	}
 
-    public static IncludeSearchPathElement[] configureIncludeSearchPath(File directory, IScannerInfo info) {
-    	IncludeSearchPathElement[] includeSearchPath = null;
-    	String[] searchPath= info.getIncludePaths();
-    	int idx= 0;
-        if (info instanceof IExtendedScannerInfo) {
-        	final IExtendedScannerInfo einfo= (IExtendedScannerInfo) info;
-            final String[] quoteIncludeSearchPath= einfo.getLocalIncludePath();
-            if (quoteIncludeSearchPath != null && quoteIncludeSearchPath.length > 0) {
-            	includeSearchPath= new IncludeSearchPathElement[quoteIncludeSearchPath.length + searchPath.length];
-            	for (String path : quoteIncludeSearchPath) {
-            		includeSearchPath[idx++]= new IncludeSearchPathElement(makeAbsolute(directory, path), true);
+	/**
+	 * Returns include search path for a given current directory and a IScannerInfo. 
+	 * @param directory the current directory
+	 * @param info scanner information, or {@code null} if not available
+	 * @return the include search path
+	 */
+	public static IncludeSearchPath configureIncludeSearchPath(File directory, IScannerInfo info) {
+    	boolean inhibitUseOfCurrentFileDirectory= false;
+    	List<IncludeSearchPathElement> elements = new ArrayList<IncludeSearchPathElement>();
+
+    	if (info != null) {
+	    	// Quote includes first
+	    	if (info instanceof IExtendedScannerInfo) {
+	        	final IExtendedScannerInfo einfo= (IExtendedScannerInfo) info;
+	            final String[] paths= einfo.getLocalIncludePath();
+	            if (paths != null) {
+	            	for (String path : paths) {
+	            		if ("-".equals(path)) { //$NON-NLS-1$
+	            			inhibitUseOfCurrentFileDirectory= true;
+	            		} else {
+	            			elements.add(new IncludeSearchPathElement(makeAbsolute(directory, path), true));
+	            		}
+					}
+	            }
+	        }
+	    	// Regular includes
+	    	String[] paths= info.getIncludePaths();
+	    	if (paths != null) {
+	        	for (String path : paths) {
+	        		if ("-".equals(path)) { //$NON-NLS-1$
+	        			inhibitUseOfCurrentFileDirectory= true;
+	        		} else {
+	        			elements.add(new IncludeSearchPathElement(makeAbsolute(directory, path), false));
+	        		}
 				}
-            }
-        }
-        if (includeSearchPath == null) {
-        	includeSearchPath= new IncludeSearchPathElement[searchPath.length];
-        }
-        for (String path : searchPath) {
-        	includeSearchPath[idx++]= new IncludeSearchPathElement(makeAbsolute(directory, path), false);
-		}
-        return includeSearchPath;
+	    	}
+    	}
+        return new IncludeSearchPath(elements, inhibitUseOfCurrentFileDirectory);
 	}
 
 	private static String makeAbsolute(File directory, String includePath) {
@@ -950,12 +982,17 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         			++pos;
         			break;
         		case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
-        			isOctal = true;
+        			if (!isFloat)
+        				isOctal = true;
         			++pos;
         			break;
         		case '8': case '9':
-        			handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
-        			return;
+        			if (!isFloat) {
+        				handleProblem(IProblem.SCANNER_BAD_OCTAL_FORMAT, image, number.getOffset(), number.getEndOffset());
+        				return;
+        			}
+        			++pos;
+        			break;
         		}
         	}
         }
@@ -1074,8 +1111,8 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         	return tester.checkFile(absoluteInclusionPath, false, null);
         }
 
-        if (currentFile != null && quoteInclude && !includeNext) {
-            // Check to see if we find a match in the current directory
+        if (currentFile != null && quoteInclude && !includeNext && !fIncludeSearchPath.isInhibitUseOfCurrentFileDirectory()) {
+            // Check to see if we find a match in the directory of the current file
     		final File currentDir= new File(currentFile).getParentFile();
     		if (currentDir != null) {
         		final String fileLocation = ScannerUtility.createReconciledPath(
@@ -1103,7 +1140,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
         	}
         }
 
-        for (IncludeSearchPathElement path : fIncludeSearchPath) {
+        for (IncludeSearchPathElement path : fIncludeSearchPath.getElements()) {
         	if (searchAfter != null) {
         		if (searchAfter.equals(path)) {
         			searchAfter= null;
@@ -1146,7 +1183,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     }
     
     private IncludeSearchPathElement findFileInIncludePath(String file, String includeDirective) {
-        for (IncludeSearchPathElement path : fIncludeSearchPath) {
+        for (IncludeSearchPathElement path : fIncludeSearchPath.getElements()) {
     		String fileLocation = path.getLocation(includeDirective);
     		if (file.equals(fileLocation)) {
     			return path;
@@ -1173,8 +1210,7 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     		} else {
     			PreprocessorMacro result= MacroDefinitionParser.parseMacroDefinition(
     					macro.getNameCharArray(), macro.getParameterList(), expansionImage);
-    			final IASTFileLocation loc= macro.getFileLocation();
-    			fLocationMap.registerMacroFromIndex(result, loc, -1);
+    			fLocationMap.registerMacroFromIndex(result, macro.getDefinition(), -1);
     			fMacroDictionary.put(result.getNameCharArray(), result);
     		}
     	} catch (Exception e) {
@@ -1187,8 +1223,8 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     }
 
 	@Override
-	public void handleComment(boolean isBlockComment, int offset, int endOffset) {
-		fLocationMap.encounteredComment(offset, endOffset, isBlockComment);
+	public void handleComment(boolean isBlockComment, int offset, int endOffset, AbstractCharArray input) {
+		fLocationMap.encounteredComment(offset, endOffset, isBlockComment, input);
 	}
 
     @Override
@@ -1901,10 +1937,10 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
     			return false;
     		}
         }
-        final boolean contentAssist = fContentAssistLimit>=0 && fCurrentContext == fRootContext;
+        final boolean contentAssist = fContentAssistLimit >= 0 && fCurrentContext == fRootContext;
         final ITokenSequence input= stopAtNewline ? fLineInputToMacroExpansion : fInputToMacroExpansion;
-		final MacroExpander expander = withinExpansion ? new MacroExpander(this, fMacroDictionary,
-				fLocationMap, fLexOptions) : fMacroExpander;
+		final MacroExpander expander = withinExpansion ?
+				new MacroExpander(this, fMacroDictionary, fLocationMap, fLexOptions) : fMacroExpander;
         TokenList replacement= expander.expand(input, options, macro, identifier, contentAssist, fCurrentContext);
     	final IASTName[] expansions= expander.clearImplicitExpansions();
     	final ImageLocationInfo[] ili= expander.clearImageLocationInfos();
@@ -1924,5 +1960,16 @@ public class CPreprocessor implements ILexerLog, IScanner, IAdaptable {
 			return fMacroExpander;
 		}
 		return null;
-	}	
+	}
+
+	/**
+	 * Return whether 'name' is a macro whose definition is provided by the
+	 * preprocessor, like __LINE__, __FILE__, __DATE__ or __TIME__.
+	 */
+	public static boolean isPreprocessorProvidedMacro(char[] name) {
+		return CharArrayUtils.equals(__LINE__.getNameCharArray(), name)
+			|| CharArrayUtils.equals(__FILE__.getNameCharArray(), name)
+			|| CharArrayUtils.equals(__DATE__.getNameCharArray(), name)
+			|| CharArrayUtils.equals(__TIME__.getNameCharArray(), name);
+	}
 }

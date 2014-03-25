@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2012 Institute for Software, HSR Hochschule fuer Technik  
+ * Copyright (c) 2008, 2013 Institute for Software, HSR Hochschule fuer Technik  
  * Rapperswil, University of applied sciences and others
  * All rights reserved. This program and the accompanying materials 
  * are made available under the terms of the Eclipse Public License v1.0 
@@ -9,6 +9,7 @@
  * Contributors: 
  *     Institute for Software - initial API and implementation
  *     Sergey Prigogin (Google)
+ *     Marc-Andre Laperle (Ericsson)
  *******************************************************************************/
 package org.eclipse.cdt.ui.tests.refactoring.togglefunction;
 
@@ -21,7 +22,7 @@ import org.eclipse.cdt.internal.ui.refactoring.CRefactoring;
 import org.eclipse.cdt.internal.ui.refactoring.togglefunction.ToggleRefactoring;
 
 /**
- * Tests for Generate Getters and Setters refactoring.
+ * Tests for ToggleRefactoring for C++ projects.
  */
 public class ToggleRefactoringTest extends RefactoringTestBase {
 	private ToggleRefactoring refactoring;
@@ -36,6 +37,7 @@ public class ToggleRefactoringTest extends RefactoringTestBase {
 
 	public static Test suite() {
 		TestSuite suite = suite(ToggleRefactoringTest.class);
+		suite.addTestSuite(ToggleRefactoringCTest.class);
 		suite.addTestSuite(ToggleNodeHelperTest.class);
 		return suite;
 	}

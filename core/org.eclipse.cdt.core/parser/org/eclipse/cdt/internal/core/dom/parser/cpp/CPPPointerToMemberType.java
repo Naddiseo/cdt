@@ -12,11 +12,12 @@
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
-import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IProblemBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.ITypedef;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTName;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNameSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTPointerToMember;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPPointerToMemberType;
@@ -70,26 +71,28 @@ public class CPPPointerToMemberType extends CPPPointerType implements ICPPPointe
 	@Override
 	public IType getMemberOfClass() {
 		if (classType == null) {
-			IASTName name;
+			ICPPASTNameSpecifier nameSpec;
 			IBinding binding= null;
 			ICPPASTPointerToMember pm = operator;
 			if (pm == null) {
-				name= new CPPASTName();
+				nameSpec = new CPPASTName();
 			} else {
-				name = pm.getName();
-				if (name instanceof ICPPASTQualifiedName) {
-					IASTName[] ns = ((ICPPASTQualifiedName) name).getNames();
-					if (ns.length > 1)
-						name = ns[ns.length - 2];
-					else 
-						name = ns[ns.length - 1]; 
+				nameSpec = (ICPPASTName) pm.getName();
+				if (nameSpec instanceof ICPPASTQualifiedName) {
+					ICPPASTQualifiedName qname = ((ICPPASTQualifiedName) nameSpec);
+					ICPPASTNameSpecifier[] qualifier = qname.getQualifier();
+					if (qualifier.length > 0) {
+						nameSpec = qualifier[qualifier.length - 1];
+					} else { 
+						nameSpec = (ICPPASTName) qname.getLastName();
+					}
 				}
-				binding = name.resolvePreBinding();
+				binding = nameSpec.resolvePreBinding();
 			}
 			if (binding instanceof IType) {
 				classType = (IType) binding;
 			} else {
-				classType = new CPPClassType.CPPClassTypeProblem(name, IProblemBinding.SEMANTIC_INVALID_TYPE, name.toCharArray());
+				classType = new CPPClassType.CPPClassTypeProblem(nameSpec, IProblemBinding.SEMANTIC_INVALID_TYPE, nameSpec.toCharArray());
 			}
 		}
 		return classType;
@@ -97,20 +100,20 @@ public class CPPPointerToMemberType extends CPPPointerType implements ICPPPointe
 	
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer) throws CoreException {
-		int firstByte= ITypeMarshalBuffer.POINTER_TO_MEMBER_TYPE;
-		if (isConst()) firstByte |= ITypeMarshalBuffer.FLAG1;
-		if (isVolatile()) firstByte |= ITypeMarshalBuffer.FLAG2;
-		if (isRestrict()) firstByte |= ITypeMarshalBuffer.FLAG3;
-		buffer.putByte((byte) firstByte);
+		short firstBytes= ITypeMarshalBuffer.POINTER_TO_MEMBER_TYPE;
+		if (isConst()) firstBytes |= ITypeMarshalBuffer.FLAG1;
+		if (isVolatile()) firstBytes |= ITypeMarshalBuffer.FLAG2;
+		if (isRestrict()) firstBytes |= ITypeMarshalBuffer.FLAG3;
+		buffer.putShort(firstBytes);
 		buffer.marshalType(getType());
 		buffer.marshalType(getMemberOfClass());
 	}
 	
-	public static IType unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
+	public static IType unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
 		IType nested= buffer.unmarshalType();
 		IType memberOf= buffer.unmarshalType();
-		return new CPPPointerToMemberType(nested, memberOf, (firstByte & ITypeMarshalBuffer.FLAG1) != 0,
-				(firstByte & ITypeMarshalBuffer.FLAG2) != 0,
-				(firstByte & ITypeMarshalBuffer.FLAG3) != 0);
+		return new CPPPointerToMemberType(nested, memberOf, (firstBytes & ITypeMarshalBuffer.FLAG1) != 0,
+				(firstBytes & ITypeMarshalBuffer.FLAG2) != 0,
+				(firstBytes & ITypeMarshalBuffer.FLAG3) != 0);
 	}
 }

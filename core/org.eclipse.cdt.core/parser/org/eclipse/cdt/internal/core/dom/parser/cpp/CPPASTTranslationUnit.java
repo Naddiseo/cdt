@@ -6,8 +6,8 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    IBM - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     IBM - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -40,8 +40,8 @@ import org.eclipse.cdt.internal.core.parser.scanner.InternalFileContent;
  * C++-specific implementation of a translation-unit.
  */
 public class CPPASTTranslationUnit extends ASTTranslationUnit implements ICPPASTTranslationUnit, IASTAmbiguityParent {
-    private CPPNamespaceScope fScope = null;
-    private ICPPNamespace fBinding = null;
+    private CPPNamespaceScope fScope;
+    private ICPPNamespace fBinding;
 	private final CPPScopeMapper fScopeMapper= new CPPScopeMapper(this);
 	
 	public CPPASTTranslationUnit() {
@@ -55,11 +55,7 @@ public class CPPASTTranslationUnit extends ASTTranslationUnit implements ICPPAST
 	@Override
 	public CPPASTTranslationUnit copy(CopyStyle style) {
 		CPPASTTranslationUnit copy = new CPPASTTranslationUnit();
-		copyAbstractTU(copy, style);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
     @Override

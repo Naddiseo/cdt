@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,6 +10,7 @@
  *     Bryan Wilkinson (QNX)
  *     Markus Schorn (Wind River Systems)
  *     Jens Elmenthaler - http://bugs.eclipse.org/173458 (camel case completion)
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -31,6 +32,8 @@ import org.eclipse.cdt.core.dom.ast.IField;
 import org.eclipse.cdt.core.dom.ast.IScope;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConversionName;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTName;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNameSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTOperatorName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateId;
@@ -55,12 +58,21 @@ import org.eclipse.core.runtime.Assert;
  */
 public class CPPASTQualifiedName extends CPPASTNameBase
 		implements ICPPASTQualifiedName, ICPPASTCompletionContext {
-	private IASTName[] names;
-	private int namesPos= -1;
-	private boolean isFullyQualified;
-	private char[] signature;
+	private ICPPASTNameSpecifier[] fQualifier;
+	private int fQualifierPos = -1;
+	private ICPPASTName fLastName;
+	private boolean fIsFullyQualified;
+	private char[] fSignature;
 
+	/**
+	 * @deprecated Prefer CPPASTQualifierName(ICPPASTName) instead.
+	 */
+	@Deprecated
 	public CPPASTQualifiedName() {
+	}
+	
+	public CPPASTQualifiedName(ICPPASTName lastName) {
+		setLastName(lastName);
 	}
 
 	@Override
@@ -71,32 +83,31 @@ public class CPPASTQualifiedName extends CPPASTNameBase
 	@Override
 	public CPPASTQualifiedName copy(CopyStyle style) {
 		CPPASTQualifiedName copy = new CPPASTQualifiedName();
-		for (IASTName name : getNames())
-			copy.addName(name == null ? null : name.copy(style));
-		copy.setFullyQualified(isFullyQualified);
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
+		if (fLastName != null)
+			copy.addName(fLastName.copy(style));
+		for (ICPPASTNameSpecifier nameSpecifier : getQualifier()) {
+			copy.addNameSpecifier(nameSpecifier == null ? null : nameSpecifier.copy(style));
 		}
-		return copy;
+		copy.setFullyQualified(fIsFullyQualified);
+		return copy(copy, style);
 	}
 
 	@Override
 	public final IBinding resolvePreBinding() {
-		// The full qualified name resolves to the same thing as the last name
+		// The whole qualified name resolves to the same thing as the last name.
 		return getLastName().resolvePreBinding();
 	}
 
 	@Override
 	public IBinding resolveBinding() {
-		// The full qualified name resolves to the same thing as the last name
+		// The whole qualified name resolves to the same thing as the last name.
 		IASTName lastName= getLastName();
 		return lastName == null ? null : lastName.resolveBinding();
 	}
 
     @Override
 	public final IBinding getPreBinding() {
-		// The full qualified name resolves to the same thing as the last name
+		// The whole qualified name resolves to the same thing as the last name.
 		return getLastName().getPreBinding();
     }
     
@@ -110,72 +121,118 @@ public class CPPASTQualifiedName extends CPPASTNameBase
 		getLastName().setBinding(binding);
 	}
 
-
 	@Override
 	public void addName(IASTName name) {
-        assertNotFrozen();
-		assert !(name instanceof ICPPASTQualifiedName);
-		if (name != null) {
-			names = ArrayUtil.appendAt(IASTName.class, names, ++namesPos, name);
-			name.setParent(this);
-			name.setPropertyInParent(SEGMENT_NAME);
+		if (fLastName != null)
+			addNameSpecifier(fLastName);
+		setLastName((ICPPASTName) name);
+	}
+	
+	@Override
+	public void setLastName(ICPPASTName lastName) {
+		assertNotFrozen();
+		assert !(lastName instanceof ICPPASTQualifiedName);
+		fLastName = lastName;
+		fLastName.setParent(this);
+		fLastName.setPropertyInParent(SEGMENT_NAME);
+	}
+	
+	@Override
+	public void addNameSpecifier(ICPPASTNameSpecifier nameSpecifier) {
+		assertNotFrozen();
+		assert !(nameSpecifier instanceof ICPPASTQualifiedName);
+		if (nameSpecifier != null) {
+			fQualifier = ArrayUtil.appendAt(ICPPASTNameSpecifier.class, fQualifier, ++fQualifierPos, nameSpecifier);
+			nameSpecifier.setParent(this);
+			nameSpecifier.setPropertyInParent(SEGMENT_NAME);
 		}
 	}
 
 	@Override
+	public ICPPASTNameSpecifier[] getQualifier() {
+		if (fQualifierPos < 0)
+			return ICPPASTNameSpecifier.EMPTY_NAME_SPECIFIER_ARRAY;
+		
+		fQualifier = ArrayUtil.trimAt(ICPPASTNameSpecifier.class, fQualifier, fQualifierPos);
+		return fQualifier;
+	}
+	
+	@Override
+	public ICPPASTNameSpecifier[] getAllSegments() {
+		ICPPASTNameSpecifier[] result = new ICPPASTNameSpecifier[fQualifierPos + (fLastName == null ? 1 : 2)];
+		int idx = 0;
+		for (ICPPASTNameSpecifier nameSpecifier : getQualifier())
+			result[idx++] = nameSpecifier;
+		if (fLastName != null)
+			result[fQualifierPos + 1] = fLastName;
+		return result;
+	}
+	
+	@Override
+	@Deprecated
 	public IASTName[] getNames() {
-		if (namesPos < 0)
-			return IASTName.EMPTY_NAME_ARRAY;
-        
-		names = ArrayUtil.trimAt(IASTName.class, names, namesPos);
-		return names;
+		IASTName[] result = new IASTName[fQualifierPos + (fLastName == null ? 1 : 2)];
+		int idx = 0;
+		for (ICPPASTNameSpecifier nameSpecifier : getQualifier()) {
+			if (nameSpecifier instanceof IASTName) {
+				result[idx++] = (IASTName) nameSpecifier;
+			} else {
+				throw new UnsupportedOperationException("Can't use getNames() on a " +  //$NON-NLS-1$
+						"qualified name that includes a decltype-specifier. Use " +     //$NON-NLS-1$
+						"getQualifier() and getLastName() instead.");                   //$NON-NLS-1$
+			}
+		}
+		if (fLastName != null)
+			result[fQualifierPos + 1] = fLastName;
+		return result;
 	}
 
 	@Override
 	public IASTName getLastName() {
-		if (namesPos < 0)
-			return null;
-		
-		return names[namesPos];
+		return fLastName;
 	}
 
 	@Override
 	public char[] getSimpleID() {
-		return names[namesPos].getSimpleID();
+		return fLastName.getSimpleID();
 	}
 	
 	@Override
 	public char[] getLookupKey() {
-		return names[namesPos].getLookupKey();
+		return fLastName.getLookupKey();
 	}
 	
 	@Override
 	public char[] toCharArray() {
-		if (signature == null) {
+		if (fSignature == null) {
 			StringBuilder buf= new StringBuilder();
-			for (int i = 0; i <= namesPos; i++) {
-				if (i > 0 || isFullyQualified) {
+			for (int i = 0; i <= fQualifierPos; i++) {
+				if (i > 0 || fIsFullyQualified) {
 					buf.append(Keywords.cpCOLONCOLON);
 				}
-				buf.append(names[i].toCharArray());
+				buf.append(fQualifier[i].toCharArray());
 			}
+			if (fQualifierPos >= 0 || fIsFullyQualified) {
+				buf.append(Keywords.cpCOLONCOLON);
+			}
+			buf.append(fLastName.toCharArray());
 
 			final int len= buf.length();
-			signature= new char[len];
-			buf.getChars(0, len, signature, 0);
+			fSignature= new char[len];
+			buf.getChars(0, len, fSignature, 0);
 		}
-		return signature;
+		return fSignature;
 	}
 
 	@Override
 	public boolean isFullyQualified() {
-		return isFullyQualified;
+		return fIsFullyQualified;
 	}
 
 	@Override
 	public void setFullyQualified(boolean isFullyQualified) {
         assertNotFrozen();
-		this.isFullyQualified = isFullyQualified;
+		this.fIsFullyQualified = isFullyQualified;
 	}
 
 	/**
@@ -197,15 +254,14 @@ public class CPPASTQualifiedName extends CPPASTNameBase
 				break;
 			}
 		}
-		for (int i = 0; i <= namesPos; i++) {
-			final IASTName name = names[i];
-			if (i == namesPos) {
-				// pointer-to-member qualified names have a dummy name as the last part of the name, don't visit it
-				if (name.getLookupKey().length > 0 && !name.accept(action))
-					return false;
-			} else if (!name.accept(action))
+		for (ICPPASTNameSpecifier nameSpecifier : getQualifier()) {
+			if (!nameSpecifier.accept(action))
 				return false;
 		}
+		// Pointer-to-member qualified names have a dummy name as the last part of the name,
+		// don't visit it.
+		if (fLastName != null && fLastName.getLookupKey().length > 0 && !fLastName.accept(action))
+			return false;
 		
 		if (action.shouldVisitNames) {
 			switch (action.leave(this)) {
@@ -235,8 +291,8 @@ public class CPPASTQualifiedName extends CPPASTNameBase
 
 	@Override
 	public int getRoleForName(IASTName n) {
-		for (int i=0; i < namesPos; ++i) {
-			if (names[i] == n) 
+		for (int i=0; i <= fQualifierPos; ++i) {
+			if (fQualifier[i] == n) 
 				return r_reference;
 		}
 		if (getLastName() == n) {
@@ -270,15 +326,15 @@ public class CPPASTQualifiedName extends CPPASTNameBase
 	public IBinding[] findBindings(IASTName n, boolean isPrefix, String[] namespaces) {
 		IBinding[] bindings = CPPSemantics.findBindingsForContentAssist(n, isPrefix, namespaces);
 		
-		if (namesPos > 0) {
-			IBinding binding = names[namesPos-1].resolveBinding();
+		if (fQualifierPos >= 0) {
+			IBinding binding = fQualifier[fQualifierPos].resolveBinding();
 			if (binding instanceof ICPPClassType) {
 				ICPPClassType classType = (ICPPClassType) binding;
 				final boolean isDeclaration = getParent().getParent() instanceof IASTSimpleDeclaration;
 				List<IBinding> filtered = filterClassScopeBindings(classType, bindings, isDeclaration);
 				if (isDeclaration && nameMatches(classType.getNameCharArray(),
 						n.getLookupKey(), isPrefix)) {
-					ICPPConstructor[] constructors = classType.getConstructors();
+					ICPPConstructor[] constructors = ClassTypeHelper.getConstructors(classType, n);
 					for (int i = 0; i < constructors.length; i++) {
 						if (!constructors[i].isImplicit()) {
 							filtered.add(constructors[i]);
@@ -303,7 +359,7 @@ public class CPPASTQualifiedName extends CPPASTNameBase
 				while(scope != null) {
 					if (scope instanceof ICPPClassScope) {
 						ICPPClassType classType = ((ICPPClassScope) scope).getClassType();
-						if (SemanticUtil.calculateInheritanceDepth(classType, baseClass) >= 0) {
+						if (SemanticUtil.calculateInheritanceDepth(classType, baseClass, this) >= 0) {
 							return true;
 						}
 					}
@@ -348,7 +404,7 @@ public class CPPASTQualifiedName extends CPPASTNameBase
 		return filtered;
 	}
 	
-	private boolean nameMatches(char[] potential, char[] name, boolean isPrefix) {
+	private static boolean nameMatches(char[] potential, char[] name, boolean isPrefix) {
 		if (isPrefix)
 			return ContentAssistMatcherFactory.getInstance().match(name, potential);
 		return CharArrayUtils.equals(potential, name);

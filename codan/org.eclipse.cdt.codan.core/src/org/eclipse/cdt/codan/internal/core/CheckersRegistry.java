@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2011 Alena Laskavaia
+ * Copyright (c) 2009, 2013 Alena Laskavaia
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,13 +10,6 @@
  *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.codan.internal.core;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 
 import org.eclipse.cdt.codan.core.CodanCorePlugin;
 import org.eclipse.cdt.codan.core.PreferenceConstants;
@@ -46,6 +39,13 @@ import org.eclipse.core.runtime.preferences.ConfigurationScope;
 import org.eclipse.core.runtime.preferences.DefaultScope;
 import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.osgi.service.prefs.Preferences;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Implementation of checker registry interface
@@ -368,8 +368,8 @@ public class CheckersRegistry implements Iterable<IChecker>, ICheckersRegistry {
 				// Load default values
 				CodanPreferencesLoader loader = new CodanPreferencesLoader(prof);
 				Preferences projectNode = CodanPreferencesLoader.getProjectNode((IProject) element);
-				boolean useWorkspace = projectNode.getBoolean(PreferenceConstants.P_USE_PARENT, true);
-				if (!useWorkspace) {
+				if (projectNode != null &&
+						!projectNode.getBoolean(PreferenceConstants.P_USE_PARENT, true)) {
 					loader.load(projectNode);
 				}
 				profiles.put(element, prof);
@@ -417,9 +417,7 @@ public class CheckersRegistry implements Iterable<IChecker>, ICheckersRegistry {
 			IProblem problem = resourceProfile.findProblem(p.getId());
 			if (problem == null)
 				throw new IllegalArgumentException(p.getId() + " is not registered"); //$NON-NLS-1$
-			if (!problem.isEnabled())
-				return false;
-			if (checker instanceof AbstractCheckerWithProblemPreferences) {
+			if (problem.isEnabled() && checker instanceof AbstractCheckerWithProblemPreferences) {
 				LaunchModeProblemPreference pref =
 						((AbstractCheckerWithProblemPreferences) checker).getLaunchModePreference(problem);
 				if (pref.isRunningInMode(mode)) {

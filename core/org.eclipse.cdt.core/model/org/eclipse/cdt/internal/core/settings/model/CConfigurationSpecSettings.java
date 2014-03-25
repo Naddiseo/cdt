@@ -27,6 +27,7 @@ import org.eclipse.cdt.core.language.settings.providers.ILanguageSettingsBroadca
 import org.eclipse.cdt.core.language.settings.providers.ILanguageSettingsProvider;
 import org.eclipse.cdt.core.language.settings.providers.ILanguageSettingsProvidersKeeper;
 import org.eclipse.cdt.core.language.settings.providers.LanguageSettingsManager;
+import org.eclipse.cdt.core.language.settings.providers.LanguageSettingsSerializableProvider;
 import org.eclipse.cdt.core.language.settings.providers.LanguageSettingsStorage;
 import org.eclipse.cdt.core.settings.model.CExternalSetting;
 import org.eclipse.cdt.core.settings.model.ICBuildSetting;
@@ -97,7 +98,7 @@ public class CConfigurationSpecSettings implements ICSettingsStorage, ILanguageS
 //	private CConfigBasedDescriptor fDescriptor;
 //	private Map fExternalSettingsProviderMap;
 
-	private List<ILanguageSettingsProvider> fLanguageSettingsProviders = new ArrayList<ILanguageSettingsProvider>(0);
+	private List<ILanguageSettingsProvider> fLanguageSettingsProviders = null;
 	private LinkedHashMap<String /*provider*/, LanguageSettingsStorage> lspPersistedState = new LinkedHashMap<String, LanguageSettingsStorage>();
 	private String[] defaultLanguageSettingsProvidersIds = null;
 
@@ -195,19 +196,23 @@ public class CConfigurationSpecSettings implements ICSettingsStorage, ILanguageS
 
 		copyExtensionInfo(base);
 
-		fLanguageSettingsProviders = LanguageSettingsProvidersSerializer.cloneProviders(base.getLanguageSettingProviders());
+		if (base.defaultLanguageSettingsProvidersIds != null) {
+			defaultLanguageSettingsProvidersIds = base.defaultLanguageSettingsProvidersIds.clone();
+		} else {
+			defaultLanguageSettingsProvidersIds = null;
+		}
+		if (base.fLanguageSettingsProviders != null) {
+			fLanguageSettingsProviders = LanguageSettingsProvidersSerializer.cloneProviders(base.fLanguageSettingsProviders);
+		} else {
+			fLanguageSettingsProviders = null;
+		}
 		for (String providerId : base.lspPersistedState.keySet()) {
 			try {
 				LanguageSettingsStorage clone = base.lspPersistedState.get(providerId).clone();
 				lspPersistedState.put(providerId, clone);
 			} catch (CloneNotSupportedException e) {
-				CCorePlugin.log("Not able to clone language settings storage:" + e); //$NON-NLS-1$
+				CCorePlugin.log("Not able to clone language settings storage: " + e); //$NON-NLS-1$
 			}
-		}
-		if (base.defaultLanguageSettingsProvidersIds != null) {
-			defaultLanguageSettingsProvidersIds = base.defaultLanguageSettingsProvidersIds.clone();
-		} else {
-			defaultLanguageSettingsProvidersIds = null;
 		}
 	}
 
@@ -1015,7 +1020,7 @@ public class CConfigurationSpecSettings implements ICSettingsStorage, ILanguageS
 	 * @param providers - list of providers to keep in the specs.
 	 */
 	@Override
-	public void setLanguageSettingProviders(List<ILanguageSettingsProvider> providers) {
+	public void setLanguageSettingProviders(List<? extends ILanguageSettingsProvider> providers) {
 		fLanguageSettingsProviders = new ArrayList<ILanguageSettingsProvider>(0);
 		Set<String> ids = new HashSet<String>();
 		for (ILanguageSettingsProvider provider : providers) {
@@ -1035,12 +1040,22 @@ public class CConfigurationSpecSettings implements ICSettingsStorage, ILanguageS
 
 	@Override
 	public List<ILanguageSettingsProvider> getLanguageSettingProviders() {
-		return Collections.unmodifiableList(fLanguageSettingsProviders);
+		List<ILanguageSettingsProvider> providers = isLanguageSettingProvidersLoaded() ? fLanguageSettingsProviders : new ArrayList<ILanguageSettingsProvider>(0);
+		return Collections.unmodifiableList(providers);
 	}
 
 	@Override
 	public void setDefaultLanguageSettingsProvidersIds(String[] ids) {
 		defaultLanguageSettingsProvidersIds = ids;
+	}
+
+	/**
+	 * Check if language settings providers loaded into configuration settings yet
+	 * 
+	 * @return {@code true} if loaded, {@code false} otherwise.
+	 */
+	public boolean isLanguageSettingProvidersLoaded() {
+		return fLanguageSettingsProviders != null;
 	}
 
 	@Override
@@ -1074,6 +1089,17 @@ public class CConfigurationSpecSettings implements ICSettingsStorage, ILanguageS
 		}
 
 		return languageSettingsDelta;
+	}
+
+	/**
+	 * Check if language settings that provider keeps got changed since last notification event.
+	 * 
+	 * @param provider - serializable language settings provider.
+	 * @return {@code true} if provider's entries changed or {@code false} if not.
+	 */
+	public boolean isLanguageSettingsProviderStoreChanged(LanguageSettingsSerializableProvider provider) {
+		LanguageSettingsStorage store = ((ILanguageSettingsBroadcastingProvider) provider).copyStorage();
+		return ! store.equals(lspPersistedState.get(provider.getId()));
 	}
 
 }

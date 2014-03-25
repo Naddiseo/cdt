@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2010 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     Andrew Niefer (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -86,9 +87,7 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
 		}
 		return null;
 	}
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMember#getVisibility()
-	 */
+
 	@Override
 	public int getVisibility() {
 		IASTDeclaration decl = getPrimaryDeclaration();
@@ -132,8 +131,7 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
 		dtor= ASTQueries.findInnermostDeclarator(dtor);
 	    IASTName name= dtor.getName();
 	    if (name instanceof ICPPASTQualifiedName) {
-	        IASTName[] ns = ((ICPPASTQualifiedName)name).getNames();
-	        name = ns[ ns.length - 1 ];
+	        name = name.getLastName();
 	    }
 	    return name;
 	}
@@ -143,9 +141,6 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
 		return CPPVisitor.getContainingScope(getASTName());
 	}
 
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod#isVirtual()
-     */
     @Override
 	public boolean isVirtual() {
     	IASTDeclaration decl = getPrimaryDeclaration();
@@ -168,9 +163,6 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
 		return declSpec;
 	}
 
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction#isInline()
-     */
     @Override
 	public boolean isInline() {
         IASTDeclaration decl = getPrimaryDeclaration();
@@ -183,9 +175,6 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
         return declSpec.isInline();
     }
 
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction#isMutable()
-     */
     @Override
 	public boolean isMutable() {
         return hasStorageClass(this, IASTDeclSpecifier.sc_mutable);
@@ -203,9 +192,6 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
 		return false;
 	}
 
-	/* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod#isDestructor()
-     */
 	@Override
 	public boolean isDestructor() {
 		char[] name = getNameCharArray();
@@ -220,11 +206,34 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
 		return false;
 	}
 
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod#isPureVirtual()
-     */
     @Override
 	public boolean isPureVirtual() {
+		ICPPASTFunctionDeclarator declarator = findFunctionDeclarator();
+    	if(declarator != null){
+    		return declarator.isPureVirtual();
+    	}
+    	return false;
+    }
+
+    @Override
+    public boolean isFinal() {
+    	ICPPASTFunctionDeclarator declarator = findFunctionDeclarator();
+    	if(declarator != null){
+    		return declarator.isFinal();
+    	}
+    	return false;
+    }
+
+    @Override
+    public boolean isOverride() {
+    	ICPPASTFunctionDeclarator declarator = findFunctionDeclarator();
+    	if(declarator != null){
+    		return declarator.isOverride();
+    	}
+    	return false;
+    }
+
+    private ICPPASTFunctionDeclarator findFunctionDeclarator(){
     	if (declarations != null) {
 			for (IASTDeclarator dtor : declarations) {
 				if (dtor == null)
@@ -235,12 +244,12 @@ public class CPPMethod extends CPPFunction implements ICPPMethod {
 				if (decl.getParent() instanceof ICPPASTCompositeTypeSpecifier) {
 					dtor= ASTQueries.findTypeRelevantDeclarator(dtor);
 					if (dtor instanceof ICPPASTFunctionDeclarator) {
-						return ((ICPPASTFunctionDeclarator) dtor).isPureVirtual();
+						return (ICPPASTFunctionDeclarator) dtor;
 					}
 				}
 			}
 		}
-    	return false;
+    	return definition;
     }
 
     @Override

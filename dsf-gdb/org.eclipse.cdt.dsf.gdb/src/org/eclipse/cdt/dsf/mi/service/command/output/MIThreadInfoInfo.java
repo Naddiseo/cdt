@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2010 Ericsson and others.
+ * Copyright (c) 2008, 2013 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,9 +8,12 @@
  * Contributors:
  *     Ericsson - Initial API and implementation
  *     Wind River Systems - refactored to match pattern in package
+ *     Xavier Raynaud (Kalray) - MIThread can be overridden (Bug 429124)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.mi.service.command.output;
 
+import java.util.Arrays;
+import java.util.Comparator;
 
 
 /**
@@ -104,7 +107,8 @@ public class MIThreadInfoInfo extends MIInfo {
 
 	// General format:
 	//		threads=[{...}],current-thread-id="n"
-	private void parse() {
+	/** @since 4.4 */
+	protected void parse() {
 		if (isDone()) {
 			MIOutput out = getMIOutput();
 			MIResultRecord rr = out.getMIResultRecord();
@@ -115,7 +119,7 @@ public class MIThreadInfoInfo extends MIInfo {
 					if (var.equals("threads")) { //$NON-NLS-1$
 						MIValue val = results[i].getMIValue();
 						if (val instanceof MIList) {
-							fThreadList = parseThreads((MIList) val);
+							fThreadList = parseThreadsImpl((MIList) val);
 						}
 					}
 					else if (var.equals("current-thread-id")) { //$NON-NLS-1$
@@ -132,6 +136,11 @@ public class MIThreadInfoInfo extends MIInfo {
 		}
 	}
 
+	/** @since 4.4 */
+	protected MIThread[] parseThreadsImpl(MIList list) {
+		return parseThreads(list);
+	}
+
 	// General formats:
 	//		id="n",target-id="Thread 0xb7c8ab90 (LWP 7010)",frame={...},state="stopped"
 	//		id="n",target-id="Thread 0xb7c8eb90 (LWP 7807)",state="running"
@@ -143,6 +152,18 @@ public class MIThreadInfoInfo extends MIInfo {
 		for (int i = 0; i < values.length; i++) {
 			threadList[i] = MIThread.parse((MITuple) values[i]);
 		}
+		Arrays.sort(threadList, new Comparator<MIThread>() {
+
+			@Override
+			public int compare(MIThread o1, MIThread o2) {
+				try {
+					return Integer.parseInt(o1.getThreadId()) - Integer.parseInt(o2.getThreadId());
+				}
+				catch(NumberFormatException e) {
+					return 0;
+				}
+			}
+		});
 		return threadList;
 	}
 }

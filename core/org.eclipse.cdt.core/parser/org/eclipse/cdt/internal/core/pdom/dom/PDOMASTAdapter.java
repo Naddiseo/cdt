@@ -7,6 +7,8 @@
  *
  * Contributors:
  *     Markus Schorn - initial API and implementation
+ *     Thomas Corbat (IFS)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.pdom.dom;
 
@@ -38,6 +40,7 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPConstructor;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPEnumeration;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPField;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPNamespace;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPScope;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameter;
 import org.eclipse.cdt.core.index.IIndexBinding;
@@ -308,7 +311,7 @@ public class PDOMASTAdapter {
 		}
 
 		@Override
-		public IEnumerator[] getEnumerators() throws DOMException {
+		public IEnumerator[] getEnumerators() {
 			return fDelegate.getEnumerators();
 		}
 
@@ -506,7 +509,7 @@ public class PDOMASTAdapter {
 		}
 
 		@Override
-		public IEnumerator[] getEnumerators() throws DOMException {
+		public IEnumerator[] getEnumerators() {
 			return ((IEnumeration) fDelegate).getEnumerators();
 		}
 
@@ -615,6 +618,16 @@ public class PDOMASTAdapter {
 		public boolean isAnonymous() {
 			return ((ICPPClassType) fDelegate).isAnonymous();
 		}
+
+		@Override
+		public boolean isFinal() {
+			return false;
+		}
+
+		@Override
+		public int getVisibility(IBinding member) {
+			return ((ICPPClassType) fDelegate).getVisibility(member);
+		}
 	}
 
 
@@ -646,6 +659,8 @@ public class PDOMASTAdapter {
 					if (name != null) {
 						return new AnonymousCompositeType(name, (ICompositeType) binding);
 					}
+				} else if (binding instanceof ICPPNamespace) {
+					return binding;
 				} else if (binding instanceof ICPPTemplateParameter) {
 					return binding;
 				} else if (binding instanceof ICPPConstructor) {
@@ -653,6 +668,18 @@ public class PDOMASTAdapter {
 				}
 				return null;
 			}
+		}
+		return binding;
+	}
+
+	/**
+	 * Retrieves the original binding from an adapter previously returned by
+	 * {@link #getAdapterForAnonymousASTBinding(IBinding)}. If the parameter binding is not
+	 * an adapter, returns the binding itself. 
+	 */
+	public static IBinding getOriginalForAdaptedBinding(IBinding binding) {
+		if (binding instanceof AnonymousCPPBinding) {
+			return ((AnonymousCPPBinding) binding).fDelegate;
 		}
 		return binding;
 	}

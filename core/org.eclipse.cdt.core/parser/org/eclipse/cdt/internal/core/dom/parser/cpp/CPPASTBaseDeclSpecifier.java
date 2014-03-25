@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2010 IBM Corporation and others.
+ * Copyright (c) 2004, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -12,23 +12,23 @@
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTDeclSpecifier;
-import org.eclipse.cdt.internal.core.dom.parser.ASTNode;
+import org.eclipse.cdt.internal.core.dom.parser.ASTAttributeOwner;
 import org.eclipse.cdt.internal.core.model.ASTStringUtil;
 
 /**
- * Base for all c++ declaration specifiers
+ * Base for all c++ declaration specifiers.
  */
-public abstract class CPPASTBaseDeclSpecifier extends ASTNode implements ICPPASTDeclSpecifier {
+public abstract class CPPASTBaseDeclSpecifier extends ASTAttributeOwner implements ICPPASTDeclSpecifier {
+    private boolean explicit;
     private boolean friend;
     private boolean inline;
     private boolean isConst;
     private boolean isConstexpr;
-    private boolean isVolatile;
     private boolean isRestrict;
-    private int sc;
     private boolean isThreadLocal;
+    private boolean isVolatile;
+    private int sc;
     private boolean virtual;
-    private boolean explicit;
     
     @Override
 	public boolean isFriend() {
@@ -141,15 +141,17 @@ public abstract class CPPASTBaseDeclSpecifier extends ASTNode implements ICPPAST
     }
 
 	protected <T extends CPPASTBaseDeclSpecifier> T copy(T copy, CopyStyle style) {
-    	copy.friend = friend;
-    	copy.inline = inline;
-    	copy.isConst = isConst;
-    	copy.isConstexpr = isConstexpr;
-    	copy.isVolatile = isVolatile;
-    	copy.isRestrict= isRestrict;
-    	copy.virtual = virtual;
-    	copy.explicit = explicit;
-    	copy.sc = sc;
+		CPPASTBaseDeclSpecifier target = copy;
+    	target.explicit = explicit;
+    	target.friend = friend;
+    	target.inline = inline;
+    	target.isConst = isConst;
+    	target.isConstexpr = isConstexpr;
+    	target.isRestrict= isRestrict;
+    	target.isThreadLocal = isThreadLocal;
+    	target.isVolatile = isVolatile;
+    	target.sc = sc;
+    	target.virtual = virtual;
 		return super.copy(copy, style);
 	}
 

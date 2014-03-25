@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2010 IBM Corporation and others.
+ * Copyright (c) 2008, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     IBM Corporation - initial API and implementation
  *     Wind River Systems - adapted for DSF
+ *     Marc-Andre Laperle (Ericsson) - Remember hover size when expanded (Bug 417559)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.debug.internal.ui;
 
@@ -198,8 +199,34 @@ public class ExpressionInformationControlCreator implements IInformationControlC
 			create();
 		}
 
+		/**
+		 * Override the size constraints so that it can be as big as
+		 * when the hover was last displayed (IDialogSettings).
+		 */
+		@Override
+		public Point computeSizeConstraints(int widthInChars, int heightInChars) {
+			// Bug 417559: The TextViewerHoverManager constrains the size of a newly created
+			// ExpressionInformationControl by 100 chars by 12 chars (602x182). The control
+			// size can be expanded beyond that, however when re-created it will still be constrained.
+			// By removing the constraint in the presence of a non-null IDialogSettings, 
+			// the size gets restored properly even when previously expanded.
+			Point dialogSettingsSize = getDialogSettingsSize();
+			if (dialogSettingsSize != null) {
+				return dialogSettingsSize;
+			}
+			return super.computeSizeConstraints(widthInChars, heightInChars);
+		}
+
 		@Override
 		public Point computeSizeHint() {
+			Point dialogSettingsSize = getDialogSettingsSize();
+			if (dialogSettingsSize != null) {
+				return dialogSettingsSize;
+			}
+			return super.computeSizeHint();
+		}
+
+		private Point getDialogSettingsSize() {
 			IDialogSettings settings = getDialogSettings(false);
 			if (settings != null) {
 				int x = getIntSetting(settings, WIDTH);
@@ -210,7 +237,8 @@ public class ExpressionInformationControlCreator implements IInformationControlC
 					}
 				}
 			}
-			return super.computeSizeHint();
+
+			return null;
 		}
 
 		@Override
@@ -359,15 +387,18 @@ public class ExpressionInformationControlCreator implements IInformationControlC
                     fViewer.getDisplay().timerExec(100, new Runnable() {
                         @Override
 						public void run() {
-                            TreeSelection selection = (TreeSelection) fViewer.getSelection();
-                            if (selection.isEmpty()) {
-                                selection = new TreeSelection(fViewer.getTopElementPath());
-                            }
-                            fViewer.setSelection(selection);
-                            if (fDetailPane != null) {
-                                fDetailPane.display(selection);
-                            }
-                        }});
+							if (!fViewer.getTree().isDisposed()) {
+								TreeSelection selection = (TreeSelection) fViewer.getSelection();
+								if (selection.isEmpty()) {
+									selection = new TreeSelection(fViewer.getTopElementPath());
+								}
+								fViewer.setSelection(selection);
+								if (fDetailPane != null) {
+									fDetailPane.display(selection);
+								}
+							}
+						}
+					});
 				}
 				@Override
 				public void viewerUpdatesBegin() {
@@ -380,6 +411,7 @@ public class ExpressionInformationControlCreator implements IInformationControlC
 				}
 			});
 
+            setForegroundColor(getShell().getDisplay().getSystemColor(SWT.COLOR_INFO_FOREGROUND));
 			setBackgroundColor(getShell().getDisplay().getSystemColor(SWT.COLOR_INFO_BACKGROUND));
 		}
 
@@ -428,7 +460,16 @@ public class ExpressionInformationControlCreator implements IInformationControlC
 			}
 		}
 
-		@Override
+        @Override
+        public void setForegroundColor(Color foreground) {
+            super.setForegroundColor(foreground);
+            if (fDetailPaneComposite != null) {
+                fDetailPaneComposite.setForeground(foreground);
+            }
+            fTree.setForeground(foreground);
+        }
+
+        @Override
 		public void setBackgroundColor(Color background) {
 			super.setBackgroundColor(background);
 			if (fDetailPaneComposite != null) {

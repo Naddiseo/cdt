@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension-point id="qmakeEnvProvider" name="%qmakeEnvProvider.name" schema="schema/qmakeEnvProvider.exsd"/>
+
+   <extension
+         point="org.eclipse.cdt.core.templates">
+      <template
+            filterPattern=".*g\+\+"
+            id="org.eclipse.cdt.qt.core.template.helloWorld.Qt5"
+            location="templates/project/Qt5/template.xml"
+            projectType="org.eclipse.cdt.build.makefile.projectType"/>
+   </extension>
+   <extension
+         point="org.eclipse.cdt.core.templateAssociations">
+      <template id="org.eclipse.cdt.qt.core.template.helloWorld.Qt5">
+         <toolChain id="cdt.managedbuild.toolchain.gnu.mingw.base"/>
+         <toolChain id="cdt.managedbuild.toolchain.gnu.base"/>
+         <toolChain id="cdt.managedbuild.toolchain.llvm.clang.macosx.base"/>
+      </template>
+   </extension>
+   <extension
+         point="org.eclipse.core.contenttype.contentTypes">
+      <content-type
+            base-type="org.eclipse.core.runtime.text"
+            file-extensions="pro"
+            id="qtProjectFile"
+            name="%qtProjectFile.name"
+            priority="normal">
+      </content-type>
+      <content-type
+            base-type="org.eclipse.core.runtime.text"
+            file-extensions="qml"
+            id="qmlFile"
+            name="%qmlFile.name"
+            priority="normal">
+      </content-type>
+   </extension>
+   <extension
+         id="qtNature"
+         point="org.eclipse.core.resources.natures">
+      <runtime>
+         <run
+               class="org.eclipse.cdt.qt.core.QtNature">
+         </run>
+      </runtime>
+   </extension>
+    <extension
+        point="org.eclipse.cdt.core.PDOMASTProcessor"
+        id="qt.PDOMASTProcessor"
+        name="Qt PDOM AST Processor">
+        <processor
+            class="org.eclipse.cdt.internal.qt.core.pdom.QtPDOMASTProcessor">
+            <enablement>
+                <with variable="projectNatures">
+                    <iterate operator="or">
+                        <equals value="org.eclipse.cdt.qt.core.qtNature"/>
+                    </iterate>
+                </with>
+            </enablement>
+        </processor>
+    </extension>
+    <extension point="org.eclipse.cdt.core.language">
+        <pdomLinkageFactory
+            id="Qt"
+            class="org.eclipse.cdt.internal.qt.core.pdom.PDOMQtLinkageFactory"/>
+    </extension>
+    <extension point="org.eclipse.cdt.core.LanguageSettingsProvider">
+        <provider
+            class="org.eclipse.cdt.internal.qt.core.QtIncludePathsProvider"
+            id="org.eclipse.cdt.qt.core.QtPathsProvider"
+            name="%QtInstallHeaders.pathProvider.name"
+            prefer-non-shared="false">
+            <language-scope id="org.eclipse.cdt.core.g++"/>
+        </provider>
+    </extension>
+    <extension point="org.eclipse.core.expressions.definitions">
+        <definition id="org.eclipse.cdt.qt.core.isQtProject">
+            <with variable="projectNatures">
+                    <iterate operator="or">
+                        <equals value="org.eclipse.cdt.qt.core.qtNature"/>
+                    </iterate>
+            </with>
+        </definition>
+    </extension>
+    <extension
+        point="org.eclipse.cdt.codan.core.checkers"
+        id="org.eclipse.cdt.core.qt.SyntaxCheckers">
+        <category
+              id="org.eclipse.cdt.qt.core.qtproblemcategory"
+              name="Qt Problems">
+        </category>
+        <checker
+            id="org.eclipse.cdt.core.qt.connectfunctioncallchecker"
+            name="Qt Connect Function Call Checker"
+            class="org.eclipse.cdt.internal.qt.core.codan.QtSyntaxChecker">
+            <problem
+                category="org.eclipse.cdt.qt.core.qtproblemcategory"
+                defaultEnabled="true"
+                defaultSeverity="Warning"
+                id="org.eclipse.cdt.qt.core.qtproblem"
+                markerType="org.eclipse.cdt.qt.core.qtproblem"
+                messagePattern="{0}"
+                name="Qt Syntax Problem">
+            </problem>
+        </checker>
+    </extension>
+    <extension
+        point="org.eclipse.core.resources.markers"
+        id="qtproblem"
+        name="Qt C/C++ Problem">
+        <super type="org.eclipse.cdt.codan.core.codanProblem"/> 
+        <persistent value="true"/>
+    </extension>
+</plugin>

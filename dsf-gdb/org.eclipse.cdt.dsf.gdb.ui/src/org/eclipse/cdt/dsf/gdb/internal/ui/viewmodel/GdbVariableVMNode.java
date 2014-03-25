@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010 Freescale Semiconductor. and others.
+ * Copyright (c) 2010, 2013 Freescale Semiconductor. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,8 @@
  * Contributors:
  *     Freescale Semiconductor - initial API and implementation
  *     Jens Elmenthaler (Verigy) - Added Full GDB pretty-printing support (bug 302121)
+ *     Marc Khouzam (Ericsson) - Add support disable "View Memory" action (bug 418710)
+ *     Marc Khouzam (Ericsson) - Turn off "watch" action for return values of methods (bug 341731)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.internal.ui.viewmodel;
 
@@ -47,6 +49,7 @@ import org.eclipse.debug.internal.ui.viewers.model.provisional.IChildrenCountUpd
 import org.eclipse.debug.internal.ui.viewers.model.provisional.IChildrenUpdate;
 import org.eclipse.debug.internal.ui.viewers.model.provisional.IHasChildrenUpdate;
 import org.eclipse.debug.internal.ui.viewers.model.provisional.IModelDelta;
+import org.eclipse.debug.ui.actions.IWatchExpressionFactoryAdapter2;
 import org.eclipse.jface.util.PropertyChangeEvent;
 import org.eclipse.jface.viewers.TreePath;
 
@@ -184,8 +187,78 @@ public class GdbVariableVMNode extends VariableVMNode {
 				request.done();
 			}
 		}
+
+		@Override
+		public boolean canViewInMemory() {
+			String expr = getExpression();
+			if (isConvenienceVariable(expr) || isRegisterExpression(expr)) {
+				return false;
+			}
+			return super.canViewInMemory();
+		}
+        
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+		@Override
+        public Object getAdapter(Class adapter) {
+        	if (adapter.isAssignableFrom(IWatchExpressionFactoryAdapter2.class)) {
+                return fGdbVariableExpressionFactory;
+        	}
+        	return super.getAdapter(adapter);
+        }
 	};
 	
+	private static boolean isConvenienceVariable(String expr) {
+		// GDB convenience variables are variables that start with a $ followed 
+		// by at least one digit.
+		// Note that registers also start with a $, so we need to make sure
+		// there is a digit immediately following the $.
+		// Also, the $ may not be at the start of the expression in cases
+		// where we are dealing with children of a convenience variable,
+		// such as ($1).myvar or ((class bar) $1).foo.
+		// So, we look for a $ followed by a number, anywhere in the expression.
+		// Convenience variables are used for return values of methods calls.
+		// see bug 341731
+		if (expr.matches(".*" + "\\$\\d" + ".*")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			return true;    				
+		}
+
+		return false;
+	}
+	
+	private static boolean isRegisterExpression(String expr) {
+		// Registers expressions start with a $ followed by a non-digit.
+		// We must check for the non-digit because we need to make sure
+		// we are not dealing with a convenience variable.
+		// Also, the $ may not be at the start of the expression in cases
+		// where we are dealing with a casted register, or children of a register
+		// such as (int)($eax)
+		// So, we look for a $ followed by a non-digit, anywhere in the expression.
+		if (expr.matches(".*" + "\\$\\D" + ".*")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			return true;    				
+		}
+
+		return false;
+	}
+
+	/**
+	 * A factory to control the "Watch" action for GDB variables.
+	 */
+    protected class GdbVariableExpressionFactory extends VariableExpressionFactory {
+    	@Override
+    	public boolean canCreateWatchExpression(Object element) {
+    		if (element instanceof VariableExpressionVMC) {
+    			String expression = ((VariableExpressionVMC)element).getExpression();
+    			if (isConvenienceVariable(expression)) {
+    				return false;
+    			}
+    		}
+    		
+    		return super.canCreateWatchExpression(element);
+    	}
+    }
+    
+    final protected VariableExpressionFactory fGdbVariableExpressionFactory = new GdbVariableExpressionFactory();
+
 	/**
 	 * The special context representing more children to be available.
 	 * 

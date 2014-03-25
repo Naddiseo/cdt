@@ -14,14 +14,14 @@
  *******************************************************************************/
 package org.eclipse.cdt.core.index;
 
-import java.util.regex.Pattern;
-
 import org.eclipse.cdt.core.dom.IName;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IScope;
 import org.eclipse.cdt.core.parser.ISignificantMacros;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+
+import java.util.regex.Pattern;
 
 /**
  * Interface for accessing the index for one or more projects.
@@ -60,7 +60,7 @@ public interface IIndex {
 	final int FIND_REFERENCES   = 0x4;
 	/**
 	 * Constant to search for occurrences across language boundaries.
-	 * You can use it to find the occurrences of a c++-function declared with 'extern "C"' within
+	 * Can be used to find the occurrences of a C++-function declared with 'extern "C"' within
 	 * the c-linkage.
 	 */
 	final int SEARCH_ACROSS_LANGUAGE_BOUNDARIES= 0x8;
@@ -69,7 +69,8 @@ public interface IIndex {
 	 */
 	final int FIND_DECLARATIONS_DEFINITIONS = FIND_DECLARATIONS | FIND_DEFINITIONS;
 	/**
-	 * Constant to search for all occurrences of a binding. This includes declarations, definitions and references.
+	 * Constant to search for all occurrences of a binding. This includes declarations, definitions
+	 * and references.
 	 */
 	final int FIND_ALL_OCCURRENCES = FIND_DECLARATIONS | FIND_DEFINITIONS | FIND_REFERENCES;
 
@@ -95,7 +96,7 @@ public interface IIndex {
 	public void releaseReadLock();
 
 	/**
-	 * @return <code>true</code> if there are threads waiting for read locks.
+	 * @return {@code true} if there are threads waiting for read locks.
 	 * @since 5.2
 	 */
 	public boolean hasWaitingReaders();
@@ -131,13 +132,13 @@ public interface IIndex {
 	public long getLastWriteAccess();
 
 	/**
-	 * Returns the file object for the given location and linkage or <code>null</code> if the file
+	 * Returns the file object for the given location and linkage or {@code null} if the file
 	 * was not indexed in this linkage.
 	 * <p>
 	 * When a header file is stored in the index in multiple variants for different sets of macro
 	 * definitions, this method will return an arbitrary one of these variants.
 	 * @param location an IIndexFileLocation representing the location of the file
-	 * @return the file in the index or <code>null</code>
+	 * @return the file in the index or {@code null}
 	 * @throws CoreException
 	 * @deprecated Use {@link #getFile(int, IIndexFileLocation, ISignificantMacros)} or
 	 *     {@link #getFiles(int, IIndexFileLocation)}.
@@ -147,13 +148,13 @@ public interface IIndex {
 
 	/**
 	 * Returns the file for the given location, linkage, and significant macros
-	 * May return <code>null</code>, if no such file exists.
-	 *  
+	 * May return {@code null}, if no such file exists.
+	 *
 	 * @param linkageID the id of the linkage in which the file has been parsed.
 	 * @param location the IIndexFileLocation representing the location of the file
 	 * @param macroDictionary The names and definitions of the macros used to disambiguate between
 	 *     variants of the file contents corresponding to different inclusion points.
-	 * @return the file for the location, or <code>null</code> if the file is not present in
+	 * @return the file for the location, or {@code null} if the file is not present in
 	 *     the index
 	 * @throws CoreException
 	 * @since 5.4
@@ -167,7 +168,7 @@ public interface IIndex {
 	 * for different sets of macro definitions.
 	 * This method may only return files that are actually managed by this fragment.
 	 * This method returns files without content, also.
-	 *  
+	 *
 	 * @param linkageID the id of the linkage in which the file has been parsed.
 	 * @param location the IIndexFileLocation representing the location of the file
 	 * @return the files for the location and the linkage.
@@ -223,13 +224,13 @@ public interface IIndex {
 	public IIndexInclude[] findIncludedBy(IIndexFile file, int depth) throws CoreException;
 
 	/**
-	 * Resolves the file that is included by the given include directive. May return <code>null</code>
+	 * Resolves the file that is included by the given include directive. May return {@code null}
 	 * in case the file cannot be found. This is usually more efficient than using:
 	 * <pre>
-	 * getFile(include.getIncludesLocation())
+	 * getFiles(include.getIncludesLocation())
 	 * </pre>
 	 * @param include
-	 * @return the file included or <code>null</code>.
+	 * @return the file included or {@code null}.
 	 * @throws CoreException
 	 * @since 4.0
 	 */
@@ -240,86 +241,100 @@ public interface IIndex {
 	 *
 	 * @param name a name, that has to be matched by the macros.
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor to report progress, may be <code>null</code>.
+	 * @param monitor a monitor to report progress, may be {@code null}.
 	 * @return an array of macros matching the name.
 	 * @throws CoreException
 	 * @since 4.0.2
 	 */
-	public IIndexMacro[] findMacros(char[] name, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexMacro[] findMacros(char[] name, IndexFilter filter, IProgressMonitor monitor)
+			throws CoreException;
 
 	/**
 	 * Searches for all macros with names that start with the given prefix.
 	 *
 	 * @param prefix the prefix with which all returned macros must start
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor for progress reporting and cancellation, may be <code>null</code>
+	 * @param monitor a monitor for progress reporting and cancellation, may be {@code null}
 	 * @return an array of bindings with the prefix
 	 * @throws CoreException
 	 * @since 4.0.2
 	 */
-	public IIndexMacro[] findMacrosForPrefix(char[] prefix, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexMacro[] findMacrosForPrefix(char[] prefix, IndexFilter filter,
+			IProgressMonitor monitor) throws CoreException;
 
 	/**
 	 * Searches for the binding of a name. The name may be originated by
-	 * an AST or by a search in an index. May return <code>null</code>.
+	 * an AST or by a search in an index. May return {@code null}.
+	 *
 	 * @param name a name to find the binding for
-	 * @return the binding or <code>null</code>
+	 * @return the binding or {@code null}
 	 * @throws CoreException
 	 */
 	public IIndexBinding findBinding(IName name) throws CoreException;
 
 	/**
-	 * Searches for all bindings with simple names that match the given pattern. In case a binding exists
-	 * in multiple projects, no duplicate bindings are returned.
+	 * Searches for all bindings with simple names that match the given pattern. In case a binding
+	 * exists in multiple projects, no duplicate bindings are returned.
 	 * This is fully equivalent to
 	 * <pre>
-	 * findBindings(new Pattern[]{pattern}, isFullyQualified, filter, monitor);
+	 * findBindings(new Pattern[] {pattern}, isFullyQualified, filter, monitor);
 	 * </pre>
 	 * @param pattern the pattern the name of the binding has to match.
-	 * @param isFullyQualified if <code>true</code>, binding must be in global scope
+	 * @param isFullyQualified if {@code true}, binding must be in global scope
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor to report progress, may be <code>null</code>.
+	 * @param monitor a monitor to report progress, may be {@code null}.
 	 * @return an array of bindings matching the pattern
 	 * @throws CoreException
 	 */
-	public IIndexBinding[] findBindings(Pattern pattern, boolean isFullyQualified, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexBinding[] findBindings(Pattern pattern, boolean isFullyQualified, IndexFilter filter,
+			IProgressMonitor monitor) throws CoreException;
 
 	/**
-	 * Searches for all bindings with qualified names that seen as an array of simple names match the given array
-	 * of patterns. In case a binding exists in multiple projects, no duplicate bindings are returned.
-	 * You can search with an array of patterns that specifies a partial qualification only.
-	 * @param patterns an array of patterns the names of the qualified name of the bindings have to match.
-	 * @param isFullyQualified if <code>true</code>, the array of pattern specifies the fully qualified name
+	 * Searches for all bindings with qualified names that seen as an array of simple names match
+	 * the given array of patterns. In case a binding exists in multiple projects, no duplicate
+	 * bindings are returned. You can search with an array of patterns that specifies a partial
+	 * qualification only.
+	 *
+	 * @param patterns an array of patterns the components of the qualified name of the bindings
+	 *     have to match.
+	 * @param isFullyQualified if {@code true}, the array of pattern specifies the fully
+	 *     qualified name
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor to report progress, may be <code>null</code>.
+	 * @param monitor a monitor to report progress, may be {@code null}.
 	 * @return an array of bindings matching the pattern
 	 * @throws CoreException
 	 */
-	public IIndexBinding[] findBindings(Pattern[] patterns, boolean isFullyQualified, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexBinding[] findBindings(Pattern[] patterns, boolean isFullyQualified,
+			IndexFilter filter, IProgressMonitor monitor) throws CoreException;
 
 	/**
 	 * Searches for all macro containers (one for macros with the same name) with names that
-	 * match the given pattern. In case a binding exists in multiple projects, no duplicate bindings
-	 * are returned.
+	 * match the given pattern. In case a binding exists in multiple projects, no duplicate
+	 * bindings are returned.
+	 *
 	 * @param pattern a pattern the name of the bindings have to match.
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor to report progress, may be <code>null</code>
+	 * @param monitor a monitor to report progress, may be {@code null}
 	 * @return an array of bindings matching the pattern
 	 * @throws CoreException
 	 */
-	IIndexBinding[] findMacroContainers(Pattern pattern, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	IIndexBinding[] findMacroContainers(Pattern pattern, IndexFilter filter, IProgressMonitor monitor)
+			throws CoreException;
 
 	/**
-	 * Searches for all bindings in global scope with a given name. In case a binding exists in multiple projects, no duplicate bindings are returned.
-	 * This method makes use of the BTree and is faster than the methods using patterns.
-	 * <p>
-	 * @param names an array of names, which has to be matched by the qualified name of the bindings.
+	 * Searches for all bindings in global scope with a given name. In case a binding exists in
+	 * multiple projects, no duplicate bindings are returned. This method makes use of the BTree
+	 * and is faster than the methods using patterns.
+	 *
+	 * @param names an array of names, which has to be matched by the qualified name of
+	 *     the bindings.
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor to report progress, may be <code>null</code>.
+	 * @param monitor a monitor to report progress, may be {@code null}.
 	 * @return an array of bindings matching the pattern
 	 * @throws CoreException
 	 */
-	public IIndexBinding[] findBindings(char[][] names, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexBinding[] findBindings(char[][] names, IndexFilter filter, IProgressMonitor monitor)
+			throws CoreException;
 
 	/**
 	 * Searches the global scope for all bindings with a given name.
@@ -332,11 +347,12 @@ public interface IIndex {
 	 * </pre>
 	 * @param name a name, which has to be matched by the qualified name of the bindings.
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor to report progress, may be <code>null</code>.
+	 * @param monitor a monitor to report progress, may be {@code null}.
 	 * @return an array of bindings matching the pattern
 	 * @throws CoreException
 	 */
-	public IIndexBinding[] findBindings(char[] name, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexBinding[] findBindings(char[] name, IndexFilter filter, IProgressMonitor monitor)
+			throws CoreException;
 
 	/**
 	 * Searches the global scope and optionally all other scopes for bindings with a given name.
@@ -346,31 +362,36 @@ public interface IIndex {
 	 * @param name a name, which has to be matched by the qualified name of the bindings.
 	 * @param fileScopeOnly if true, only bindings at file scope are returned
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor to report progress, may be <code>null</code>.
+	 * @param monitor a monitor to report progress, may be {@code null}.
 	 * @return an array of bindings matching the pattern
 	 * @throws CoreException
 	 */
-	public IIndexBinding[] findBindings(char[] name, boolean fileScopeOnly, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexBinding[] findBindings(char[] name, boolean fileScopeOnly, IndexFilter filter,
+			IProgressMonitor monitor) throws CoreException;
 
 	/**
 	 * Searches for all bindings with names that start with the given prefix.
+	 *
 	 * @param prefix the prefix with which all returned bindings must start
 	 * @param fileScopeOnly if true, only bindings at file scope are returned
 	 * @param filter a filter that allows for skipping parts of the index
-	 * @param monitor a monitor for progress reporting and cancellation, may be <code>null</code>
+	 * @param monitor a monitor for progress reporting and cancellation, may be {@code null}
 	 * @return an array of bindings with the prefix
 	 * @throws CoreException
 	 */
-	public IIndexBinding[] findBindingsForPrefix(char[] prefix, boolean fileScopeOnly, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexBinding[] findBindingsForPrefix(char[] prefix, boolean fileScopeOnly,
+			IndexFilter filter, IProgressMonitor monitor) throws CoreException;
 
 	/**
 	 * @noreference This method is not intended to be referenced by clients.
 	 */
-	public IIndexBinding[] findBindingsForContentAssist(char[] prefix, boolean fileScopeOnly, IndexFilter filter, IProgressMonitor monitor) throws CoreException;
+	public IIndexBinding[] findBindingsForContentAssist(char[] prefix, boolean fileScopeOnly,
+			IndexFilter filter, IProgressMonitor monitor) throws CoreException;
 
 	/**
-	 * Searches for all names that resolve to the given binding. You can limit the result to references, declarations
-	 * or definitions, or a combination of those.
+	 * Searches for all names that resolve to the given binding. The search can be limited to
+	 * references, declarations or definitions, or a combination of those.
+	 *
 	 * @param binding a binding for which names are searched for
 	 * @param flags a combination of {@link #FIND_DECLARATIONS}, {@link #FIND_DEFINITIONS},
 	 * {@link #FIND_REFERENCES} and {@link #SEARCH_ACROSS_LANGUAGE_BOUNDARIES}.
@@ -416,23 +437,24 @@ public interface IIndex {
 	public IIndexName[] findDefinitions(IBinding binding) throws CoreException;
 
 	/**
-	 * Returns an IIndexBinding for this IIndex that is equivalent to the specified binding,
+	 * Returns an {@link IIndexBinding} for this index that is equivalent to the specified binding,
 	 * or null if such a binding does not exist in this index. This is useful for adapting
 	 * bindings obtained from IIndex objects that might have been created for a different scope
      * or for IBinding objects obtained directly from the AST.
-	 * @param binding
-	 * @return an IIndexBinding for this IIndex that is equivalent to the specified binding
+     *
+	 * @param binding an AST or an index binding
+	 * @return an IIndexBinding for this index that is equivalent to the specified binding
 	 */
 	public IIndexBinding adaptBinding(IBinding binding);
 
 	/**
-	 * Creates a file-set that can be used with this index as long as you hold a read-lock.
+	 * Creates a file-set that can be used with this index as long as the caller holds a read-lock.
 	 */
 	public IIndexFileSet createFileSet();
 
 	/**
 	 * Returns an array of all files that are part of this index. If a file is parsed in two
-	 * linkages, or in multiple fragments only one of the files will be returned.
+	 * linkages or in multiple fragments, only one of the files will be returned.
 	 */
 	public IIndexFile[] getAllFiles() throws CoreException;
 
@@ -444,7 +466,7 @@ public interface IIndex {
 	public IIndexFile[] getDefectiveFiles() throws CoreException;
 
 	/**
-	 * Returns an array of files containg unresolved includes.
+	 * Returns an array of files containing unresolved includes.
 	 * @noreference This method is not intended to be referenced by clients.
 	 * @since 5.4
 	 */

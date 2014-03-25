@@ -9,7 +9,6 @@
          This extension point is used to contribute a new Language Settings Provider. A Language Settings Provider is used to get additions to compiler options such as include paths (-I) or preprocessor defines (-D) and others into the project model.
       </documentation>
    </annotation>
-
    <element name="extension">
       <annotation>
          <appInfo>
@@ -49,7 +48,6 @@
          </attribute>
       </complexType>
    </element>
-
    <element name="provider">
       <annotation>
          <documentation>
@@ -64,8 +62,9 @@
          <attribute name="class" type="string">
             <annotation>
                <documentation>
-                  A fully qualified name of the Java class that implements &lt;samp&gt;org.eclipse.cdt.core.settings.model.ILanguageSettingsProvider&lt;/samp&gt; interface. If empty, &lt;samp&gt;org.eclipse.cdt.core.language.settings.providers.LanguageSettingsBaseProvider&lt;/samp&gt; is used by default which provides basic functionality defined by this extension point.
-If there is a need to configure a provider in more deliberate way, attribute &lt;samp&gt;parameter&lt;/samp&gt; could be used in a class extending &lt;samp&gt;LanguageSettingsBaseProvider&lt;/samp&gt;.
+                  A fully qualified name of the Java class that implements &lt;samp&gt;org.eclipse.cdt.core.language.settings.providers&lt;/samp&gt; interface. If empty, &lt;samp&gt;org.eclipse.cdt.core.language.settings.providers.LanguageSettingsBaseProvider&lt;/samp&gt; is used by default which provides basic functionality defined by this extension point.&lt;br&gt;
+In case the provider ever needs to be non-shared, set per project/configuration, or editable in UI - the provider must implement &lt;samp&gt;org.eclipse.cdt.core.language.settings.providers.ILanguageSettingsEditableProvider&lt;/samp&gt;. There is a generic implementation &lt;samp&gt;org.eclipse.cdt.core.language.settings.providers.LanguageSettingsGenericProvider&lt;/samp&gt; that can be used in most cases.&lt;br&gt;
+If there is a need to configure a provider in more deliberate way, attribute &lt;samp&gt;parameter&lt;/samp&gt; could be used in a class extending &lt;samp&gt;LanguageSettingsBaseProvider&lt;/samp&gt;.&lt;br&gt;
 Default constructor (constructor without arguments) of this class must be public and the package be exported in order to be able to instantiate via extension point.
                </documentation>
                <appInfo>
@@ -78,6 +77,9 @@ Default constructor (constructor without arguments) of this class must be public
                <documentation>
                   Unique ID of the provider.
                </documentation>
+               <appInfo>
+                  <meta.attribute kind="identifier"/>
+               </appInfo>
             </annotation>
          </attribute>
          <attribute name="name" type="string" use="required">
@@ -85,6 +87,9 @@ Default constructor (constructor without arguments) of this class must be public
                <documentation>
                   Name of the provider. This name will be presented to a user in UI.
                </documentation>
+               <appInfo>
+                  <meta.attribute translatable="true"/>
+               </appInfo>
             </annotation>
          </attribute>
          <attribute name="parameter" type="string">
@@ -104,7 +109,6 @@ The value &quot;true&quot; of this attribute is meaningful only for providers ca
          </attribute>
       </complexType>
    </element>
-
    <element name="language-scope">
       <annotation>
          <documentation>
@@ -123,7 +127,6 @@ The value &quot;true&quot; of this attribute is meaningful only for providers ca
          </attribute>
       </complexType>
    </element>
-
    <element name="entry">
       <annotation>
          <documentation>
@@ -138,7 +141,6 @@ The value &quot;true&quot; of this attribute is meaningful only for providers ca
             <annotation>
                <documentation>
                   Kind of language settings entry which maps to compiler options. For example, following mapping is used for gcc options:
-
 &lt;br&gt;&quot;&lt;samp&gt;-I&lt;/samp&gt;&quot; : includePath
 &lt;br&gt;&quot;&lt;samp&gt;-D&lt;/samp&gt;&quot; : macro
 &lt;br&gt;&quot;&lt;samp&gt;-include&lt;/samp&gt;&quot; : includeFile
@@ -184,7 +186,6 @@ The value &quot;true&quot; of this attribute is meaningful only for providers ca
          </attribute>
       </complexType>
    </element>
-
    <element name="flag">
       <annotation>
          <documentation>
@@ -201,6 +202,7 @@ The value &quot;true&quot; of this attribute is meaningful only for providers ca
   &lt;br&gt;- &lt;samp&gt;RESOLVED&lt;/samp&gt; : Indicates that the entries do not need to be resolved such as expansion of environment variables, normalizing the path against build working directory etc.
   &lt;br&gt;- &lt;samp&gt;VALUE_WORKSPACE_PATH&lt;/samp&gt; : is used to indicate that the entry is a resource managed by eclipse in the workspace. The path is rooted in the workspace root.
   &lt;br&gt;- &lt;samp&gt;UNDEFINED&lt;/samp&gt; : indicates that the entry should not be defined, corresponds to &lt;samp&gt;-U&lt;/samp&gt; option of gcc compiler. If this flag is defined it will negate entries with the same name (and kind) for all providers down the list.
+  &lt;br&gt;- &lt;samp&gt;EXPORTED&lt;/samp&gt; : indicates that the entry is exported to referencing projects. It will be passed to the projects configurations referencing the configuration the entry belongs to.
                </documentation>
             </annotation>
             <simpleType>
@@ -215,12 +217,13 @@ The value &quot;true&quot; of this attribute is meaningful only for providers ca
                   </enumeration>
                   <enumeration value="UNDEFINED">
                   </enumeration>
+                  <enumeration value="EXPORTED">
+                  </enumeration>
                </restriction>
             </simpleType>
          </attribute>
       </complexType>
    </element>
-
    <annotation>
       <appInfo>
          <meta.section type="since"/>
@@ -229,16 +232,6 @@ The value &quot;true&quot; of this attribute is meaningful only for providers ca
          CDT 8.1
       </documentation>
    </annotation>
-
-   <annotation>
-      <appInfo>
-         <meta.section type="examples"/>
-      </appInfo>
-      <documentation>
-         [Enter extension point usage example here.]
-      </documentation>
-   </annotation>
-
    <annotation>
       <appInfo>
          <meta.section type="apiinfo"/>
@@ -250,27 +243,16 @@ For those cases where contributed settings entries (representing the compiler op
 &lt;br/&gt;
       </documentation>
    </annotation>
-
-   <annotation>
-      <appInfo>
-         <meta.section type="implementation"/>
-      </appInfo>
-      <documentation>
-         [Enter information about supplied implementation of this extension point.]
-      </documentation>
-   </annotation>
-
    <annotation>
       <appInfo>
          <meta.section type="copyright"/>
       </appInfo>
       <documentation>
-         Copyright (c) 2009, 2011 Andrew Gvozdev and others.
+         Copyright (c) 2009, 2013 Andrew Gvozdev and others.
 All rights reserved. This program and the accompanying materials
 are made available under the terms of the Eclipse Public License v1.0
 which accompanies this distribution, and is available at
 http://www.eclipse.org/legal/epl-v10.html
       </documentation>
    </annotation>
-
 </schema>

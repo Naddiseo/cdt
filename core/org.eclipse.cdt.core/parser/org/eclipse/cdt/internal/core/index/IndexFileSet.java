@@ -6,7 +6,7 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Markus Schorn - initial API and implementation
+ *     Markus Schorn - initial API and implementation
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.index;
 
@@ -118,8 +118,7 @@ public class IndexFileSet implements IIndexFileSet {
 				IIndexFragmentBinding fb;
 				if (binding instanceof IIndexFragmentBinding) {
 					fb= (IIndexFragmentBinding) binding;
-				}
-				else {
+				} else {
 					fb= (IIndexFragmentBinding) binding.getAdapter(IIndexFragmentBinding.class);
 				}
 				try {
@@ -128,8 +127,7 @@ public class IndexFileSet implements IIndexFileSet {
 						if (subSet != null && subSet.containsFileOfLocalBinding(fb)) {
 							ok.set(i);
 						}
-					}
-					else {
+					} else {
 						ok.set(i);
 					}
 				} catch (CoreException e) {
@@ -150,7 +148,7 @@ public class IndexFileSet implements IIndexFileSet {
 		int j= ok.nextSetBit(0);
 		for (int i = 0; i < result.length; i++) {
 			result[i]= bindings[j];
-			j= ok.nextSetBit(j+1);
+			j= ok.nextSetBit(j + 1);
 		}
 		return result;
 	}
@@ -164,17 +162,14 @@ public class IndexFileSet implements IIndexFileSet {
 		if (!(file instanceof IIndexFragmentFile))
 			return invert;
 		
-		IIndexFragmentFile ifile= (IIndexFragmentFile) file;
-		IIndexFragmentFileSet subSet= fSubSets.get(ifile.getIndexFragment());
-		if (subSet != null && subSet.contains(ifile)) {
+		IIndexFragmentFile fragmentFile= (IIndexFragmentFile) file;
+		IIndexFragmentFileSet subSet= fSubSets.get(fragmentFile.getIndexFragment());
+		if (subSet != null && subSet.contains(fragmentFile)) {
 			return !invert;
 		}
 		return invert;
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.index.IIndexFileSet#invert()
-	 */
 	@Override
 	public IIndexFileSet invert() {
 		if (fInverse == null) {

@@ -6,10 +6,10 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    IBM - Initial API and implementation
- *    Yuan Zhang / Beth Tibbitts (IBM Research)
- *    Anton Leherbauer (Wind River Systems)
- *    Markus Schorn (Wind River Systems)
+ *     IBM - Initial API and implementation
+ *     Yuan Zhang / Beth Tibbitts (IBM Research)
+ *     Anton Leherbauer (Wind River Systems)
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.c;
 
@@ -27,26 +27,30 @@ public class CASTProblem extends ASTProblem {
 
     @Override
 	public CASTProblem copy() {
-    	char[] arg = getArgument();
-    	CASTProblem problem = new CASTProblem(getID(), arg == null ? null : arg.clone(), isError());
-		problem.setOffsetAndLength(this);
-		return problem;
+		return copy(CopyStyle.withoutLocations);
 	}
-    
+
+	@Override
+	public CASTProblem copy(CopyStyle style) {
+    	char[] arg = getArgument();
+    	CASTProblem copy = new CASTProblem(getID(), arg == null ? null : arg.clone(), isError());
+		return copy(copy, style);
+	}
+
     @Override
-	public boolean accept( ASTVisitor action ){
-    	if( action.shouldVisitProblems ){
-		    switch( action.visit( this ) ){
-	            case ASTVisitor.PROCESS_ABORT : return false;
-	            case ASTVisitor.PROCESS_SKIP  : return true;
-	            default : break;
+	public boolean accept(ASTVisitor action) {
+    	if (action.shouldVisitProblems) {
+		    switch (action.visit(this)) {
+	            case ASTVisitor.PROCESS_ABORT: return false;
+	            case ASTVisitor.PROCESS_SKIP: return true;
+	            default: break;
 	        }
 		}
-    	if( action.shouldVisitProblems ){
-		    switch( action.leave( this ) ){
-	            case ASTVisitor.PROCESS_ABORT : return false;
-	            case ASTVisitor.PROCESS_SKIP  : return true;
-	            default : break;
+    	if (action.shouldVisitProblems) {
+		    switch (action.leave(this)) {
+	            case ASTVisitor.PROCESS_ABORT: return false;
+	            case ASTVisitor.PROCESS_SKIP: return true;
+	            default: break;
 	        }
 		}
         return true;

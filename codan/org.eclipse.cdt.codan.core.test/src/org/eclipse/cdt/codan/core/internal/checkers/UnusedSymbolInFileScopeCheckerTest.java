@@ -317,4 +317,30 @@ public class UnusedSymbolInFileScopeCheckerTest extends CheckerTestCase {
 		loadCodeAndRun(getAboveComment());
 		checkNoErrors();
 	}
+
+	//	extern int* pxCurrentTCB;
+	//
+	//	int main() {
+	//	    asm ("lds r26, pxCurrentTCB\n\t");
+	//	}
+	public void testUseInAsm_bug393129() throws IOException {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	static void foo(int) {}
+	//	static void foo(float) {}
+	//
+	//	template <typename T>
+	//	void bar(T t) {
+	//	    foo(t);
+	//	}
+	//
+	//	int main() {
+	//	    bar(0);
+	//	}
+	public void testOverloadedStaticFunctionUsedInTemplate_bug358694() throws IOException {
+		loadCodeAndRunCpp(getAboveComment());
+		checkNoErrors();
+	}
 }

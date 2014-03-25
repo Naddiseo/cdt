@@ -37,8 +37,7 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
  * Scope of a function, containing labels.
  */
 public class CPPFunctionScope extends CPPScope implements ICPPFunctionScope {
-
-    private CharArrayObjectMap<IBinding> labels = CharArrayObjectMap.emptyMap();
+    private CharArrayObjectMap<ILabel> labels = CharArrayObjectMap.emptyMap();
     
 	/**
 	 * @param physicalNode
@@ -52,36 +51,23 @@ public class CPPFunctionScope extends CPPScope implements ICPPFunctionScope {
 		return EScopeKind.eLocal;
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPScope#addBinding(org.eclipse.cdt.core.dom.ast.IBinding)
-	 */
 	@Override
 	public void addBinding(IBinding binding) {
 	    //3.3.4 only labels have function scope
 	    if (!(binding instanceof ILabel))
 	        return;
-	    
+
 	    if (labels == CharArrayObjectMap.EMPTY_MAP)
-	        labels = new CharArrayObjectMap<IBinding>(2);
-	    
-	    labels.put(binding.getNameCharArray(), binding);
+	        labels = new CharArrayObjectMap<ILabel>(2);
+
+	    labels.put(binding.getNameCharArray(), (ILabel) binding);
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPScope#getBinding(int, char[])
-	 */
-	public IBinding getBinding(IASTName name) {
-	    return labels.get(name.getLookupKey());
-	}
-
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.IScope#find(java.lang.String)
-	 */
 	@Override
 	public IBinding[] find(String name) {
 	    char[] n = name.toCharArray();
 	    List<IBinding> bindings = new ArrayList<IBinding>();
-	    
+
 	    for (int i = 0; i < labels.size(); i++) {
 	    	char[] key = labels.keyAt(i);
 	    	if (CharArrayUtils.equals(key, n)) {
@@ -106,9 +92,6 @@ public class CPPFunctionScope extends CPPScope implements ICPPFunctionScope {
 	    return CPPVisitor.getContainingNonTemplateScope(name);
 	}
 
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPFunctionScope#getBodyScope()
-     */
     @Override
 	public IScope getBodyScope() {
         IASTFunctionDeclarator fnDtor = (IASTFunctionDeclarator) getPhysicalNode();
@@ -121,9 +104,6 @@ public class CPPFunctionScope extends CPPScope implements ICPPFunctionScope {
         return null;
     }
 
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPScope#getScopeName()
-     */
     @Override
 	public IName getScopeName() {
         IASTNode node = getPhysicalNode();

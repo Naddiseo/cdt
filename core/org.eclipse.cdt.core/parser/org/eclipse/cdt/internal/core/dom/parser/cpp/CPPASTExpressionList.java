@@ -50,11 +50,7 @@ public class CPPASTExpressionList extends ASTNode implements ICPPASTExpressionLi
 		CPPASTExpressionList copy = new CPPASTExpressionList();
 		for(IASTExpression expr : getExpressions())
 			copy.addExpression(expr == null ? null : expr.copy(style));
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 	
 	@Override
@@ -178,7 +174,7 @@ public class CPPASTExpressionList extends ASTNode implements ICPPASTExpressionLi
 		for (int i = 0; i < evals.length; i++) {
 			evals[i]= ((ICPPASTExpression) exprs[i]).getEvaluation();
 		}
-		return new EvalComma(evals);
+		return new EvalComma(evals, this);
 	}
 
     @Override

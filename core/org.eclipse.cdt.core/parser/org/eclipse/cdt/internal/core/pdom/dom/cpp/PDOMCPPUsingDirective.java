@@ -6,7 +6,7 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Markus Schorn - initial API and implementation
+ *     Markus Schorn - initial API and implementation
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.pdom.dom.cpp;
 
@@ -59,14 +59,11 @@ public class PDOMCPPUsingDirective implements ICPPUsingDirective, IPDOMNode {
 		db.putInt(fRecord + FILE_OFFSET, fileOffset);
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPUsingDirective#getNamespace()
-	 */
 	@Override
 	public ICPPNamespaceScope getNominatedScope() {
 		try {
 			long rec = fLinkage.getDB().getRecPtr(fRecord + NOMINATED_NAMESPACE);
-			PDOMNode node= fLinkage.getNode(rec);
+			PDOMNode node= PDOMNode.load(fLinkage.getPDOM(), rec);
 			if (node instanceof ICPPNamespace) {
 				return ((ICPPNamespace) node).getNamespaceScope();
 			}
@@ -76,16 +73,12 @@ public class PDOMCPPUsingDirective implements ICPPUsingDirective, IPDOMNode {
 		return null;
 	}
 
-	
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPUsingDirective#getContainingScope()
-	 */
 	@Override
 	public IScope getContainingScope() {
 		try {
 			long rec = fLinkage.getDB().getRecPtr(fRecord + CONTAINER_NAMESPACE);
 			if (rec != 0) {
-				PDOMNode node= fLinkage.getNode(rec);
+				PDOMNode node= PDOMNode.load(fLinkage.getPDOM(), rec);
 				if (node instanceof PDOMCPPNamespace) {
 					return (PDOMCPPNamespace) node;
 				}
@@ -96,9 +89,6 @@ public class PDOMCPPUsingDirective implements ICPPUsingDirective, IPDOMNode {
 		return null;
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPUsingDirective#getPointOfDeclaration()
-	 */
 	@Override
 	public int getPointOfDeclaration() {
 		final Database db= fLinkage.getDB();
@@ -118,9 +108,6 @@ public class PDOMCPPUsingDirective implements ICPPUsingDirective, IPDOMNode {
 		return db.getRecPtr(fRecord + PREV_DIRECTIVE_OF_FILE);
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.IPDOMNode#accept(org.eclipse.cdt.core.dom.IPDOMVisitor)
-	 */
 	@Override
 	public void accept(IPDOMVisitor visitor) throws CoreException {
 	}

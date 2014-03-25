@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2010 IBM Corporation and others.
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -26,13 +26,16 @@ import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
+import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IScope;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTLinkageSpecification;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNameSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNamespaceDefinition;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateId;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPNamespace;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPNamespaceScope;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateInstance;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPUsingDirective;
 import org.eclipse.cdt.core.index.IIndex;
 import org.eclipse.cdt.core.index.IIndexFileSet;
@@ -40,7 +43,6 @@ import org.eclipse.cdt.core.index.IIndexName;
 import org.eclipse.cdt.core.parser.util.CharArrayUtils;
 import org.eclipse.cdt.internal.core.dom.parser.ASTInternal;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPScopeMapper.InlineNamespaceDirective;
-import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
 import org.eclipse.cdt.internal.core.index.IIndexScope;
 import org.eclipse.core.runtime.CoreException;
 
@@ -80,8 +82,8 @@ public class CPPNamespaceScope extends CPPScope implements ICPPInternalNamespace
 	private void initUsingDirectives() {
 		if (fUsingDirectives == null) {
 			fUsingDirectives= new ArrayList<ICPPUsingDirective>(1);
-			// Insert a using directive for every inline namespace found in the index
-			for (ICPPInternalNamespaceScope inline: getIndexInlineNamespaces()) {
+			// Insert a using directive for every inline namespace found in the index.
+			for (ICPPInternalNamespaceScope inline : getIndexInlineNamespaces()) {
 				if (!(inline instanceof CPPNamespaceScope)) {
 					fUsingDirectives.add(new InlineNamespaceDirective(this, inline));
 				}
@@ -105,16 +107,21 @@ public class CPPNamespaceScope extends CPPScope implements ICPPInternalNamespace
     }
 
     public IScope findNamespaceScope(IIndexScope scope) {
-    	final String[] qname= CPPVisitor.getQualifiedName(scope.getScopeBinding());
+    	final ArrayList<IBinding> parentChain = new ArrayList<IBinding>();
+	    for (IBinding binding= scope.getScopeBinding(); binding != null; binding= binding.getOwner()) {
+	    	parentChain.add(binding);
+	    }
+
     	final IScope[] result= { null };
     	final ASTVisitor visitor= new ASTVisitor() {
-    		private int depth= 0;
+    		private int position = parentChain.size();
+
     		{
     			shouldVisitNamespaces= shouldVisitDeclarations= true;
     		}
 
     		@Override
-    		public int visit( IASTDeclaration declaration ){
+    		public int visit(IASTDeclaration declaration) {
     			if (declaration instanceof ICPPASTLinkageSpecification)
     				return PROCESS_CONTINUE;
     			return PROCESS_SKIP;
@@ -122,25 +129,22 @@ public class CPPNamespaceScope extends CPPScope implements ICPPInternalNamespace
 
     		@Override
     		public int visit(ICPPASTNamespaceDefinition namespace) {
-    			final String name = namespace.getName().toString();
-    			if (name.length() == 0) {
-    				return PROCESS_CONTINUE;
+    			final char[] name = namespace.getName().toCharArray();
+    			IBinding binding = parentChain.get(--position);
+    			if (!CharArrayUtils.equals(name, binding.getNameCharArray())) {
+    				++position;
+        			return PROCESS_SKIP;
     			}
-    			if (qname[depth].equals(name)) {
-    				if (++depth == qname.length) {
-    					result[0]= namespace.getScope();
-    					return PROCESS_ABORT;
-    				}
-    				return PROCESS_CONTINUE;
-    			}
-    			return PROCESS_SKIP;
+				if (position == 0) {
+					result[0]= namespace.getScope();
+					return PROCESS_ABORT;
+				}
+				return PROCESS_CONTINUE;
     		}
 
     		@Override
     		public int leave(ICPPASTNamespaceDefinition namespace) {
-    			if (namespace.getName().getLookupKey().length > 0) {
-    				--depth;
-    			}
+   				++position;
     			return PROCESS_CONTINUE;
     		}
     	};
@@ -158,19 +162,27 @@ public class CPPNamespaceScope extends CPPScope implements ICPPInternalNamespace
     
 	public boolean canDenoteNamespaceMember(ICPPASTQualifiedName name) {
 		IScope scope= this;
-		IASTName[] segments= name.getNames();
+		ICPPASTNameSpecifier[] segments= name.getQualifier();
 		try {
-			for (int i= segments.length - 1; --i >= 0;) {
+			for (int i= segments.length; --i >= 0;) {
 				if (scope == null)
 					return false;
 				IName scopeName = scope.getScopeName();
 				if (scopeName == null)
 					return false;
 
-				IASTName segmentName = segments[i];
-				if (segmentName instanceof ICPPASTTemplateId ||
-						!CharArrayUtils.equals(scopeName.getSimpleID(), segmentName.getSimpleID())) {
-					return false;
+				if (segments[i] instanceof IASTName) {
+					IASTName segmentName = (IASTName) segments[i];
+					if (segmentName instanceof ICPPASTTemplateId ||
+							!CharArrayUtils.equals(scopeName.getSimpleID(), segmentName.getSimpleID())) {
+						return false;
+					}
+				} else {
+					IBinding segmentBinding = segments[i].resolveBinding();
+					if (segmentBinding instanceof ICPPTemplateInstance ||
+							!CharArrayUtils.equals(scopeName.getSimpleID(), segmentBinding.getNameCharArray())) {
+						return false;
+					}
 				}
 				scope= scope.getParent();
 			}

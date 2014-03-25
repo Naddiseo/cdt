@@ -13,7 +13,7 @@ package org.eclipse.cdt.core.dom.ast;
 
 /**
  * Interface for basic types.
- * 
+ *
  * @noextend This interface is not intended to be extended by clients.
  * @noimplement This interface is not intended to be implemented by clients.
  */
@@ -22,39 +22,25 @@ public interface IBasicType extends IType {
 	 * @since 5.2
 	 */
 	enum Kind {
-		eUnspecified, eVoid, eChar, eWChar, eInt, eFloat, eDouble, eBoolean, eChar16, eChar32, 
-		/** @since 5.4 */ eNullPtr
+		eUnspecified, eVoid, eChar, eWChar, eInt, eFloat, eDouble,
+		eBoolean, eChar16, eChar32, /** @since 5.4 */ eNullPtr,
+		/** @since 5.5 */ eInt128, /** @since 5.5 */ eFloat128
 	}
-	
-	/**
-	 * @since 5.2
-	 */
-	final int IS_LONG     = 1;
-	/**
-	 * @since 5.2
-	 */
-	final int IS_SHORT    = 1 << 1;
-	/**
-	 * @since 5.2
-	 */
-	final int IS_SIGNED   = 1 << 2;
-	/**
-	 * @since 5.2
-	 */
-	final int IS_UNSIGNED = 1 << 3;
-	/**
-	 * @since 5.2
-	 */
-	final int IS_COMPLEX  = 1 << 4;	
-	/**
-	 * @since 5.2
-	 */
-	final int IS_IMAGINARY = 1 << 5;  
-	/**
-	 * @since 5.2
-	 */
-	final int IS_LONG_LONG = 1 << 6;  
 
+	/** @since 5.2 */
+	final int IS_LONG     = 1;
+	/** @since 5.2 */
+	final int IS_SHORT    = 1 << 1;
+	/** @since 5.2 */
+	final int IS_SIGNED   = 1 << 2;
+	/** @since 5.2 */
+	final int IS_UNSIGNED = 1 << 3;
+	/** @since 5.2 */
+	final int IS_COMPLEX  = 1 << 4;
+	/** @since 5.2 */
+	final int IS_IMAGINARY = 1 << 5;
+	/** @since 5.2 */
+	final int IS_LONG_LONG = 1 << 6;
 
 	/**
 	 * This returns the kind of basic type you are looking at. The type is
@@ -62,13 +48,13 @@ public interface IBasicType extends IType {
 	 * @since 5.2
 	 */
 	Kind getKind();
-	
+
 	/**
 	 * This returns the combination of modifier bits for this type.
 	 * @since 5.2
 	 */
 	int getModifiers();
-	
+
 	public boolean isSigned();
 	public boolean isUnsigned();
 	public boolean isShort();
@@ -84,7 +70,7 @@ public interface IBasicType extends IType {
 	 * @since 5.2
 	 */
 	public boolean isComplex();
-	
+
 	/**
 	 * Is imaginary number? e.g. _Imaginr
 	 * @return true if it is an imaginary number, false otherwise
@@ -97,13 +83,13 @@ public interface IBasicType extends IType {
 	 */
 	@Deprecated
 	public int getType() throws DOMException;
-	
+
 	/**
 	 * @deprecated, types don't have values.
 	 */
 	@Deprecated
 	public IASTExpression getValue() throws DOMException;
-	
+
 	/**
 	 * @deprecated,  use the type-safe version getKind(), instead.
 	 */

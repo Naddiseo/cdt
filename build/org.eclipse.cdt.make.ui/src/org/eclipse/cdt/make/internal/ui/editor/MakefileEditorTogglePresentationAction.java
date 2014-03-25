@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2006 QNX Software Systems and others.
+ * Copyright (c) 2000, 2013 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -18,19 +18,16 @@ import org.eclipse.ui.texteditor.TextEditorAction;
 /**
  */
 public class MakefileEditorTogglePresentationAction extends TextEditorAction {
-
 	/**
 	 * Constructor for MakefileEditorTogglePresentationAction.
 	 */
 	public MakefileEditorTogglePresentationAction() {
 		super(MakeUIPlugin.getDefault().getResourceBundle(), "TogglePresentation.", null); //$NON-NLS-1$
-		MakeUIImages.setImageDescriptors(this, MakeUIImages.T_TOOL, MakeUIImages.IMG_TOOLS_MAKEFILE_SEGMENT_EDIT);
+		setDisabledImageDescriptor(MakeUIImages.getImageDescriptor(MakeUIImages.IMG_DTOOL_SEGMENT_EDIT));
+		setImageDescriptor(MakeUIImages.getImageDescriptor(MakeUIImages.IMG_ETOOL_SEGMENT_EDIT));
 		update();
 	}
 
-	/**
-	 * @see org.eclipse.jface.action.IAction#run()
-	 */
 	@Override
 	public void run() {
 		ITextEditor editor= getTextEditor();
@@ -40,9 +37,6 @@ public class MakefileEditorTogglePresentationAction extends TextEditorAction {
 		editor.showHighlightRangeOnly(!show);
 	}
 
-	/**
-	 * @see org.eclipse.ui.texteditor.IUpdate#update()
-	 */
 	@Override
 	public void update() {
 		setChecked(getTextEditor() != null && getTextEditor().showsHighlightRangeOnly());

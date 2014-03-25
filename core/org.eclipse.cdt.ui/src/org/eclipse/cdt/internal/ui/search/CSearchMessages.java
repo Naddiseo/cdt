@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2003, 2011 IBM Corporation and others.
+ * Copyright (c) 2003, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -14,9 +14,7 @@ package org.eclipse.cdt.internal.ui.search;
 
 import org.eclipse.osgi.util.NLS;
 
-
 public final class CSearchMessages extends NLS {
-    private static final String BUNDLE_NAME = "org.eclipse.cdt.internal.ui.search.CSearchMessages"; //$NON-NLS-1$
 	public static String group_declarations;
 	public static String group_references;
 	public static String CSearchResultCollector_matches;
@@ -95,9 +93,10 @@ public final class CSearchMessages extends NLS {
 	public static String PDOMSearchTreeContentProvider_IndexerNotEnabledWarning;
 	public static String PDOMSearchTreeContentProvider_ProjectClosedWarning;
 	public static String PDOMSearchUnresolvedIncludesQuery_title;
+	public static String CSearchProviderManager_InvalidSearchProvider;
 
 	static {
-		NLS.initializeMessages(BUNDLE_NAME, CSearchMessages.class);
+		NLS.initializeMessages(CSearchMessages.class.getName(), CSearchMessages.class);
 	}
 
     private CSearchMessages() {

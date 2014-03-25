@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010 Ericsson and others.
+ * Copyright (c) 2010, 2013 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,17 +10,17 @@
  *******************************************************************************/
 package org.eclipse.cdt.tests.dsf.gdb.tests;
 
+import static org.junit.Assert.assertEquals;
+
 import java.util.HashMap;
 import java.util.Map;
-
-import junit.framework.TestCase;
 
 import org.eclipse.cdt.dsf.gdb.launching.LaunchUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-public class LaunchUtilsTest extends TestCase {
+public class LaunchUtilsTest {
 	
     @Before
     public void init() {
@@ -31,7 +31,7 @@ public class LaunchUtilsTest extends TestCase {
     }
 	
     @Test
-	public void testGetGDBVersionFromText() {
+	public void tesetGDBVersionFromText() {
     	Map<String, String> versions = new HashMap<String, String>(10);
 
     	versions.put("GNU gdb 6.8.50.20080730", "6.8.50.20080730");
@@ -42,7 +42,8 @@ public class LaunchUtilsTest extends TestCase {
     	versions.put("GNU gdb 7.0", "7.0");
     	versions.put("GNU gdb Fedora (6.8-27.el5)", "6.8");
     	versions.put("GNU gdb Red Hat Linux (6.3.0.0-1.162.el4rh)", "6.3.0.0");
-    	
+    	versions.put("GNU gdb (GDB) STMicroelectronics/Linux Base 7.4-71 [build Mar  1 2013]", "7.4");
+
     	for (String key : versions.keySet()) {
     		assertEquals("From \"" + key + "\"", versions.get(key), LaunchUtils.getGDBVersionFromText(key));
     	}

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2012 IBM Corporation and others.
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -19,7 +19,6 @@ import java.util.List;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.TextUtilities;
 import org.eclipse.jface.text.contentassist.ContentAssistant;
@@ -30,7 +29,6 @@ import org.eclipse.jface.text.templates.TemplateProposal;
 import org.eclipse.ui.texteditor.AbstractTextEditor;
 import org.eclipse.ui.texteditor.ITextEditor;
 
-import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.IPDOMManager;
 import org.eclipse.cdt.core.model.ICProject;
 import org.eclipse.cdt.core.testplugin.CProjectHelper;
@@ -47,7 +45,6 @@ import org.eclipse.cdt.internal.ui.text.contentassist.CContentAssistProcessor;
 import org.eclipse.cdt.internal.ui.text.contentassist.RelevanceConstants;
 
 public abstract class AbstractContentAssistTest extends BaseUITestCase {
-
 	public static final int COMPARE_ID_STRINGS = 0;
 	public static final int COMPARE_DISP_STRINGS = 1;
 	public static final int COMPARE_REP_STRINGS = 2;
@@ -55,7 +52,7 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 	protected ICProject fCProject;
 	private IFile fCFile;
 	protected ITextEditor fEditor;
-	private boolean fIsCpp;
+	private final boolean fIsCpp;
 
 	public AbstractContentAssistTest(String name, boolean isCpp) {
 		super(name);
@@ -67,13 +64,12 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 		super.setUp();
 		if (fIsCpp) {
 			fCProject= CProjectHelper.createCCProject(getName(), "unused", IPDOMManager.ID_FAST_INDEXER);
-		}
-		else {
+		} else {
 			fCProject= CProjectHelper.createCProject(getName(), "unused", IPDOMManager.ID_FAST_INDEXER);
 		}
 		fCFile= setUpProjectContent(fCProject.getProject());
 		assertNotNull(fCFile);
-		CCorePlugin.getIndexManager().joinIndexer(8000, new NullProgressMonitor());
+		waitForIndexer(fCProject);
 		fEditor= (ITextEditor)EditorTestHelper.openInEditor(fCFile, true);
 		assertNotNull(fEditor);
 		CPPASTNameBase.sAllowNameComputation= true;
@@ -98,8 +94,8 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 		fCFile= null;
 		super.tearDown();
 	}
-	
-	protected void assertContentAssistResults(int offset, int length, String[] expected, boolean isCompletion, boolean isTemplate, int compareType) throws Exception {
+
+	protected void assertContentAssistResults(int offset, int length, String[] expected, boolean isCompletion, boolean isTemplate, boolean filterResults, int compareType) throws Exception {
 		if (CTestPlugin.getDefault().isDebugging())  {
 			System.out.println("\n\n\n\n\nTesting "+this.getClass().getName());
 		}
@@ -118,10 +114,12 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 		long endTime= System.currentTimeMillis();
 		assertTrue(results != null);
 
-		if(isTemplate) {
-			results= filterResultsKeepTemplates(results);
-		} else {
-			results= filterResults(results, isCode);
+		if (filterResults) {
+			if (isTemplate) {
+				results= filterResultsKeepTemplates(results);
+			} else {
+				results= filterResults(results, isCode);
+			}
 		}
 		String[] resultStrings= toStringArray(results, compareType);
 		Arrays.sort(expected);
@@ -129,30 +127,28 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 
 		if (CTestPlugin.getDefault().isDebugging())  {
 			System.out.println("Time (ms): " + (endTime-startTime));
-			for (int i = 0; i < resultStrings.length; i++) {
-				String proposal = resultStrings[i];
+			for (String proposal : resultStrings) {
 				System.out.println("Result: " + proposal);
 			}
 		}
 
-		boolean allFound = true ;  // for the time being, let's be optimistic
+		boolean allFound = true;  // for the time being, let's be optimistic
 
-		for (int i = 0; i< expected.length; i++){
+		for (String element : expected) {
 			boolean found = false;
-			for(int j = 0; j< resultStrings.length; j++){
-				String proposal = resultStrings[j];
-				if(expected[i].equals(proposal)){
+			for (String proposal : resultStrings) {
+				if(element.equals(proposal)){
 					found = true;
 					if (CTestPlugin.getDefault().isDebugging())  {
-						System.out.println("Lookup success for " + expected[i]);
+						System.out.println("Lookup success for " + element);
 					}
 					break;
 				}
 			}
 			if (!found)  {
-				allFound = false ;
+				allFound = false;
 				if (CTestPlugin.getDefault().isDebugging())  {
-					System.out.println( "Lookup failed for " + expected[i]); //$NON-NLS-1$
+					System.out.println( "Lookup failed for " + element); //$NON-NLS-1$
 				}
 			}
 		}
@@ -162,7 +158,10 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 		} else if (doCheckExtraResults())  {
 			assertEquals("Extra results!", toString(expected), toString(resultStrings));
 		}
-
+	}
+	
+	protected void assertContentAssistResults(int offset, int length, String[] expected, boolean isCompletion, boolean isTemplate, int compareType) throws Exception {
+		assertContentAssistResults(offset, length, expected, isCompletion, isTemplate, true, compareType);
 	}
 
 	protected void assertContentAssistResults(int offset, String[] expected, boolean isCompletion, int compareType) throws Exception {
@@ -177,8 +176,7 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 	 */
 	private Object[] filterResults(Object[] results, boolean isCodeCompletion) {
 		List<Object> filtered= new ArrayList<Object>();
-		for (int i = 0; i < results.length; i++) {
-			Object result = results[i];
+		for (Object result : results) {
 			if (result instanceof TemplateProposal) {
 				continue;
 			}
@@ -206,8 +204,7 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 	 */
 	private Object[] filterResultsKeepTemplates(Object[] results) {
 		List<Object> filtered= new ArrayList<Object>();
-		for (int i = 0; i < results.length; i++) {
-			Object result = results[i];
+		for (Object result : results) {
 			if (result instanceof TemplateProposal) {
 				filtered.add(result);
 			}
@@ -248,8 +245,8 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 	
 	private String toString(String[] strings) {
 		StringBuffer buf= new StringBuffer();
-		for(int i=0; i< strings.length; i++){
-			buf.append(strings[i]).append('\n');
+		for (String string : strings) {
+			buf.append(string).append('\n');
 		}
 		return buf.toString();
 	}
@@ -258,7 +255,7 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 	 * Override to relax checking of extra results
 	 */
 	protected boolean doCheckExtraResults() {
-		return true ;
+		return true;
 	}
 
 	/**
@@ -274,5 +271,4 @@ public abstract class AbstractContentAssistTest extends BaseUITestCase {
 	protected IDocument getDocument() {
 		return EditorTestHelper.getDocument(fEditor);
 	}
-
 }

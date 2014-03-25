@@ -12,6 +12,7 @@
  *     Anton Leherbauer (Wind River Systems)
  *     oyvind.harboe@zylin.com - http://bugs.eclipse.org/250638
  *     Jens Elmenthaler - http://bugs.eclipse.org/173458 (camel case completion)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.core;
 
@@ -26,6 +27,7 @@ import java.util.ResourceBundle;
 import org.eclipse.cdt.core.cdtvariables.ICdtVariableManager;
 import org.eclipse.cdt.core.cdtvariables.IUserVarSupplier;
 import org.eclipse.cdt.core.dom.IPDOMManager;
+import org.eclipse.cdt.core.dom.ast.tag.ITagService;
 import org.eclipse.cdt.core.envvar.IEnvironmentVariableManager;
 import org.eclipse.cdt.core.index.IIndexManager;
 import org.eclipse.cdt.core.language.settings.providers.ScannerDiscoveryLegacySupport;
@@ -50,6 +52,7 @@ import org.eclipse.cdt.internal.core.ICConsole;
 import org.eclipse.cdt.internal.core.PositionTrackerManager;
 import org.eclipse.cdt.internal.core.cdtvariables.CdtVariableManager;
 import org.eclipse.cdt.internal.core.cdtvariables.UserVarSupplier;
+import org.eclipse.cdt.internal.core.dom.ast.tag.TagService;
 import org.eclipse.cdt.internal.core.envvar.EnvironmentVariableManager;
 import org.eclipse.cdt.internal.core.language.settings.providers.LanguageSettingsScannerInfoProvider;
 import org.eclipse.cdt.internal.core.model.CModelManager;
@@ -89,13 +92,13 @@ import org.osgi.framework.BundleContext;
 import com.ibm.icu.text.MessageFormat;
 
 /**
- * CCorePlugin is the life-cycle owner of the core plug-in, and starting point for access to many core APIs.
+ * CCorePlugin is the life-cycle owner of the core plug-in, and starting point for access to many
+ * core APIs.
  *
  * @noextend This class is not intended to be subclassed by clients.
  * @noinstantiate This class is not intended to be instantiated by clients.
  */
 public class CCorePlugin extends Plugin {
-
 	public static final int STATUS_CDTPROJECT_EXISTS = 1;
 	public static final int STATUS_CDTPROJECT_MISMATCH = 2;
 	public static final int CDT_PROJECT_NATURE_ID_MISMATCH = 3;
@@ -207,13 +210,15 @@ public class CCorePlugin extends Plugin {
 	/**
 	 * @noreference This field is not intended to be referenced by clients.
 	 */
-	public CDTLogWriter cdtLog = null;
+	public CDTLogWriter cdtLog;
 
 	private volatile CProjectDescriptionManager fNewCProjectDescriptionManager;
 
 	private CoreModel fCoreModel;
 
 	private PDOMManager pdomManager;
+
+	private ITagService tagService = new TagService();
 
 	private CdtVarPathEntryVariableManager fPathEntryVariableManager;
 
@@ -298,7 +303,6 @@ public class CCorePlugin extends Plugin {
 	public static CCorePlugin getDefault() {
 		return fgCPlugin;
 	}
-
 
 	/**
 	 * @see Plugin#shutdown
@@ -403,7 +407,7 @@ public class CCorePlugin extends Plugin {
         HashSet<String> optionNames = CModelManager.OptionNames;
 
         // get preferences set to their default
-        for (String propertyName : preferences.defaultPropertyNames()){
+        for (String propertyName : preferences.defaultPropertyNames()) {
             if (optionNames.contains(propertyName))
                 defaultOptions.put(propertyName, preferences.getDefaultString(propertyName));
         }
@@ -431,10 +435,10 @@ public class CCorePlugin extends Plugin {
      */
     public static String getOption(String optionName) {
 
-        if (CORE_ENCODING.equals(optionName)){
+        if (CORE_ENCODING.equals(optionName)) {
             return ResourcesPlugin.getEncoding();
         }
-        if (CModelManager.OptionNames.contains(optionName)){
+        if (CModelManager.OptionNames.contains(optionName)) {
             Preferences preferences = getDefault().getPluginPreferences();
             return preferences.getString(optionName).trim();
         }
@@ -462,14 +466,14 @@ public class CCorePlugin extends Plugin {
             HashSet<String> optionNames = CModelManager.OptionNames;
 
             // get preferences set to their default
-            for (String propertyName : preferences.defaultPropertyNames()){
-                if (optionNames.contains(propertyName)){
+            for (String propertyName : preferences.defaultPropertyNames()) {
+                if (optionNames.contains(propertyName)) {
                     options.put(propertyName, preferences.getDefaultString(propertyName));
                 }
             }
             // get preferences not set to their default
-            for (String propertyName : preferences.propertyNames()){
-                if (optionNames.contains(propertyName)){
+            for (String propertyName : preferences.propertyNames()) {
+                if (optionNames.contains(propertyName)) {
                     options.put(propertyName, preferences.getString(propertyName).trim());
                 }
             }
@@ -496,10 +500,10 @@ public class CCorePlugin extends Plugin {
         // see #initializeDefaultPluginPreferences() for changing default settings
         Preferences preferences = getDefault().getPluginPreferences();
 
-        if (newOptions == null){
+        if (newOptions == null) {
             newOptions = getDefaultOptions();
         }
-        for (String key : newOptions.keySet()){
+        for (String key : newOptions.keySet()) {
             if (!CModelManager.OptionNames.contains(key)) continue; // unrecognized option
             if (key.equals(CORE_ENCODING)) continue; // skipped, contributed by resource prefs
             String value = newOptions.get(key);
@@ -509,7 +513,6 @@ public class CCorePlugin extends Plugin {
         // persist options
         getDefault().savePluginPreferences();
     }
-
 
 	/**
 	 * Create CDT console adapter for build console defined as an extension.
@@ -716,6 +719,13 @@ public class CCorePlugin extends Plugin {
 		return getDefault().pdomManager;
 	}
 
+	/**
+	 * @since 5.5
+	 */
+	public static ITagService getTagService() {
+		return getDefault().tagService;
+	}
+
 	public IPathEntryVariableManager getPathEntryVariableManager() {
 		return fPathEntryVariableManager;
 	}
@@ -833,61 +843,61 @@ public class CCorePlugin extends Plugin {
 			final IProject projectHandle,
 			final String bsId,
 			IProgressMonitor monitor)
-			throws CoreException, OperationCanceledException {
+					throws CoreException, OperationCanceledException {
 
-			getWorkspace().run(new IWorkspaceRunnable() {
-				@Override
-				public void run(IProgressMonitor monitor) throws CoreException {
-					try {
-						if (monitor == null) {
-							monitor = new NullProgressMonitor();
-						}
-						monitor.beginTask("Creating C Project...", 3); //$NON-NLS-1$
-						if (!projectHandle.exists()) {
-							projectHandle.create(description, new SubProgressMonitor(monitor, 1));
-						}
-
-						if (monitor.isCanceled()) {
-							throw new OperationCanceledException();
-						}
-
-						// Open first.
-						projectHandle.open(IResource.BACKGROUND_REFRESH, new SubProgressMonitor(monitor, 1));
-
-//						mapCProjectOwner(projectHandle, projectID, false);
-
-						// Add C Nature ... does not add duplicates
-						CProjectNature.addCNature(projectHandle, new SubProgressMonitor(monitor, 1));
-
-						if(bsId != null){
-							ICProjectDescription projDes = createProjectDescription(projectHandle, true);
-							ICConfigurationDescription cfgs[] = projDes.getConfigurations();
-							ICConfigurationDescription cfg = null;
-							for (ICConfigurationDescription cfg2 : cfgs) {
-								if(bsId.equals(cfg2.getBuildSystemId())){
-									cfg = cfg2;
-									break;
-								}
-							}
-
-							if(cfg == null){
-								ICConfigurationDescription prefCfg = getPreferenceConfiguration(bsId);
-								if(prefCfg != null){
-									cfg = projDes.createConfiguration(CDataUtil.genId(prefCfg.getId()), prefCfg.getName(), prefCfg);
-								}
-							}
-
-							if(cfg != null){
-								setProjectDescription(projectHandle, projDes);
-							}
-						}
-					} finally {
-						monitor.done();
+		getWorkspace().run(new IWorkspaceRunnable() {
+			@Override
+			public void run(IProgressMonitor monitor) throws CoreException {
+				try {
+					if (monitor == null) {
+						monitor = new NullProgressMonitor();
 					}
+					monitor.beginTask("Creating C Project...", 3); //$NON-NLS-1$
+					if (!projectHandle.exists()) {
+						projectHandle.create(description, new SubProgressMonitor(monitor, 1));
+					}
+
+					if (monitor.isCanceled()) {
+						throw new OperationCanceledException();
+					}
+
+					// Open first.
+					projectHandle.open(IResource.BACKGROUND_REFRESH, new SubProgressMonitor(monitor, 1));
+
+					//						mapCProjectOwner(projectHandle, projectID, false);
+
+					// Add C Nature ... does not add duplicates
+					CProjectNature.addCNature(projectHandle, new SubProgressMonitor(monitor, 1));
+
+					if (bsId != null) {
+						ICProjectDescription projDes = createProjectDescription(projectHandle, true);
+						ICConfigurationDescription cfgs[] = projDes.getConfigurations();
+						ICConfigurationDescription cfg = null;
+						for (ICConfigurationDescription cfg2 : cfgs) {
+							if (bsId.equals(cfg2.getBuildSystemId())) {
+								cfg = cfg2;
+								break;
+							}
+						}
+
+						if (cfg == null) {
+							ICConfigurationDescription prefCfg = getPreferenceConfiguration(bsId);
+							if (prefCfg != null) {
+								cfg = projDes.createConfiguration(CDataUtil.genId(prefCfg.getId()), prefCfg.getName(), prefCfg);
+							}
+						}
+
+						if (cfg != null) {
+							setProjectDescription(projectHandle, projDes);
+						}
+					}
+				} finally {
+					monitor.done();
 				}
-			}, getWorkspace().getRoot(), 0, monitor);
-			return projectHandle;
-		}
+			}
+		}, getWorkspace().getRoot(), 0, monitor);
+		return projectHandle;
+	}
 
 	/**
 	 * Method convertProjectFromCtoCC converts
@@ -899,7 +909,6 @@ public class CCorePlugin extends Plugin {
 	 * @param monitor
 	 * @throws CoreException
 	 */
-
 	public void convertProjectFromCtoCC(IProject projectHandle, IProgressMonitor monitor) throws CoreException {
 		if ((projectHandle != null)
 			&& projectHandle.hasNature(CProjectNature.C_NATURE_ID)
@@ -974,7 +983,7 @@ public class CCorePlugin extends Plugin {
 				for (IConfigurationElement configElement : configElements) {
 					if (configElement.getName().equals("processList")) { //$NON-NLS-1$
 						String platform = configElement.getAttribute("platform"); //$NON-NLS-1$
-						if (platform == null ) { // first contributor found with not platform will be default.
+						if (platform == null) { // first contributor found with not platform will be default.
 							if (defaultContributor == null) {
 								defaultContributor = configElement;
 							}
@@ -985,12 +994,11 @@ public class CCorePlugin extends Plugin {
 					}
 				}
 			}
-			if ( defaultContributor != null) {
+			if (defaultContributor != null) {
 				return (IProcessList) defaultContributor.createExecutableExtension("class"); //$NON-NLS-1$
 			}
 		}
 		return null;
-
 	}
 
 	/**
@@ -1024,7 +1032,7 @@ public class CCorePlugin extends Plugin {
 		try {
 			// Look up in session property for previously created provider
 			QualifiedName scannerInfoProviderName = new QualifiedName(PLUGIN_ID, SCANNER_INFO_PROVIDER2_NAME);
-			provider = (IScannerInfoProvider)project.getSessionProperty(scannerInfoProviderName);
+			provider = (IScannerInfoProvider) project.getSessionProperty(scannerInfoProviderName);
 			if (provider != null)
 				return provider;
 
@@ -1050,6 +1058,23 @@ public class CCorePlugin extends Plugin {
  		}
 
 		return provider;
+	}
+
+	/**
+	 * Clears cached scanner info provider for the given project so that the next call to
+	 * {@link #getScannerInfoProvider(IProject)} would return an up to date scanner info provider.
+	 *
+	 * @noreference This method is not intended to be referenced by clients.
+	 */
+	public void resetCachedScannerInfoProvider(IProject project) {
+		try {
+			QualifiedName scannerInfoProviderName = new QualifiedName(PLUGIN_ID, SCANNER_INFO_PROVIDER2_NAME);
+			project.setSessionProperty(scannerInfoProviderName, null);
+		} catch (CoreException e) {
+			if (project.isOpen()) {
+				log(e);
+			}
+		}
 	}
 
 	/**
@@ -1117,40 +1142,35 @@ public class CCorePlugin extends Plugin {
 		CContentTypes.setUseProjectSpecificContentTypes(project, val);
 	}
 
-
-
 	private static final String MODEL = CCorePlugin.PLUGIN_ID + "/debug/model" ; //$NON-NLS-1$
 	private static final String PARSER = CCorePlugin.PLUGIN_ID + "/debug/parser" ; //$NON-NLS-1$
 	private static final String PARSER_EXCEPTIONS = CCorePlugin.PLUGIN_ID + "/debug/parser/exceptions" ; //$NON-NLS-1$
 	private static final String SCANNER = CCorePlugin.PLUGIN_ID + "/debug/scanner"; //$NON-NLS-1$
 	private static final String DELTA = CCorePlugin.PLUGIN_ID + "/debug/deltaprocessor" ; //$NON-NLS-1$
-	//private static final String CONTENTASSIST = CCorePlugin.PLUGIN_ID + "/debug/contentassist" ; //$NON-NLS-1$
 
 	/**
 	 * Configure the plug-in with respect to option settings defined in ".options" file
 	 */
 	public void configurePluginDebugOptions() {
-
-		if(CCorePlugin.getDefault().isDebugging()) {
+		if (CCorePlugin.getDefault().isDebugging()) {
 			String option = Platform.getDebugOption(PARSER);
-			if(option != null) Util.VERBOSE_PARSER = option.equalsIgnoreCase("true") ; //$NON-NLS-1$
+			if (option != null) Util.VERBOSE_PARSER = option.equalsIgnoreCase("true") ; //$NON-NLS-1$
 
 			option = Platform.getDebugOption(PARSER_EXCEPTIONS);
-			if( option != null ) Util.PARSER_EXCEPTIONS = option.equalsIgnoreCase("true"); //$NON-NLS-1$
+			if (option != null) Util.PARSER_EXCEPTIONS = option.equalsIgnoreCase("true"); //$NON-NLS-1$
 
 			option = Platform.getDebugOption(SCANNER);
-			if( option != null ) Util.VERBOSE_SCANNER = option.equalsIgnoreCase("true"); //$NON-NLS-1$
+			if (option != null) Util.VERBOSE_SCANNER = option.equalsIgnoreCase("true"); //$NON-NLS-1$
 
 			option = Platform.getDebugOption(MODEL);
-			if(option != null) Util.VERBOSE_MODEL = option.equalsIgnoreCase("true") ; //$NON-NLS-1$
+			if (option != null) Util.VERBOSE_MODEL = option.equalsIgnoreCase("true") ; //$NON-NLS-1$
 
 			option = Platform.getDebugOption(DELTA);
-			if(option != null) Util.VERBOSE_DELTA= option.equalsIgnoreCase("true") ; //$NON-NLS-1$
-
+			if (option != null) Util.VERBOSE_DELTA= option.equalsIgnoreCase("true") ; //$NON-NLS-1$
 		}
 	}
 
-	// Preference to turn on/off the use of structural parse mode to build the CModel
+	// Preference to turn on/off the use of structural parse mode to build the CModel.
 	public void setStructuralParseMode(boolean useNewParser) {
 		getPluginPreferences().setValue(PREF_USE_STRUCTURAL_PARSE_MODE, useNewParser);
 		savePluginPreferences();
@@ -1168,11 +1188,11 @@ public class CCorePlugin extends Plugin {
 	    return org.eclipse.cdt.core.dom.CDOM.getInstance();
 	}
 
-	public ICdtVariableManager getCdtVariableManager(){
+	public ICdtVariableManager getCdtVariableManager() {
 		return CdtVariableManager.getDefault();
 	}
 
-	public IEnvironmentVariableManager getBuildEnvironmentManager(){
+	public IEnvironmentVariableManager getBuildEnvironmentManager() {
 		return EnvironmentVariableManager.getDefault();
 	}
 
@@ -1230,7 +1250,7 @@ public class CCorePlugin extends Plugin {
 	 *
 	 * @see #getProjectDescription(IProject, boolean)
 	 */
-	public ICProjectDescription getProjectDescription(IProject project){
+	public ICProjectDescription getProjectDescription(IProject project) {
 		return fNewCProjectDescriptionManager.getProjectDescription(project);
 	}
 
@@ -1281,7 +1301,7 @@ public class CCorePlugin extends Plugin {
 	 * @return {@link ICProjectDescription} or null if the project does not contain the
 	 * CDT data associated with it.
 	 */
-	public ICProjectDescription getProjectDescription(IProject project, boolean write){
+	public ICProjectDescription getProjectDescription(IProject project, boolean write) {
 		return fNewCProjectDescriptionManager.getProjectDescription(project, write);
 	}
 
@@ -1301,18 +1321,18 @@ public class CCorePlugin extends Plugin {
 	/**
 	 * Answers whether the given project is a new-style project, i.e. CConfigurationDataProvider-driven
 	 */
-	public boolean isNewStyleProject(IProject project){
+	public boolean isNewStyleProject(IProject project) {
 		return fNewCProjectDescriptionManager.isNewStyleProject(project);
 	}
 
 	/**
 	 * Answers whether the given project is a new-style project, i.e. CConfigurationDataProvider-driven
 	 */
-	public boolean isNewStyleProject(ICProjectDescription des){
+	public boolean isNewStyleProject(ICProjectDescription des) {
 		return fNewCProjectDescriptionManager.isNewStyleProject(des);
 	}
 
-	public ICProjectDescriptionManager getProjectDescriptionManager(){
+	public ICProjectDescriptionManager getProjectDescriptionManager() {
 		return fNewCProjectDescriptionManager;
 	}
 
@@ -1340,6 +1360,34 @@ public class CCorePlugin extends Plugin {
 		log(createStatus(e));
 	}
 
+	/**
+	 * Print a message in the log
+	 * 
+	 * @param severity - desired severity of the message in the log,
+	 *    one of {@link IStatus#INFO}, {@link IStatus#WARNING} or {@link IStatus#ERROR}
+	 * @param msg - message
+	 * 
+	 * @since 5.5
+	 * @noreference This method is not intended to be referenced by clients.
+	 */
+	public static void log(int severity, String msg) {
+		log(new Status(severity, PLUGIN_ID, msg));
+	}
+	
+	/**
+	 * Print a message in the log accompanied by stack trace
+	 * 
+	 * @param severity - desired severity of the message in the log,
+	 *    one of {@link IStatus#INFO}, {@link IStatus#WARNING} or {@link IStatus#ERROR}
+	 * @param msg - message
+	 * 
+	 * @since 5.5
+	 * @noreference This method is not intended to be referenced by clients.
+	 */
+	public static void logStackTrace(int severity, String msg) {
+		log(new Status(severity, PLUGIN_ID, msg, new Exception()));
+	}
+	
 	/**
 	 * @noreference This method is not intended to be referenced by clients.
 	 */

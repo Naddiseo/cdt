@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012 Tilera Corporation and others.
+ * Copyright (c) 2012, 2013 Tilera Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,6 +7,8 @@
  *
  * Contributors:
  *     William R. Swanson (Tilera Corporation) - initial API and implementation
+ *     Marc Dumais (Ericsson) - Bug 405390
+ *     Marc Dumais (Ericsson) - Bug 407321
  *******************************************************************************/
 
 package org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model;
@@ -38,20 +40,30 @@ public class VisualizerModel
 	/** Completion state tracker. */
 	protected Todo m_todo;
 	
+	/** Completion state tracker for load meters. */
+	protected Todo m_loadTodo;
+	
 	// Setting to remove exited threads, or keep them shown.
 	// If we are to support this, we should have a preference
 	// and a way to for the user to clean up old threads,
 	// or maybe a timeout to remove them.
 	private boolean m_keepExitedThreads = false;
 	
+	protected boolean m_loadMetersEnabled = false;
+	
+	/** data source corresponding to this model  */
+	protected String m_sessionId = null;
+	
 	// --- constructors/destructors ---
 	
 	/** Constructor */
-	public VisualizerModel() {
+	public VisualizerModel(String sessionId) {
+		m_sessionId = sessionId;
 		m_cpus = new ArrayList<VisualizerCPU>();
 		m_cpuMap = new Hashtable<Integer, VisualizerCPU>();
 		m_threads = new ArrayList<VisualizerThread>();
 		m_todo = new Todo();
+		m_loadTodo = new Todo();
 	}
 	
 	/** Dispose method */
@@ -76,6 +88,11 @@ public class VisualizerModel
 			m_todo.dispose();
 			m_todo = null;
 		}
+		if (m_loadTodo != null) {
+			m_loadTodo.dispose();
+			m_loadTodo = null;
+		}
+		m_sessionId = null;
 	}
 	
 	
@@ -86,6 +103,24 @@ public class VisualizerModel
 		return m_todo;
 	}
 	
+	/** Gets completion state tracker. */
+	public Todo getLoadTodo() {
+		return m_loadTodo;
+	}
+	
+	public void setLoadMetersEnabled (boolean enable) {
+		m_loadMetersEnabled = enable;
+	}
+	
+	public boolean getLoadMetersEnabled () {
+		return m_loadMetersEnabled;
+	}
+	
+	/**	Gets the unique id for the source this model was build from */
+	public String getSessionId() {
+		return m_sessionId;
+	}
+		
 	// --- methods ---
 	
 	/** Sorts cores, cpus, etc. by IDs. */
@@ -101,6 +136,21 @@ public class VisualizerModel
 	/** Gets number of CPUs. */
 	public int getCPUCount() {
 		return m_cpus.size();
+	}
+	
+	/** Gets number of cores. */
+	public int getCoreCount() {
+		int count = 0;
+		
+		for(VisualizerCPU cpu : m_cpus) {
+			count += cpu.getCoreCount();
+		}
+		return count;
+	}
+	
+	/** Gets number of threads. */
+	public int getThreadCount () {
+		return m_threads.size();
 	}
 	
 	/** Gets CPU with specified ID. */

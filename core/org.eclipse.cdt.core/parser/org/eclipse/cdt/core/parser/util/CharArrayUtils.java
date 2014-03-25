@@ -75,6 +75,21 @@ public class CharArrayUtils {
 	}
 
 	/**
+	 * Returns {@code true} if the contents of a section of a character array are the same as
+	 * contents of a string.
+	 * @since 5.5
+	 */
+	public static final boolean equals(char[] str1, int start1, int length1, String str2) {
+		if (length1 != str2.length() || str1.length < length1 + start1)
+			return false;
+		for (int i = 0; i < length1; ++i) {
+			if (str1[start1++] != str2.charAt(i))
+				return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Returns {@code true} if a prefix of the character array is the same as contents
 	 * of a string.
 	 * @since 5.4
@@ -117,6 +132,10 @@ public class CharArrayUtils {
 		return str1.length - str2.length;
 	}
 
+	/**
+	 * Returns {@code true} if the contents of a section of a character array are the same as
+	 * contents of another character array.
+	 */
 	public static final boolean equals(char[] str1, int start1, int length1, char[] str2) {
 		if (length1 != str2.length || str1.length < length1 + start1)
 			return false;
@@ -329,7 +348,7 @@ public class CharArrayUtils {
     }
 
     /**
-     * Find an array of chars in an array of arrays of chars.
+     * Finds an array of chars in an array of arrays of chars.
      * @return offset where the array was found or <code>-1</code>
      */
     public static int indexOf(final char[] searchFor, final char[][] searchIn) {
@@ -340,4 +359,15 @@ public class CharArrayUtils {
 		}
 		return -1;
     }
+
+    /**
+     * Converts a {@link StringBuilder} to a character array.
+     * @since 5.5
+     */
+	public static char[] extractChars(StringBuilder buf) {
+		final int len = buf.length();
+		char[] result= new char[len];
+		buf.getChars(0, len, result, 0);
+		return result;
+	}
 }

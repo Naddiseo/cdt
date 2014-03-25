@@ -7,30 +7,62 @@
  *
  * Contributors:
  *     Markus Schorn - initial API and implementation
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp.semantics;
 
 import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.LVALUE;
 import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.PRVALUE;
-import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.*;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_alignof;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_has_nothrow_constructor;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_has_nothrow_copy;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_has_trivial_assign;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_has_trivial_constructor;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_has_trivial_copy;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_has_trivial_destructor;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_has_virtual_destructor;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_abstract;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_class;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_empty;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_enum;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_final;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_literal_type;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_pod;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_polymorphic;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_standard_layout;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_trivial;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_is_union;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_sizeof;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_sizeofParameterPack;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_typeid;
+import static org.eclipse.cdt.core.dom.ast.IASTTypeIdExpression.op_typeof;
 
 import org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
+import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.IValue;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassSpecialization;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameterMap;
 import org.eclipse.cdt.internal.core.dom.parser.ISerializableEvaluation;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeMarshalBuffer;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemType;
 import org.eclipse.cdt.internal.core.dom.parser.Value;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPBasicType;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPEvaluation;
 import org.eclipse.core.runtime.CoreException;
 
-public class EvalUnaryTypeID extends CPPEvaluation {
+public class EvalUnaryTypeID extends CPPDependentEvaluation {
 	private final int fOperator;
 	private final IType fOrigType;
 	private IType fType;
 
-	public EvalUnaryTypeID(int operator, IType type) {
+	public EvalUnaryTypeID(int operator, IType type, IASTNode pointOfDefinition) {
+		this(operator, type, findEnclosingTemplate(pointOfDefinition));
+	}
+
+	public EvalUnaryTypeID(int operator, IType type, IBinding templateDefinition) {
+		super(templateDefinition);
 		fOperator= operator;
 		fOrigType= type;
 	}
@@ -63,6 +95,8 @@ public class EvalUnaryTypeID extends CPPEvaluation {
 	@Override
 	public boolean isValueDependent() {
 		switch (fOperator) {
+		case op_sizeofParameterPack:
+			return true;
 		case op_sizeof:
 		case op_alignof:
 		case op_has_nothrow_copy:
@@ -76,8 +110,12 @@ public class EvalUnaryTypeID extends CPPEvaluation {
 		case op_is_class:
 		case op_is_empty:
 		case op_is_enum:
+		case op_is_final:
+		case op_is_literal_type:
 		case op_is_pod:
 		case op_is_polymorphic:
+		case op_is_standard_layout:
+		case op_is_trivial:
 		case op_is_union:
 			return CPPTemplates.isDependentType(fOrigType);
 
@@ -86,6 +124,11 @@ public class EvalUnaryTypeID extends CPPEvaluation {
 			return false;
 		}
 		return false;
+	}
+
+	@Override
+	public boolean isConstantExpression(IASTNode point) {
+		return true;
 	}
 
 	@Override
@@ -98,6 +141,7 @@ public class EvalUnaryTypeID extends CPPEvaluation {
 	private IType computeType(IASTNode point) {
 		switch (fOperator) {
 		case op_sizeof:
+		case op_sizeofParameterPack:
 		case op_alignof:
 			return CPPVisitor.get_SIZE_T(point);
 		case op_typeid:
@@ -113,8 +157,12 @@ public class EvalUnaryTypeID extends CPPEvaluation {
 		case op_is_class:
 		case op_is_empty:
 		case op_is_enum:
+		case op_is_final:
+		case op_is_literal_type:
 		case op_is_pod:
 		case op_is_polymorphic:
+		case op_is_standard_layout:
+		case op_is_trivial:
 		case op_is_union:
 			return CPPBasicType.BOOLEAN;
 		case op_typeof:
@@ -127,7 +175,10 @@ public class EvalUnaryTypeID extends CPPEvaluation {
 
 	@Override
 	public IValue getValue(IASTNode point) {
-		return Value.create(this, point);
+		if (isValueDependent())
+			return Value.create(this);
+
+		return Value.evaluateUnaryTypeIdExpression(fOperator, fOrigType, point);
 	}
 
 	@Override
@@ -137,14 +188,49 @@ public class EvalUnaryTypeID extends CPPEvaluation {
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer, boolean includeValue) throws CoreException {
-		buffer.putByte(ITypeMarshalBuffer.EVAL_UNARY_TYPE_ID);
+		buffer.putShort(ITypeMarshalBuffer.EVAL_UNARY_TYPE_ID);
 		buffer.putByte((byte) fOperator);
-		buffer.marshalType(fType);
+		buffer.marshalType(fOrigType);
+		marshalTemplateDefinition(buffer);
 	}
 
-	public static ISerializableEvaluation unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
+	public static ISerializableEvaluation unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
 		int op= buffer.getByte();
 		IType arg= buffer.unmarshalType();
-		return new EvalUnaryTypeID(op, arg);
+		IBinding templateDefinition= buffer.unmarshalBinding();
+		return new EvalUnaryTypeID(op, arg, templateDefinition);
+	}
+
+	@Override
+	public ICPPEvaluation instantiate(ICPPTemplateParameterMap tpMap, int packOffset,
+			ICPPClassSpecialization within, int maxdepth, IASTNode point) {
+		if (fOperator == op_sizeofParameterPack) {
+			int packSize = determinePackSize(tpMap);
+			if (packSize == CPPTemplates.PACK_SIZE_FAIL || packSize == CPPTemplates.PACK_SIZE_NOT_FOUND) {
+				return EvalFixed.INCOMPLETE;
+			} else if (packSize != CPPTemplates.PACK_SIZE_DEFER) {
+				return new EvalFixed(getTypeOrFunctionSet(point), getValueCategory(point), Value.create(packSize));
+			}
+		}
+		IType type = CPPTemplates.instantiateType(fOrigType, tpMap, packOffset, within, point);
+		if (type == fOrigType)
+			return this;
+		return new EvalUnaryTypeID(fOperator, type, getTemplateDefinition());
+	}
+
+	@Override
+	public ICPPEvaluation computeForFunctionCall(CPPFunctionParameterMap parameterMap,
+			int maxdepth, IASTNode point) {
+		return this;
+	}
+
+	@Override
+	public int determinePackSize(ICPPTemplateParameterMap tpMap) {
+		return CPPTemplates.determinePackSize(fOrigType, tpMap);
+	}
+
+	@Override
+	public boolean referencesTemplateParameter() {
+		return false;
 	}
 }

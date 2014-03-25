@@ -14,6 +14,7 @@
  *     Marc Khouzam (Ericsson) - No longer call method to check non-stop for GDB < 7.0 (Bug 365471)
  *     Mathias Kunter - Support for different charsets (bug 370462)
  *     Anton Gorenkov - A preference to use RTTI for variable types determination (Bug 377536)
+ *     Xavier Raynaud (Kalray) - Avoid duplicating fields in sub-classes (add protected accessors)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.launching;
 
@@ -22,9 +23,12 @@ import java.util.Map;
 
 import org.eclipse.cdt.debug.core.CDebugUtils;
 import org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants;
+import org.eclipse.cdt.debug.core.model.IConnectHandler;
+import org.eclipse.cdt.debug.internal.core.DebugStringVariableSubstitutor;
 import org.eclipse.cdt.debug.internal.core.sourcelookup.CSourceLookupDirector;
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.ImmediateDataRequestMonitor;
+import org.eclipse.cdt.dsf.concurrent.ImmediateRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.ReflectionSequence;
 import org.eclipse.cdt.dsf.concurrent.RequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.RequestMonitorWithProgress;
@@ -70,6 +74,24 @@ public class FinalLaunchSequence extends ReflectionSequence {
 		super(session.getExecutor(), rm, LaunchMessages.getString("FinalLaunchSequence.0"), LaunchMessages.getString("FinalLaunchSequence.1"));     //$NON-NLS-1$ //$NON-NLS-2$
 		fSession = session;
 		fAttributes = attributes;
+	}
+
+	/**
+	 * Gets the DsfSession of this launch sequence.
+	 * @return the {@link DsfSession}
+	 * @since 4.3
+	 */
+	protected DsfSession getSession() {
+		return fSession;
+	}
+
+	/**
+	 * Gets the launch configuration attributes, as a {@link Map}.
+	 * @return the launch configuration attributes
+	 * @since 4.3
+	 */
+	protected Map<String, Object> getAttributes() {
+		return fAttributes;
 	}
 
 	@Override
@@ -209,11 +231,25 @@ public class FinalLaunchSequence extends ReflectionSequence {
 					new RequestMonitor(getExecutor(), requestMonitor) {
 						@Override
 						protected void handleCompleted() {
-							fCommandControl.setPrintPythonErrors(false, requestMonitor);
+							fCommandControl.setPrintPythonErrors(false,  new ImmediateRequestMonitor() {
+								@Override
+								protected void handleCompleted() {
+									// Ignore this error
+									// Bug 402988
+									requestMonitor.done();
+								}
+							});
 						}
 					});
 		} else {
-			fCommandControl.setPrintPythonErrors(false, requestMonitor);
+			fCommandControl.setPrintPythonErrors(false, new ImmediateRequestMonitor() {
+				@Override
+				protected void handleCompleted() {
+					// Ignore this error
+					// Bug 402988
+					requestMonitor.done();
+				}
+			});
 		}
 	}
 	
@@ -278,11 +314,14 @@ public class FinalLaunchSequence extends ReflectionSequence {
 	@Execute
 	public void stepSourceGDBInitFile(final RequestMonitor requestMonitor) {
 		try {
-			final String gdbinitFile = fGDBBackend.getGDBInitFile();
+			String gdbinitFile = fGDBBackend.getGDBInitFile();
 
 			if (gdbinitFile != null && gdbinitFile.length() > 0) {
+				String projectName = (String) fAttributes.get(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME);
+				final String expandedGDBInitFile = new DebugStringVariableSubstitutor(projectName).performStringSubstitution(gdbinitFile);
+
 				fCommandControl.queueCommand(
-						fCommandFactory.createCLISource(fCommandControl.getContext(), gdbinitFile), 
+						fCommandFactory.createCLISource(fCommandControl.getContext(), expandedGDBInitFile), 
 						new DataRequestMonitor<MIInfo>(getExecutor(), requestMonitor) {
 							@Override
 							protected void handleCompleted() {
@@ -290,7 +329,7 @@ public class FinalLaunchSequence extends ReflectionSequence {
 								// should not consider this an error.
 								// If it is not the default, then the user must have specified it and
 								// we want to warn the user if we can't find it.
-								if (!gdbinitFile.equals(IGDBLaunchConfigurationConstants.DEBUGGER_GDB_INIT_DEFAULT )) {
+								if (!expandedGDBInitFile.equals(IGDBLaunchConfigurationConstants.DEBUGGER_GDB_INIT_DEFAULT)) {
 									requestMonitor.setStatus(getStatus());
 								}
 								requestMonitor.done();
@@ -520,9 +559,9 @@ public class FinalLaunchSequence extends ReflectionSequence {
 						fProcService.createProcessContext(fCommandControl.getContext(), Integer.toString(pid)),
 						new DataRequestMonitor<IDMContext>(getExecutor(), requestMonitor));
 			} else {
-				IConnect connectCommand = (IConnect)fSession.getModelAdapter(IConnect.class);
-				if (connectCommand != null) {
-					connectCommand.connect(requestMonitor);
+				IConnectHandler connectCommand = (IConnectHandler)fSession.getModelAdapter(IConnectHandler.class);
+				if (connectCommand instanceof IConnect) {
+					((IConnect)connectCommand).connect(requestMonitor);
 				} else {
 					requestMonitor.done();
 				}

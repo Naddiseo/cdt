@@ -15,6 +15,7 @@
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
+import static org.eclipse.cdt.core.dom.ast.cpp.ICPPParameter.EMPTY_CPPPARAMETER_ARRAY;
 import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.CVTYPE;
 import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.REF;
 import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.TDEF;
@@ -42,6 +43,7 @@ import org.eclipse.cdt.core.dom.ast.ISemanticProblem;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTCompositeTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFunctionDeclarator;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNameSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNewExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTParameterDeclaration;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
@@ -69,7 +71,7 @@ import org.eclipse.cdt.internal.core.parser.util.ContentAssistMatcherFactory;
  * Base implementation for c++ scopes.
  */
 public class CPPClassScope extends CPPScope implements ICPPClassScope {
-    private ICPPMethod[] implicits = null;
+    private ICPPMethod[] implicits;
 
 	public CPPClassScope(ICPPASTCompositeTypeSpecifier physicalNode) {
 		super(physicalNode);
@@ -101,7 +103,6 @@ public class CPPClassScope extends CPPScope implements ICPPClassScope {
         }
         char[] className = name.getLookupKey();
 
-        ICPPParameter[] voidPs = new ICPPParameter[] { new CPPParameter(CPPSemantics.VOID_TYPE, 0) };
 		IType pType = new CPPReferenceType(SemanticUtil.constQualify(clsType), false);
 		ICPPParameter[] ps = new ICPPParameter[] { new CPPParameter(pType, 0) };
 
@@ -110,22 +111,21 @@ public class CPPClassScope extends CPPScope implements ICPPClassScope {
 		implicits= new ICPPMethod[ia.getImplicitsToDeclareCount()];
 
 		if (!ia.hasUserDeclaredConstructor()) {
-			//default constructor: A(void)
-			ICPPMethod m = new CPPImplicitConstructor(this, className, voidPs);
+			// Default constructor: A(void)
+			ICPPMethod m = new CPPImplicitConstructor(this, className, EMPTY_CPPPARAMETER_ARRAY);
 			implicits[i++] = m;
 			addBinding(m);
 		}
 
 		if (!ia.hasUserDeclaredCopyConstructor()) {
-			//copy constructor: A(const A &)
-
+			// Copy constructor: A(const A &)
 			ICPPMethod m = new CPPImplicitConstructor(this, className, ps);
 			implicits[i++] = m;
 			addBinding(m);
 		}
 
 		if (!ia.hasUserDeclaredCopyAssignmentOperator()) {
-			//copy assignment operator: A& operator = (const A &)
+			// Copy assignment operator: A& operator = (const A &)
 			IType refType = new CPPReferenceType(clsType, false);
 			ICPPFunctionType ft= CPPVisitor.createImplicitFunctionType(refType, ps, false, false);
 			ICPPMethod m = new CPPImplicitMethod(this, OverloadableOperator.ASSIGN.toCharArray(), ft, ps);
@@ -134,10 +134,10 @@ public class CPPClassScope extends CPPScope implements ICPPClassScope {
 		}
 
 		if (!ia.hasUserDeclaredDestructor()) {
-			//destructor: ~A()
-			ICPPFunctionType ft= CPPVisitor.createImplicitFunctionType(new CPPBasicType(Kind.eUnspecified, 0), voidPs, false, false);
+			// Destructor: ~A()
+			ICPPFunctionType ft= CPPVisitor.createImplicitFunctionType(new CPPBasicType(Kind.eUnspecified, 0), EMPTY_CPPPARAMETER_ARRAY, false, false);
 			char[] dtorName = CharArrayUtils.concat("~".toCharArray(), className);  //$NON-NLS-1$
-			ICPPMethod m = new CPPImplicitMethod(this, dtorName, ft, voidPs);
+			ICPPMethod m = new CPPImplicitMethod(this, dtorName, ft, EMPTY_CPPPARAMETER_ARRAY);
 			implicits[i++] = m;
 			addBinding(m);
 		}
@@ -169,9 +169,22 @@ public class CPPClassScope extends CPPScope implements ICPPClassScope {
 			// Check whether the qualification matches.
 			IBinding b= getClassType();
 			final ICPPASTQualifiedName qname = (ICPPASTQualifiedName) name;
-			final IASTName[] names= qname.getNames();
-			for (int i = names.length - 1; --i >= 0;) {
-				if (b == null || !CharArrayUtils.equals(names[i].getLookupKey(), b.getNameCharArray()))
+			final ICPPASTNameSpecifier[] qualifier = qname.getQualifier();
+			for (int i = qualifier.length; --i >= 0;) {
+				if (b == null)
+					return;
+				
+				char[] segmentName;
+				if (qualifier[i] instanceof IASTName) {
+					segmentName = ((IASTName) qualifier[i]).getLookupKey();
+				} else {
+					IBinding segmentBinding = qualifier[i].resolveBinding();
+					if (segmentBinding == null)
+						return;
+					segmentName = segmentBinding.getNameCharArray();
+				}
+				
+				if (!CharArrayUtils.equals(segmentName, b.getNameCharArray()))
 					return;
 				
 				b= b.getOwner();
@@ -244,8 +257,6 @@ public class CPPClassScope extends CPPScope implements ICPPClassScope {
 	        }
             //9.2 ... The class-name is also inserted into the scope of the class itself
             result = ArrayUtil.append(IBinding.class, result, compName.resolveBinding());
-            if (!prefixLookup)
-            	return ArrayUtil.trim(IBinding.class, result);
 	    }
 	    result = ArrayUtil.addAll(IBinding.class, result, super.getBindings(lookup));
 	    return ArrayUtil.trim(IBinding.class, result);

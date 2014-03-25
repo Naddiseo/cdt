@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2012 Wind River Systems and others.
+ * Copyright (c) 2006, 2013 Wind River Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,8 @@
  *     Vladimir Prus (Mentor Graphics) - Add proper stop reason for step return (Bug 362274) 
  *     Indel AG           - [369622] fixed moveToLine using MinGW
  *     Marc Khouzam (Ericsson) - Make each thread an IDisassemblyDMContext (bug 352748)
+ *     Alvaro Sanchez-Leon (Ericsson AB) - Support for Step into selection (bug 244865)
+ *     Alvaro Sanchez-Leon (Ericsson AB) - Bug 415362
  *******************************************************************************/
 package org.eclipse.cdt.dsf.mi.service;
 
@@ -19,8 +21,10 @@ import java.util.LinkedList;
 import java.util.Map;
 
 import org.eclipse.cdt.core.IAddress;
+import org.eclipse.cdt.core.model.IFunctionDeclaration;
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.IDsfStatusConstants;
+import org.eclipse.cdt.dsf.concurrent.ImmediateDataRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.ImmediateExecutor;
 import org.eclipse.cdt.dsf.concurrent.ImmediateRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.Immutable;
@@ -40,6 +44,9 @@ import org.eclipse.cdt.dsf.debug.service.IBreakpointsExtension.IBreakpointHitDME
 import org.eclipse.cdt.dsf.debug.service.ICachingService;
 import org.eclipse.cdt.dsf.debug.service.IDisassembly.IDisassemblyDMContext;
 import org.eclipse.cdt.dsf.debug.service.IProcesses;
+import org.eclipse.cdt.dsf.debug.service.IRunControl3;
+import org.eclipse.cdt.dsf.debug.service.ISourceLookup;
+import org.eclipse.cdt.dsf.debug.service.ISourceLookup.ISourceLookupDMContext;
 import org.eclipse.cdt.dsf.debug.service.IStack.IFrameDMContext;
 import org.eclipse.cdt.dsf.debug.service.command.BufferedCommandControl;
 import org.eclipse.cdt.dsf.debug.service.command.CommandCache;
@@ -93,7 +100,7 @@ import org.osgi.framework.BundleContext;
  * state.
  * @since 3.0
  */
-public class MIRunControl extends AbstractDsfService implements IMIRunControl, ICachingService
+public class MIRunControl extends AbstractDsfService implements IMIRunControl, ICachingService, IRunControl3
 {
 	private static class MIExecutionDMC extends AbstractDMContext implements IMIExecutionDMContext, IDisassemblyDMContext
 	{
@@ -372,6 +379,10 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
     private boolean fResumePending = false;
 	private boolean fStepping = false;
 	private boolean fTerminated = false;
+	/**
+	 * @since 4.2
+	 */
+	protected RunControlEvent<IExecutionDMContext, ?> fLatestEvent = null;
 	
 	
 	/**
@@ -390,17 +401,20 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
 	private IExecutionDMContext fStateChangeTriggeringContext;
 	/** 
 	 * Indicates that the next MIRunning event should be silenced.
+	 * @since 4.3
 	 */
-	private boolean fDisableNextRunningEvent;
+	protected boolean fDisableNextRunningEvent;
 	/** 
 	 * Indicates that the next MISignal (MIStopped) event should be silenced.
+	 * @since 4.3
 	 */
-	private boolean fDisableNextSignalEvent;
+	protected boolean fDisableNextSignalEvent;
 	/** 
 	 * Stores the silenced MIStopped event in case we need to use it
 	 * for a failure.
+	 * @since 4.3
 	 */
-	private MIStoppedEvent fSilencedSignalEvent;
+	protected MIStoppedEvent fSilencedSignalEvent;
 	
 	private static final int FAKE_THREAD_ID = 0;
 
@@ -408,7 +422,7 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
         super(session);
     }
     
-    @Override
+	@Override
     public void initialize(final RequestMonitor rm) {
         super.initialize(
             new ImmediateRequestMonitor(rm) {
@@ -590,6 +604,8 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
         fStateChangeReason = e.getReason();
         fStateChangeDetails = null; // we have no details of interest for a resume
         fMICommandCache.setContextAvailable(e.getDMContext(), false);
+        fLatestEvent = e;
+        
         //fStateChangeTriggeringContext = e.getTriggeringContext();
         if (e.getReason().equals(StateChangeReason.STEP)) {
             fStepping = true;
@@ -612,7 +628,8 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
             ? e.getTriggeringContexts()[0] : null;
         fSuspended = true;
         fStepping = false;
-        
+        fLatestEvent = e;
+
         fResumePending = false;
     }
     
@@ -777,7 +794,14 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
     }
     
 	@Override
-    public void step(final IExecutionDMContext context, StepType stepType, final RequestMonitor rm) {
+	public void step(IExecutionDMContext context, StepType stepType, final RequestMonitor rm) {
+		step(context, stepType, true, rm);
+	}
+	
+    /**
+	 * @since 4.2
+	 */
+    protected void step(final IExecutionDMContext context, StepType stepType, boolean checkCanResume, final RequestMonitor rm) {
     	assert context != null;
 
     	IMIExecutionDMContext dmc = DMContexts.getAncestorOfType(context, IMIExecutionDMContext.class);
@@ -787,7 +811,7 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
             return;
 		}
     	
-    	if (!doCanResume(context)) {
+    	if (checkCanResume && !doCanResume(context)) {
             rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, INVALID_STATE, "Cannot resume context", null)); //$NON-NLS-1$
             rm.done();
             return;
@@ -1435,13 +1459,15 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
 	 * @since 3.0
 	 */
 	@Override
-	public void runToLine(IExecutionDMContext context, String sourceFile,
-			int lineNumber, boolean skipBreakpoints, RequestMonitor rm) {
+	public void runToLine(final IExecutionDMContext context, String sourceFile,
+			final int lineNumber, final boolean skipBreakpoints, final RequestMonitor rm) {
 		
-		// Hack around a MinGW bug; see 196154
-		sourceFile = MIBreakpointsManager.adjustDebuggerPath(sourceFile);
-		
-		runToLocation(context, sourceFile + ":" + Integer.toString(lineNumber), skipBreakpoints, rm); //$NON-NLS-1$
+        determineDebuggerPath(context, sourceFile, new ImmediateDataRequestMonitor<String>(rm) {
+            @Override
+            protected void handleSuccess() {
+        		runToLocation(context, getData() + ":" + Integer.toString(lineNumber), skipBreakpoints, rm); //$NON-NLS-1$
+            }
+        });
 	}
 
 	/* (non-Javadoc)
@@ -1487,33 +1513,37 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
 	 * @since 3.0
 	 */
 	@Override
-	public void moveToLine(IExecutionDMContext context, String sourceFile,
-			int lineNumber, boolean resume, RequestMonitor rm) {
-		IMIExecutionDMContext threadExecDmc = DMContexts.getAncestorOfType(context, IMIExecutionDMContext.class);
+	public void moveToLine(final IExecutionDMContext context, String sourceFile,
+			final int lineNumber, final boolean resume, final RequestMonitor rm) {
+		final IMIExecutionDMContext threadExecDmc = DMContexts.getAncestorOfType(context, IMIExecutionDMContext.class);
 		if (threadExecDmc == null) {
             rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, "Invalid thread context", null)); //$NON-NLS-1$
             rm.done();                        	
 		}
 		else
 		{
-			// Hack around a MinGW bug; see 369622 (and also 196154 and 232415) 
-			sourceFile = MIBreakpointsManager.adjustDebuggerPath(sourceFile);
-			
-			String location = sourceFile + ":" + lineNumber; //$NON-NLS-1$
-			if (resume)
-				resumeAtLocation(context, location, rm);
-			else {
-				// Create the breakpoint attributes
-				Map<String,Object> attr = new HashMap<String,Object>();
-				attr.put(MIBreakpoints.BREAKPOINT_TYPE, MIBreakpoints.BREAKPOINT);
-				attr.put(MIBreakpoints.FILE_NAME, sourceFile);
-				attr.put(MIBreakpoints.LINE_NUMBER, lineNumber);
-				attr.put(MIBreakpointDMData.IS_TEMPORARY, true);
-				attr.put(MIBreakpointDMData.THREAD_ID, Integer.toString(threadExecDmc.getThreadId()));
-				
-				// Now do the operation
-				moveToLocation(context, location, attr, rm);
-			}
+			determineDebuggerPath(context, sourceFile, new ImmediateDataRequestMonitor<String>(rm) {
+				@Override
+				protected void handleSuccess() {
+					String debuggerPath = getData();
+
+					String location = debuggerPath + ":" + lineNumber; //$NON-NLS-1$
+					if (resume) {
+						resumeAtLocation(context, location, rm);
+					} else {
+						// Create the breakpoint attributes
+						Map<String,Object> attr = new HashMap<String,Object>();
+						attr.put(MIBreakpoints.BREAKPOINT_TYPE, MIBreakpoints.BREAKPOINT);
+						attr.put(MIBreakpoints.FILE_NAME, debuggerPath);
+						attr.put(MIBreakpoints.LINE_NUMBER, lineNumber);
+						attr.put(MIBreakpointDMData.IS_TEMPORARY, true);
+						attr.put(MIBreakpointDMData.THREAD_ID, Integer.toString(threadExecDmc.getThreadId()));
+
+						// Now do the operation
+						moveToLocation(context, location, attr, rm);
+					}
+				}
+			});
 		}
 	}
 
@@ -1578,4 +1608,56 @@ public class MIRunControl extends AbstractDsfService implements IMIRunControl, I
 		// we know GDB is accepting commands
 		return !fTerminated && fSuspended && !fResumePending;
 	}
+	
+	/**
+	 * Determine the path that should be sent to the debugger as per the source lookup service.
+	 * 
+	 * @param dmc A context that can be used to obtain the sourcelookup context.
+	 * @param hostPath The path of the file on the host, which must be converted.
+	 * @param rm The result of the conversion.
+	 * @since 4.2
+	 */
+    protected void determineDebuggerPath(IDMContext dmc, String hostPath, final DataRequestMonitor<String> rm)
+    {
+    	final IBreakpoints breakpoints = getServicesTracker().getService(IBreakpoints.class);
+    	if (!(breakpoints instanceof IMIBreakpointPathAdjuster)) {
+    		rm.done(hostPath);
+    		return;
+    	}
+    	ISourceLookup sourceLookup = getServicesTracker().getService(ISourceLookup.class);
+    	ISourceLookupDMContext srcDmc = DMContexts.getAncestorOfType(dmc, ISourceLookupDMContext.class);
+    	if (sourceLookup == null || srcDmc == null) {
+    		// Source lookup not available for given context, use the host
+    		// path for the debugger path.
+    		// Hack around a MinGW bug; see 369622 (and also 196154 and 232415)
+    		rm.done(((IMIBreakpointPathAdjuster)breakpoints).adjustDebuggerPath(hostPath));
+    		return;
+    	}
+
+    	sourceLookup.getDebuggerPath(srcDmc, hostPath, new DataRequestMonitor<String>(getExecutor(), rm) {
+    		@Override
+    		protected void handleSuccess() {
+    			// Hack around a MinGW bug; see 369622 (and also 196154 and 232415)
+    			rm.done(((IMIBreakpointPathAdjuster)breakpoints).adjustDebuggerPath(getData()));
+    		}
+    	});
+    }
+    
+	/**
+	 * @since 4.2
+	 */
+	@Override
+	public void canStepIntoSelection(IExecutionDMContext context, String sourceFile, int lineNumber, IFunctionDeclaration selectedFunction, DataRequestMonitor<Boolean> rm) {
+		rm.done(false);
+	}
+
+	/**
+	 * @since 4.2
+	 */
+	@Override
+	public void stepIntoSelection(IExecutionDMContext context, String sourceFile, int lineNumber, boolean skipBreakpoints, IFunctionDeclaration selectedFunction, RequestMonitor rm) {
+		IStatus status = new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, "Step Into Selection not supported", null);  //$NON-NLS-1$
+		rm.done(status);
+	}
+    
 }

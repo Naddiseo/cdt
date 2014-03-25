@@ -42,6 +42,9 @@ th	     { font-weight: bold }
 	display: none;
 }
 
+.menu, .option td { vertical-align: top; }
+td.menu_name, td.option_name {vertical-align: top; font-weight: bold;}
+
 /* Mike Behm's addition to the style sheet */
 .userinput { font-family: monospace; }
 .guitab, .important, .guibutton, .selectblue, .guimenu, .guilabel, 

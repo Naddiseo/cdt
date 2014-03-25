@@ -8,7 +8,9 @@
  * Contributors:
  *     Ericsson - Initial API and implementation 
  *     Marc Khouzam (Ericsson) - Support for fast tracepoints (Bug 346320)
+ *     Marc Khouzam (Ericsson) - Fetch groupIds when getting breakpoints (Bug 360735)
  *******************************************************************************/
+
 package org.eclipse.cdt.dsf.gdb.service;
 
 import java.util.HashMap;
@@ -27,7 +29,10 @@ import org.eclipse.cdt.dsf.gdb.internal.GdbPlugin;
 import org.eclipse.cdt.dsf.mi.service.IMICommandControl;
 import org.eclipse.cdt.dsf.mi.service.MIBreakpointDMData;
 import org.eclipse.cdt.dsf.mi.service.MIBreakpoints;
+import org.eclipse.cdt.dsf.mi.service.command.output.CLIInfoBreakInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIBreakInsertInfo;
+import org.eclipse.cdt.dsf.mi.service.command.output.MIBreakListInfo;
+import org.eclipse.cdt.dsf.mi.service.command.output.MIBreakpoint;
 import org.eclipse.cdt.dsf.service.DsfSession;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IStatus;
@@ -87,6 +92,80 @@ public class GDBBreakpoints_7_2 extends GDBBreakpoints_7_0
 	public void shutdown(RequestMonitor requestMonitor) {
         unregister();
 		super.shutdown(requestMonitor);
+	}
+	
+	/** 
+	 * {@inheritDoc}
+	 * 
+	 * Starting with GDB 7.2, also provides information about which process each breakpoint applies to.
+	 */
+	@Override
+	public void getBreakpoints(final IBreakpointsTargetDMContext context, final DataRequestMonitor<IBreakpointDMContext[]> drm)
+	{
+		if (bpThreadGroupInfoAvailable()) {
+			// With GDB 7.6, we obtain the thread-groups to which a breakpoint applies
+			// directly in the -break-list command, so we don't need to do any special processing.
+			super.getBreakpoints(context, drm);
+			return;
+		}
+		
+		// Validate the context
+		if (context == null) {
+       		drm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, UNKNOWN_EXECUTION_CONTEXT, null));
+       		drm.done();
+			return;
+		}
+
+		// Select the breakpoints context map
+		// If it doesn't exist then no breakpoint was ever inserted for this breakpoint space.
+		// In that case, return an empty list.
+		final Map<Integer, MIBreakpointDMData> breakpointContext = getBreakpointMap(context);
+		if (breakpointContext == null) {
+       		drm.setData(new IBreakpointDMContext[0]);
+       		drm.done();
+			return;
+		}
+
+		// Execute the command
+		fConnection.queueCommand(fConnection.getCommandFactory().createMIBreakList(context),
+			new DataRequestMonitor<MIBreakListInfo>(getExecutor(), drm) {
+				@Override
+				protected void handleSuccess() {
+					final MIBreakpoint[] breakpoints = getData().getMIBreakpoints();
+					
+					// Also fetch the information about which breakpoint belongs to which
+					// process.  We currently can only obtain this information from the CLI
+					// command.  This information is needed for breakpoint filtering.
+					// Bug 360735
+					fConnection.queueCommand(fConnection.getCommandFactory().createCLIInfoBreak(context),
+							new ImmediateDataRequestMonitor<CLIInfoBreakInfo>(drm) {
+						@Override
+						protected void handleSuccess() {
+							Map<Integer, String[]> groupIdMap = getData().getBreakpointToGroupMap();
+
+							// Refresh the breakpoints map and format the result
+							breakpointContext.clear();
+							IBreakpointDMContext[] result = new IBreakpointDMContext[breakpoints.length];
+							for (int i = 0; i < breakpoints.length; i++) {
+								MIBreakpointDMData breakpointData = new MIBreakpointDMData(breakpoints[i]);
+								
+								// Now fill in the thread-group information into the breakpoint data
+								// It is ok to get null.  For example, pending breakpoints are not
+								// associated to a thread-group; also, when debugging a single process,
+								// the thread-group list is empty.
+								int reference = breakpointData.getReference();
+								String[] groupIds = groupIdMap.get(reference);
+								breakpointData.setGroupIds(groupIds);
+								
+								result[i] = new MIBreakpointDMContext(GDBBreakpoints_7_2.this, new IDMContext[] { context }, reference);
+								breakpointContext.put(reference, breakpointData);
+							}
+							drm.setData(result);
+							drm.done();
+						}
+					});
+				}
+			});
 	}
 	
 	private void setTracepointMode() {
@@ -153,25 +232,25 @@ public class GDBBreakpoints_7_2 extends GDBBreakpoints_7_0
 						contextBreakpoints.put(reference, newBreakpoint);
 
 						// Format the return value
-								MIBreakpointDMContext dmc = new MIBreakpointDMContext(GDBBreakpoints_7_2.this, new IDMContext[] { context }, reference);
-								drm.setData(dmc);
+						MIBreakpointDMContext dmc = new MIBreakpointDMContext(GDBBreakpoints_7_2.this, new IDMContext[] { context }, reference);
+						drm.setData(dmc);
 
-								// Flag the event
-								getSession().dispatchEvent(new BreakpointAddedEvent(dmc), getProperties());
+						// Flag the event
+						getSession().dispatchEvent(new BreakpointAddedEvent(dmc), getProperties());
 
-								// Tracepoints are created with no passcount (passcount are not 
-								// the same thing as ignore-count, which is not supported by
-								// tracepoints).  We have to set the passcount manually now.
-								// Same for commands.
-								Map<String,Object> delta = new HashMap<String,Object>();
-								delta.put(MIBreakpoints.PASS_COUNT, getProperty(attributes, MIBreakpoints.PASS_COUNT, 0));
-								delta.put(MIBreakpoints.COMMANDS, getProperty(attributes, MIBreakpoints.COMMANDS, "")); //$NON-NLS-1$
-								modifyBreakpoint(dmc, delta, drm, false);
+						// Tracepoints are created with no passcount (passcount are not 
+						// the same thing as ignore-count, which is not supported by
+						// tracepoints).  We have to set the passcount manually now.
+						// Same for commands.
+						Map<String,Object> delta = new HashMap<String,Object>();
+						delta.put(MIBreakpoints.PASS_COUNT, getProperty(attributes, MIBreakpoints.PASS_COUNT, 0));
+						delta.put(MIBreakpoints.COMMANDS, getProperty(attributes, MIBreakpoints.COMMANDS, "")); //$NON-NLS-1$
+						modifyBreakpoint(dmc, delta, drm, false);
 					}
 
 					@Override
 					protected void handleError() {
-						drm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, BREAKPOINT_INSERTION_FAILURE, null));
+						drm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, BREAKPOINT_INSERTION_FAILURE, getStatus().getException()));
 						drm.done();
 					}
 				});
@@ -208,5 +287,19 @@ public class GDBBreakpoints_7_2 extends GDBBreakpoints_7_0
 				}
 			}
 		});
+	}
+	
+	/**
+	 * Does the MI command -break-list provide information
+	 * about which thread-group a breakpoint applies to?
+	 * The use of this method allows us to avoid duplicating code.
+	 * See Bug 402217
+	 * 
+	 * @return true if the information is available (GDB >= 7.6),
+	 *         false otherwise.
+	 * @since 4.2
+	 */
+	protected boolean bpThreadGroupInfoAvailable() {
+		return false;
 	}
 }

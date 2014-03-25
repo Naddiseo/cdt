@@ -24,7 +24,9 @@ import org.eclipse.cdt.core.dom.parser.c.GCCScannerExtensionConfiguration;
 import org.eclipse.cdt.core.dom.parser.c.ICParserExtensionConfiguration;
 import org.eclipse.cdt.core.index.IIndex;
 import org.eclipse.cdt.core.parser.IParserLogService;
+import org.eclipse.cdt.core.parser.IParserSettings;
 import org.eclipse.cdt.core.parser.IScanner;
+import org.eclipse.cdt.core.parser.IScannerInfo;
 import org.eclipse.cdt.core.parser.ParserLanguage;
 import org.eclipse.cdt.core.parser.ParserMode;
 import org.eclipse.cdt.internal.core.dom.parser.c.GNUCSourceParser;
@@ -65,9 +67,20 @@ public class GCCLanguage extends AbstractCLikeLanguage {
 		return ILinkage.C_LINKAGE_ID;
 	}
 
+	/**
+	 * @nooverride This method is not intended to be re-implemented or extended by clients.
+	 * @deprecated Since 5.4 not called by the framework. Override
+	 *     {@link #getScannerExtensionConfiguration(IScannerInfo)} instead.
+	 */
+	@Deprecated
 	@Override
 	protected IScannerExtensionConfiguration getScannerExtensionConfiguration() {
 		return C_GNU_SCANNER_EXTENSION;
+	}
+
+	@Override
+	protected IScannerExtensionConfiguration getScannerExtensionConfiguration(IScannerInfo info) {
+		return GCCScannerExtensionConfiguration.getInstance(info);
 	}
 
 	/**
@@ -81,6 +94,19 @@ public class GCCLanguage extends AbstractCLikeLanguage {
 	@Override
 	protected ISourceCodeParser createParser(IScanner scanner, ParserMode parserMode, IParserLogService logService, IIndex index) {
 		return new GNUCSourceParser(scanner, parserMode, logService, getParserExtensionConfiguration(), index);
+	}
+
+	@Override
+	protected ISourceCodeParser createParser(IScanner scanner, ParserMode parserMode, IParserLogService logService, IIndex index,
+			int options, IParserSettings settings) {
+		GNUCSourceParser parser = new GNUCSourceParser(scanner, parserMode, logService, getParserExtensionConfiguration(), index);
+		if (settings != null) {
+			int maximumTrivialExpressions = settings.getMaximumTrivialExpressionsInAggregateInitializers();
+			if (maximumTrivialExpressions >= 0 && (options & OPTION_SKIP_TRIVIAL_EXPRESSIONS_IN_AGGREGATE_INITIALIZERS) != 0) {
+					parser.setMaximumTrivialExpressionsInAggregateInitializers(maximumTrivialExpressions);
+			}
+		}
+		return parser;
 	}
 
 	@Override

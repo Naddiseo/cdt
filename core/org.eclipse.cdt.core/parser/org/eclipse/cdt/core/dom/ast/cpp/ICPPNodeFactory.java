@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2011 IBM Corporation and others.
+ * Copyright (c) 2006, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     Mike Kucera (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.ast.cpp;
 
@@ -24,9 +25,12 @@ import org.eclipse.cdt.core.dom.ast.IASTProblem;
 import org.eclipse.cdt.core.dom.ast.IASTProblemTypeId;
 import org.eclipse.cdt.core.dom.ast.IASTReturnStatement;
 import org.eclipse.cdt.core.dom.ast.IASTStatement;
+import org.eclipse.cdt.core.dom.ast.IASTToken;
 import org.eclipse.cdt.core.dom.ast.IASTTypeId;
 import org.eclipse.cdt.core.dom.ast.INodeFactory;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTCompositeTypeSpecifier.ICPPASTBaseSpecifier;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPUnaryTypeTransformation.Operator;
+import org.eclipse.cdt.core.dom.parser.cpp.ICPPASTAttributeSpecifier;
 import org.eclipse.cdt.core.parser.IScanner;
 
 /**
@@ -50,6 +54,16 @@ public interface ICPPNodeFactory extends INodeFactory {
 	 * @since 5.2
 	 */
 	public ICPPASTArraySubscriptExpression newArraySubscriptExpression(IASTExpression arrayExpr, IASTInitializerClause subscript);
+
+	/**
+	 * @since 5.7
+	 */
+	public ICPPASTAttribute newAttribute(char[] name, char[] scope, IASTToken argumentClause, boolean packExpansion);
+
+	/**
+	 * @since 5.7
+	 */
+	public ICPPASTAttributeSpecifier newAttributeSpecifier();
 
 	public ICPPASTBaseSpecifier newBaseSpecifier(IASTName name, int visibility, boolean isVirtual);
 	
@@ -108,6 +122,11 @@ public interface ICPPNodeFactory extends INodeFactory {
 	 */
 	@Override
 	public ICPPASTDeclarator newDeclarator(IASTName name);
+	
+	/**
+	 * @since 5.6
+	 */
+	public ICPPASTDecltypeSpecifier newDecltypeSpecifier(ICPPASTExpression decltypeExpression);
 	
 	public ICPPASTDeleteExpression newDeleteExpression(IASTExpression operand);
 
@@ -235,9 +254,19 @@ public interface ICPPNodeFactory extends INodeFactory {
 	public org.eclipse.cdt.core.dom.ast.gnu.cpp.IGPPASTPointerToMember newPointerToMemberGPP(IASTName name);
 	
 	public IASTProblemTypeId newProblemTypeId(IASTProblem problem);
-	
+
+	/**
+	 * Creates a {@link ICPPASTQualifiedName}.
+	 * @since 5.7
+	 */
+	public ICPPASTQualifiedName newQualifiedName(ICPPASTName name);
+
+	/**
+	 * @deprecated Replaced by {@link #newQualifiedName(ICPPASTName)}.
+	 */
+	@Deprecated
 	public ICPPASTQualifiedName newQualifiedName();
-	
+
 	/**
 	 * Creates a range based for statement.
 	 * @since 5.3
@@ -339,6 +368,11 @@ public interface ICPPNodeFactory extends INodeFactory {
 	@Deprecated
 	public ICPPASTTypenameExpression newTypenameExpression(IASTName qualifiedName, IASTExpression expr, boolean isTemplate);
 
+	/**
+	 * @since 5.6
+	 */
+	public ICPPASTTypeTransformationSpecifier newTypeTransformationSpecifier(Operator kind, ICPPASTTypeId typeId);
+	
 	@Override
 	public ICPPASTUnaryExpression newUnaryExpression(int operator, IASTExpression operand);
 
@@ -354,4 +388,9 @@ public interface ICPPNodeFactory extends INodeFactory {
 	
 	@Override
 	public ICPPASTWhileStatement newWhileStatement(IASTExpression condition, IASTStatement body);
+
+	/**
+	 * @since 5.5
+	 */
+	public ICPPASTAliasDeclaration newAliasDeclaration(IASTName aliasName, ICPPASTTypeId aliasedType);
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012 Tilera Corporation and others.
+ * Copyright (c) 2012, 2013 Tilera Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,6 +7,8 @@
  *
  * Contributors:
  *     William R. Swanson (Tilera Corporation) - initial API and implementation
+ *     Marc Dumais (Ericsson) - Add CPU/core load information to the multicore visualizer (Bug 396268)
+ *     Marc Dumais (Ericsson) -  Bug 405390
  *******************************************************************************/
 
 package org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model;
@@ -22,12 +24,17 @@ import java.util.List;
 
 /** Represents single CPU. */
 public class VisualizerCPU
-	implements Comparable<VisualizerCPU>
+	implements Comparable<VisualizerCPU>, IVisualizerModelObject
 {
 	// --- members ---
 	
 	/** ID of this core. */
 	public int m_id;
+	
+	/** Contains load information
+	 * @since 1.1
+	 */
+	protected VisualizerLoadInfo m_loadinfo;
 	
 	/** List of cores */
 	protected ArrayList<VisualizerCore> m_cores;
@@ -55,6 +62,7 @@ public class VisualizerCPU
 			m_coreMap = null;
 			m_cores.clear();
 			m_cores = null;
+			m_loadinfo = null;
 		}
 	}
 	
@@ -71,10 +79,34 @@ public class VisualizerCPU
 	// --- accessors ---
 	
 	/** Gets ID of this CPU. */
+	@Override
 	public int getID() {
 		return m_id;
 	}
 	
+	/** CPU has no parent  - always returns null */
+	@Override
+	public IVisualizerModelObject getParent() {
+		return null;
+	}
+	
+	/** sets the load info for this CPU 
+	 * @since 1.1*/
+	public synchronized void setLoadInfo (VisualizerLoadInfo info) {
+		m_loadinfo = info;
+	}
+	
+	/** Gets the CPU usage load of this CPU. 
+	 * @since 1.1*/
+	public synchronized Integer getLoad() {
+		return (m_loadinfo == null) ? null : m_loadinfo.getLoad();
+	}
+	
+	/** get the highest recorded load for this CPU
+	 * @since 1.1*/
+	public synchronized Integer getHighLoadWatermark() {
+		return (m_loadinfo == null) ? null : m_loadinfo.getHighLoadWaterMark();
+	}
 	
 	// --- methods ---
 	
@@ -130,4 +162,14 @@ public class VisualizerCPU
 		return result;
 	}
 	
+	/** IVisualizerModelObject version of compareTO() */
+	@Override
+	public int compareTo(IVisualizerModelObject o) {
+		if (o != null) {
+			if (o.getClass() == this.getClass()) {
+				return compareTo((VisualizerCPU)o);
+			}
+		}
+		return 1;
+	}
 }

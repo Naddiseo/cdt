@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2012 Anton Gorenkov and others
+ * Copyright (c) 2011, 2013 Anton Gorenkov and others
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,8 @@
  * Contributors:
  *     Anton Gorenkov  - initial implementation
  *     Marc-Andre Laperle
+ *     Nathan Ridge
+ *     Danny Ferreira
  *******************************************************************************/
 package org.eclipse.cdt.codan.internal.checkers;
 
@@ -38,14 +40,18 @@ import org.eclipse.cdt.core.dom.ast.IPointerType;
 import org.eclipse.cdt.core.dom.ast.IProblemBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.ITypedef;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConstructorChainInitializer;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFunctionDefinition;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTUnaryExpression;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPConstructor;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPReferenceType;
+import org.eclipse.cdt.core.dom.ast.cpp.SemanticQueries;
 import org.eclipse.cdt.core.index.IIndex;
 import org.eclipse.cdt.core.index.IIndexBinding;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.ClassTypeHelper;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVariableReadWriteFlags;
 import org.eclipse.cdt.internal.core.pdom.dom.PDOMName;
 
@@ -84,9 +90,13 @@ public class ClassMembersInitializationChecker extends AbstractIndexAstChecker {
 				Set<IField> fieldsInConstructor = constructorsStack.push(new HashSet<IField>());
 				
 				// Add all class fields
-				for (IField field : constructor.getClassOwner().getDeclaredFields()) {
+				for (IField field : ClassTypeHelper.getDeclaredFields(constructor.getClassOwner(), declaration)) {
 					if (isSimpleType(field.getType()) && !field.isStatic()) {
-						fieldsInConstructor.add(field);
+						// In C++11, a field may have an initial value specified at its declaration.
+						// Such a field does not need to be initialized in the constructor as well.
+						if (field.getInitialValue() == null) {
+							fieldsInConstructor.add(field);
+						}
 					}
 				}
 			}
@@ -243,7 +253,7 @@ public class ClassMembersInitializationChecker extends AbstractIndexAstChecker {
 		}
 
 		/** Checks that specified declaration is a class constructor 
-		 *  (it is a class member and its name is equal to class name)
+		 *  (it is a class member and its name is equal to the class name)
 		 */
 		private ICPPConstructor getConstructor(IASTDeclaration decl) {
 			if (decl instanceof ICPPASTFunctionDefinition) {
@@ -253,16 +263,34 @@ public class ClassMembersInitializationChecker extends AbstractIndexAstChecker {
 				IBinding binding = functionDefinition.getDeclarator().getName().resolveBinding();
 				if (binding instanceof ICPPConstructor) {
 					ICPPConstructor constructor = (ICPPConstructor) binding;
-					if (constructor.getClassOwner().getKey() != ICompositeType.k_union) {
-						return constructor;
+					// Skip defaulted copy and move constructors.
+					if (functionDefinition.isDefaulted() && SemanticQueries.isCopyOrMoveConstructor(constructor))
+						return null;
+					if (constructor.getClassOwner().getKey() == ICompositeType.k_union)
+						return null;
+					// Skip delegating constructors.
+					for (ICPPASTConstructorChainInitializer memberInitializer : functionDefinition.getMemberInitializers()) {
+						IASTName memberName = memberInitializer.getMemberInitializerId();
+						if (memberName != null) {
+							IBinding memberBinding = memberName.resolveBinding();
+							ICPPClassType classType = null; 
+							if (memberBinding instanceof ICPPClassType) {
+								classType = (ICPPClassType) memberBinding;
+							} else if (memberBinding instanceof ICPPConstructor) {
+								classType = ((ICPPConstructor) memberBinding).getClassOwner();
+							}
+							if (classType != null && classType.isSameType(constructor.getClassOwner()))
+								return null;
+						}
 					}
+					return constructor;
 				}
 			}
 			
 			return null;
 		}
 	}
-	
+
 	@Override
 	public void initPreferences(IProblemWorkingCopy problem) {
 		super.initPreferences(problem);

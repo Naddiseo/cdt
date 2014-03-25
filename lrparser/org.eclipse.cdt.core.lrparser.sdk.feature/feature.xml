@@ -2,7 +2,7 @@
 <feature
       id="org.eclipse.cdt.core.lrparser.sdk"
       label="%featureName"
-      version="5.2.0.qualifier"
+      version="8.4.0.qualifier"
       provider-name="%providerName"
       plugin="org.eclipse.cdt.core.lrparser.source">
 
@@ -17,10 +17,6 @@
    <license>
       %license
    </license>
-
-   <url>
-      <update label="%updateSiteName" url="http://download.eclipse.org/tools/cdt/releases/indigo"/>
-   </url>
 
    <includes
          id="org.eclipse.cdt.core.lrparser.source"

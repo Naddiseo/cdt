@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2011 Symbian Software Systems and others.
+ * Copyright (c) 2008, 2013 Symbian Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
  *     Andrew Ferguson (Symbian) - Initial Implementation
  *     Markus Schorn (Wind River Systems)
  *     IBM Corporation
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -30,7 +31,7 @@ import org.eclipse.cdt.internal.core.dom.parser.ASTAmbiguousNode;
 import org.eclipse.core.runtime.Assert;
 
 /**
- * Ambiguity node for deciding between type-id and id-expression in a template argument.
+ * Ambiguity node for deciding between type-id and expression in a template argument.
  */
 public class CPPASTAmbiguousTemplateArgument extends ASTAmbiguousNode implements ICPPASTAmbiguousTemplateArgument {
 	private List<IASTNode> fNodes;
@@ -42,15 +43,8 @@ public class CPPASTAmbiguousTemplateArgument extends ASTAmbiguousNode implements
 	public CPPASTAmbiguousTemplateArgument(IASTNode... nodes) {
 		fNodes= new ArrayList<IASTNode>(2);
 		for (IASTNode node : nodes) {
-			if (node instanceof IASTTypeId || node instanceof IASTIdExpression) {
+			if (node instanceof IASTTypeId || node instanceof IASTExpression) {
 				fNodes.add(node);
-			} else if (node instanceof ICPPASTPackExpansionExpression) {
-				final IASTExpression pattern = ((ICPPASTPackExpansionExpression) node).getPattern();
-				if (pattern instanceof IASTIdExpression) {
-					fNodes.add(node);
-				} else {
-					Assert.isLegal(false, pattern == null ? "null" : pattern.getClass().getName()); //$NON-NLS-1$
-				}
 			} else {
 				Assert.isLegal(false, node == null ? "null" : node.getClass().getName()); //$NON-NLS-1$
 			}
@@ -59,7 +53,9 @@ public class CPPASTAmbiguousTemplateArgument extends ASTAmbiguousNode implements
 	
 	@Override
 	protected void beforeAlternative(IASTNode node) {
-		// The name may be shared between the alternatives make sure it's parent is set correctly
+		// If the expression is an id-expression, the name may be shared 
+		// between the alternatives (see bug 316704), so make sure its parent 
+		// is set correctly.
 		if (node instanceof IASTTypeId) {
 			IASTDeclSpecifier declSpec = ((IASTTypeId) node).getDeclSpecifier();
 			if (declSpec instanceof IASTNamedTypeSpecifier) {
@@ -68,12 +64,18 @@ public class CPPASTAmbiguousTemplateArgument extends ASTAmbiguousNode implements
 				name.setBinding(null);
 				namedTypeSpec.setName(name);
 			}
-		} else if (node instanceof IASTIdExpression) {
-			IASTIdExpression id= (IASTIdExpression) node;
-			final IASTName name = id.getName();
-			name.setBinding(null);
-			id.setName(name);
-		}
+		} else {
+			// Unwrap variadic pack expansion if necessary.
+			if (node instanceof ICPPASTPackExpansionExpression)
+				node= ((ICPPASTPackExpansionExpression) node).getPattern();
+
+			if (node instanceof IASTIdExpression) {
+				IASTIdExpression id= (IASTIdExpression) node;
+				final IASTName name = id.getName();
+				name.setBinding(null);
+				id.setName(name);
+			}
+		} 
 	}
 
 	@Override
@@ -116,15 +118,20 @@ public class CPPASTAmbiguousTemplateArgument extends ASTAmbiguousNode implements
 	}
 	
 	@Override
-	public void addIdExpression(IASTIdExpression idExpression) {
-        assertNotFrozen();
-		addNode(idExpression);
+	public void addExpression(IASTExpression expression) {
+		assertNotFrozen();
+		addNode(expression);
 	}
 
 	@Override
+	public void addIdExpression(IASTIdExpression idExpression) {
+        addExpression(idExpression);
+	}
+
+	@Deprecated
+	@Override
 	public void addIdExpression(IASTExpression idExpression) {
-        assertNotFrozen();
-		addNode(idExpression);
+        addExpression(idExpression);
 	}
 
 	private void addNode(IASTNode node) {
@@ -133,4 +140,3 @@ public class CPPASTAmbiguousTemplateArgument extends ASTAmbiguousNode implements
 		node.setPropertyInParent(ICPPASTTemplateId.TEMPLATE_ID_ARGUMENT);
 	}
 }
-

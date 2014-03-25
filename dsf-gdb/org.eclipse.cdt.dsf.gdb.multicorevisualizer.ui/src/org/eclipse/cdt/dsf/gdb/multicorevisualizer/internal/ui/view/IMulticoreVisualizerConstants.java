@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012 Ericsson and others.
+ * Copyright (c) 2012, 2013 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,6 +7,7 @@
  *
  * Contributors:
  *     Marc Khouzam (Ericsson) - initial API and implementation
+ *     Marc Dumais (Ericsson) - Add CPU/core load information to the multicore visualizer (Bug 396268)
  *******************************************************************************/
 
 package org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.view;
@@ -49,6 +50,17 @@ public class IMulticoreVisualizerConstants
 	public static final Color COLOR_CRASHED_CORE_FG = Colors.RED;
 	public static final Color COLOR_CRASHED_CORE_BG = Colors.DARK_RED;
 	
+	// Colors for drawing CPUs
+	
+	/**
+	 * @since 1.1
+	 */
+	public static final Color COLOR_CPU_FG = Colors.GREEN;
+	/** 
+	 * @since 1.1
+	 */
+	public static final Color COLOR_CPU_BG = Colors.getColor(0,64,0);
+	
 	// Colors for text
 
 	/** Color to be used to draw a the text for a thread */
@@ -58,4 +70,31 @@ public class IMulticoreVisualizerConstants
 	/** Color to be used to draw a the text for a core */
 	public static final Color COLOR_CORE_TEXT_FG = Colors.WHITE; 
 	public static final Color COLOR_CORE_TEXT_BG = Colors.BLACK;
+	
+	/** Color to be used to draw the load text
+	 * @since 1.1
+	 */
+	public static final Color COLOR_LOAD_TEXT = Colors.GREEN;
+	
+	/** Color used to draw text to the status bar */
+	public static final Color COLOR_STATUS_BAR_TEXT = Colors.GREEN;
+	
+	// Colors for load meters
+	
+	/**
+	 * @since 1.1
+	 */
+	public static final Color COLOR_LOAD_LOADBAR_NORMAL = Colors.GREEN;
+	/**
+	 * @since 1.1
+	 */
+	public static final Color COLOR_LOAD_LOADBAR_OVERLOAD = Colors.RED;
+	/**
+	 * @since 1.1
+	 */
+	public static final Color COLOR_LOAD_UNDERBAR_FG = Colors.getColor(0,200,0);
+	/**
+	 * @since 1.1
+	 */
+	public static final Color COLOR_LOAD_UNDERBAR_BG_DEFAULT = Colors.getColor(0,64,0);
 }

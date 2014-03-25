@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.cdt.core.dom.ast.ASTVisitor;
+import org.eclipse.cdt.core.dom.ast.DOMException;
 import org.eclipse.cdt.core.dom.ast.IASTExpression;
 import org.eclipse.cdt.core.dom.ast.IASTImplicitName;
 import org.eclipse.cdt.core.dom.ast.IASTName;
@@ -29,6 +30,7 @@ import org.eclipse.cdt.core.dom.ast.IProblemBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFieldReference;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNameSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateId;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPConstructor;
@@ -53,7 +55,7 @@ public class CPPASTFieldReference extends ASTNode
     private boolean isDeref;
     private IASTImplicitName[] implicitNames;
 	private ICPPEvaluation fEvaluation;
-    
+
     public CPPASTFieldReference() {
 	}
 	
@@ -74,11 +76,7 @@ public class CPPASTFieldReference extends ASTNode
 		copy.setFieldOwner(owner == null ? null : owner.copy(style));
 		copy.isTemplate = isTemplate;
 		copy.isDeref = isDeref;
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -263,7 +261,7 @@ public class CPPASTFieldReference extends ASTNode
 				if (binding instanceof IProblemBinding || binding instanceof IType || binding instanceof ICPPConstructor) 
 					return EvalFixed.INCOMPLETE;
 
-				return new EvalMemberAccess(ownerType, ownerEval.getValueCategory(this), binding, isDeref);
+				return new EvalMemberAccess(ownerType, ownerEval.getValueCategory(this), binding, isDeref, this);
 			}
 		}
 
@@ -271,18 +269,23 @@ public class CPPASTFieldReference extends ASTNode
 		ICPPTemplateArgument[] args= null;
 		IASTName n= name;
 		if (n instanceof ICPPASTQualifiedName) {
-			IASTName[] ns= ((ICPPASTQualifiedName) n).getNames();
-			if (ns.length < 2)
+			ICPPASTQualifiedName qn= (ICPPASTQualifiedName) n;
+			ICPPASTNameSpecifier[] ns= qn.getQualifier();
+			if (ns.length < 1)
 				return EvalFixed.INCOMPLETE;
-			qualifier= ns[ns.length - 2].resolveBinding();
+			qualifier= ns[ns.length - 1].resolveBinding();
 			if (qualifier instanceof IProblemBinding)
 				return EvalFixed.INCOMPLETE;
-			n= ns[ns.length - 1];
+			n= qn.getLastName();
 		}
 		if (n instanceof ICPPASTTemplateId) {
-			args= CPPTemplates.createTemplateArgumentArray((ICPPASTTemplateId) n);
+			try {
+				args= CPPTemplates.createTemplateArgumentArray((ICPPASTTemplateId) n);
+			} catch (DOMException e) {
+				return EvalFixed.INCOMPLETE;
+			}
 		}		
-		return new EvalID(ownerEval, qualifier, name.getSimpleID(), false, qualifier != null, args);
+		return new EvalID(ownerEval, qualifier, name.getSimpleID(), false, true, args, this);
 	}
 
 	@Override

@@ -7,6 +7,7 @@
  *
  * Contributors:
  *     IBM Corporation - initial API and implementation
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.pdom.tests;
 
@@ -162,19 +163,19 @@ public class MethodTests extends PDOMTestBase {
 	}
 	
 	public void testDefaultPrivateMethod() throws Exception {
-		assertVisibility(pdom, "Class3::defaultMethod", ICPPMember.v_private);
+		assertCPPMemberVisibility(pdom, "Class3::defaultMethod", ICPPMember.v_private);
 	}
 	
 	public void testPrivateMethod() throws Exception {
-		assertVisibility(pdom, "Class3::privateMethod", ICPPMember.v_private);
+		assertCPPMemberVisibility(pdom, "Class3::privateMethod", ICPPMember.v_private);
 	}
 	
 	public void testProtectedMethod() throws Exception {
-		assertVisibility(pdom, "Class3::protectedMethod", ICPPMember.v_protected);
+		assertCPPMemberVisibility(pdom, "Class3::protectedMethod", ICPPMember.v_protected);
 	}
 	
 	public void testPublicMethod() throws Exception {
-		assertVisibility(pdom, "Class3::publicMethod", ICPPMember.v_public);
+		assertCPPMemberVisibility(pdom, "Class3::publicMethod", ICPPMember.v_public);
 	}
 	
 	public void testInlineMethod() throws Exception {
@@ -301,5 +302,32 @@ public class MethodTests extends PDOMTestBase {
 		int t2= ((ICPPBasicType) exceptionSpec[1]).getType();
 		assertEquals(IBasicType.t_int, Math.min(t1, t2));
 		assertEquals(IBasicType.t_double, Math.max(t1, t2));
+	}
+
+	public void testVirtualMemberFunction() throws Exception {
+		IBinding[] bindings = findQualifiedName(pdom, "E::virtualMemberFunction");
+		assertEquals(1, bindings.length);
+		assertInstance(bindings[0], ICPPMethod.class);
+		ICPPMethod virtMemFun = (ICPPMethod) bindings[0];
+		assertFalse(virtMemFun.isOverride());
+		assertFalse(virtMemFun.isFinal());
+	}
+
+	public void testOverrideVirtualMemberFunction() throws Exception {
+		IBinding[] bindings = findQualifiedName(pdom, "F::virtualMemberFunction");
+		assertEquals(1, bindings.length);
+		assertInstance(bindings[0], ICPPMethod.class);
+		ICPPMethod virtMemFun = (ICPPMethod) bindings[0];
+		assertTrue(virtMemFun.isOverride());
+		assertFalse(virtMemFun.isFinal());
+	}
+
+	public void testOverrideFinalVirtualMemberFunction() throws Exception {
+		IBinding[] bindings = findQualifiedName(pdom, "G::virtualMemberFunction");
+		assertEquals(1, bindings.length);
+		assertInstance(bindings[0], ICPPMethod.class);
+		ICPPMethod virtMemFun = (ICPPMethod) bindings[0];
+		assertTrue(virtMemFun.isOverride());
+		assertTrue(virtMemFun.isFinal());
 	}
 }

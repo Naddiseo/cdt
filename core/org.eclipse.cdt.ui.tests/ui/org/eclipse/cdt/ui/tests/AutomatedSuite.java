@@ -75,7 +75,7 @@ public class AutomatedSuite extends TestSuite {
 
 		// tests from package org.eclipse.cdt.ui.tests.text.contentAssist2
 		addTest(ContentAssist2TestSuite.suite());
-		
+
 		// tests from package org.eclipse.cdt.ui.tests.text.selection
 		addTest(SelectionTestSuite.suite());
 		

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2012 Wind River Systems, Inc. and others.
+ * Copyright (c) 2007, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -12,7 +12,9 @@
 package org.eclipse.cdt.internal.core.parser.scanner;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
+import org.eclipse.cdt.core.dom.IName;
 import org.eclipse.cdt.core.dom.ast.ASTNodeProperty;
 import org.eclipse.cdt.core.dom.ast.IASTComment;
 import org.eclipse.cdt.core.dom.ast.IASTFileLocation;
@@ -113,6 +115,7 @@ abstract class ASTPreprocessorNode extends ASTNode {
 class ASTComment extends ASTPreprocessorNode implements IASTComment {
 	private final boolean fIsBlockComment;
 	private String fFilePath;
+
 	public ASTComment(IASTTranslationUnit parent, String filePath, int offset, int endOffset, boolean isBlockComment) {
 		super(parent, IASTTranslationUnit.PREPROCESSOR_STATEMENT, offset, endOffset);
 		fIsBlockComment= isBlockComment;
@@ -290,6 +293,7 @@ class ASTInclusionStatement extends ASTPreprocessorNode implements IASTPreproces
 	private final boolean fIsResolved;
 	private final boolean fIsSystemInclude;
 	private final boolean fFoundByHeuristics;
+	private final boolean fIncludedFileExported;
 	private final IFileNomination fNominationDelegate;
 	private boolean fPragmaOnce;
 	private boolean fCreatesAST;
@@ -304,7 +308,7 @@ class ASTInclusionStatement extends ASTPreprocessorNode implements IASTPreproces
 	public ASTInclusionStatement(IASTTranslationUnit parent, 
 			int startNumber, int nameStartNumber, int nameEndNumber, int endNumber,
 			char[] headerName, String filePath, boolean userInclude, boolean active, boolean heuristic, 
-			IFileNomination nominationDelegate) {
+			boolean exportedFile, IFileNomination nominationDelegate) {
 		super(parent, IASTTranslationUnit.PREPROCESSOR_STATEMENT, startNumber, endNumber);
 		fName= new ASTPreprocessorName(this, IASTPreprocessorIncludeStatement.INCLUDE_NAME,
 				nameStartNumber, nameEndNumber, headerName, null);
@@ -314,6 +318,7 @@ class ASTInclusionStatement extends ASTPreprocessorNode implements IASTPreproces
 		fFoundByHeuristics= heuristic;
 		fSignificantMacros= ISignificantMacros.NONE;
 		fNominationDelegate= nominationDelegate;
+		fIncludedFileExported= exportedFile;
 		if (!active) {
 			setInactive();
 		}
@@ -459,6 +464,11 @@ class ASTInclusionStatement extends ASTPreprocessorNode implements IASTPreproces
 	}
 
 	@Override
+	public boolean isIncludedFileExported() {
+		return fIncludedFileExported;
+	}
+
+	@Override
 	public boolean createsAST() {
 		return fCreatesAST;
 	}
@@ -494,14 +504,13 @@ class ASTMacroDefinition extends ASTPreprocessorNode implements IASTPreprocessor
 	 * Constructor for built-in macros
 	 * @param expansionOffset 
 	 */
-	public ASTMacroDefinition(IASTTranslationUnit parent, IMacroBinding macro, IASTFileLocation floc, int expansionOffset) {
+	public ASTMacroDefinition(IASTTranslationUnit parent, IMacroBinding macro, IName originalDefinition, int expansionOffset) {
 		super(parent, IASTTranslationUnit.PREPROCESSOR_STATEMENT, -1, -1);
-		fName= new ASTBuiltinName(this, IASTPreprocessorMacroDefinition.MACRO_NAME, floc, macro.getNameCharArray(), macro);
+		fName= new ASTBuiltinName(this, IASTPreprocessorMacroDefinition.MACRO_NAME, originalDefinition, macro.getNameCharArray(), macro);
 		fExpansionNumber= -1;
 		fExpansionOffset= expansionOffset;
 	}
 
-	
 	@Override
 	public String getContainingFilename() {
 		if (fName instanceof ASTBuiltinName) {
@@ -526,7 +535,7 @@ class ASTMacroDefinition extends ASTPreprocessorNode implements IASTPreprocessor
 
 	@Override
 	public int getRoleForName(IASTName n) {
-		return (fName == n) ? r_definition : r_unclear;
+		return fName == n ? r_definition : r_unclear;
 	}
 
 	@Override
@@ -537,6 +546,7 @@ class ASTMacroDefinition extends ASTPreprocessorNode implements IASTPreprocessor
 
 	@Override
 	public void setExpansion(String exp) {assert false;}
+
 	@Override
 	public void setName(IASTName name) {assert false;}
 
@@ -597,8 +607,8 @@ class ASTFunctionStyleMacroDefinition extends ASTMacroDefinition implements IAST
 	 * Constructor for builtins
 	 */
 	public ASTFunctionStyleMacroDefinition(IASTTranslationUnit parent, IMacroBinding macro, 
-			IASTFileLocation nameLoc, int expansionOffset) {
-		super(parent, macro, nameLoc, expansionOffset);
+			IName originalDefinition, int expansionOffset) {
+		super(parent, macro, originalDefinition, expansionOffset);
 	}
 
 	@Override
@@ -776,6 +786,22 @@ class ASTFileLocation implements IASTFileLocation {
 	@Override
 	public IASTPreprocessorIncludeStatement getContextInclusionStatement() {
 		return fLocationCtx.getInclusionStatement();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		ASTFileLocation other = (ASTFileLocation) obj;
+		if (fOffset != other.fOffset)
+			return false;
+		if (fLength != other.fLength)
+			return false;
+		return Objects.equals(fLocationCtx, fLocationCtx);
 	}
 }
 

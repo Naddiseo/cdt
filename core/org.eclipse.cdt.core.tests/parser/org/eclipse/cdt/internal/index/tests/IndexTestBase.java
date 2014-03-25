@@ -6,9 +6,8 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Markus Schorn - initial API and implementation
+ *     Markus Schorn - initial API and implementation
  *******************************************************************************/ 
-
 package org.eclipse.cdt.internal.index.tests;
 
 import java.io.IOException;
@@ -25,16 +24,13 @@ import org.eclipse.core.resources.IWorkspaceRunnable;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.NullProgressMonitor;
 
 public class IndexTestBase extends BaseTestCase {
-	protected static int INDEXER_WAIT_TIME= 8000;
-	
 	public IndexTestBase(String name) {
 		super(name);
 	}
 
-	protected ICProject createProject(final boolean useCpp, final String importSource) throws CoreException {
+	protected ICProject createProject(final boolean useCpp, final String importSource) throws CoreException, InterruptedException {
 		// Create the project
 		final ICProject[] result= new ICProject[] {null};
 		final IWorkspace workspace = ResourcesPlugin.getWorkspace();
@@ -52,7 +48,7 @@ public class IndexTestBase extends BaseTestCase {
 		}, null);
 		CCorePlugin.getIndexManager().setIndexerId(result[0], IPDOMManager.ID_FAST_INDEXER);		
 		// wait until the indexer is done
-		assertTrue(CCorePlugin.getIndexManager().joinIndexer(10000, new NullProgressMonitor()));
+		waitForIndexer(result[0]);
 		return result[0];
 	}
 	

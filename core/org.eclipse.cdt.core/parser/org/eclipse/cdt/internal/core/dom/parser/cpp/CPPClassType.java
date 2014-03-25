@@ -105,26 +105,32 @@ public class CPPClassType extends PlatformObject implements ICPPInternalClassTyp
 		public ICPPClassType[] getNestedClasses() {
 			return ICPPClassType.EMPTY_CLASS_ARRAY;
 		}
+		@Override
+		public boolean isFinal() {
+			return false;
+		}
+		@Override
+		public int getVisibility(IBinding member) {
+			throw new IllegalArgumentException(member.getName() + " is not a member of " + getName()); //$NON-NLS-1$
+		}
 	}
 
 	private IASTName definition;
 	private IASTName[] declarations;
-	private boolean checked = false;
+	private boolean checked;
 	private ICPPClassType typeInIndex;
 
 	public CPPClassType(IASTName name, IBinding indexBinding) {
-		if (name instanceof ICPPASTQualifiedName) {
-			IASTName[] ns = ((ICPPASTQualifiedName) name).getNames();
-			name = ns[ns.length - 1];
-		}
+		name = stripQualifier(name);
 		IASTNode parent = name.getParent();
 		while (parent instanceof IASTName)
 			parent = parent.getParent();
 
-		if (parent instanceof IASTCompositeTypeSpecifier)
+		if (parent instanceof IASTCompositeTypeSpecifier) {
 			definition = name;
-		else 
+		} else {
 			declarations = new IASTName[] { name };
+		}
 		name.setBinding(this);
 		if (indexBinding instanceof ICPPClassType && indexBinding instanceof IIndexBinding) {
 			typeInIndex= (ICPPClassType) indexBinding;
@@ -191,7 +197,8 @@ public class CPPClassType extends PlatformObject implements ICPPInternalClassTyp
 	@Override
 	public IScope getScope() {
 		IASTName name = definition != null ? definition : declarations[0];
-
+		name = stripQualifier(name);
+		
 		IScope scope = CPPVisitor.getContainingScope(name);
 		if (definition == null && name.getPropertyInParent() != ICPPASTQualifiedName.SEGMENT_NAME) {
 			IASTNode node = declarations[0].getParent().getParent();
@@ -309,7 +316,7 @@ public class CPPClassType extends PlatformObject implements ICPPInternalClassTyp
 
 	@Override
 	public IField[] getFields() {
-		return ClassTypeHelper.getFields(this);
+		return ClassTypeHelper.getFields(this, null);
 	}
 
 	@Override
@@ -319,12 +326,12 @@ public class CPPClassType extends PlatformObject implements ICPPInternalClassTyp
 
 	@Override
 	public ICPPMethod[] getMethods() {
-		return ClassTypeHelper.getMethods(this);
+		return ClassTypeHelper.getMethods(this, null);
 	}
 
 	@Override
 	public ICPPMethod[] getAllDeclaredMethods() {
-		return ClassTypeHelper.getAllDeclaredMethods(this);
+		return ClassTypeHelper.getAllDeclaredMethods(this, null);
 	}
 
 	@Override
@@ -392,5 +399,26 @@ public class CPPClassType extends PlatformObject implements ICPPInternalClassTyp
 			}
 		}
 		return false;
+	}
+
+	@Override
+	public boolean isFinal() {
+		ICPPASTCompositeTypeSpecifier typeSpecifier = getCompositeTypeSpecifier();
+		if (typeSpecifier != null) {
+			return typeSpecifier.isFinal();
+		}
+		return false;
+	}
+
+	private IASTName stripQualifier(IASTName name) {
+		if (name instanceof ICPPASTQualifiedName) {
+	        name = ((ICPPASTQualifiedName)name).getLastName();
+	    }
+		return name;
+	}
+
+	@Override
+	public int getVisibility(IBinding member) {
+		return ClassTypeHelper.getVisibility(this, member);
 	}
 }

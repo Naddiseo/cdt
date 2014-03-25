@@ -258,4 +258,111 @@ public class AbstractClassInstantiationCheckerTest extends CheckerTestCase {
 		loadCodeAndRun(getAboveComment());
 		checkNoErrors();
 	}
+
+	//	struct MyInterface {
+	//	    virtual void doIt() = 0;
+	//	};
+	//
+	//	struct Empty: virtual public MyInterface {};
+	//
+	//	struct Implementer: virtual public MyInterface {
+	//	    virtual void doIt();
+	//	};
+	//
+	//	struct Multiple: public Empty, public Implementer {};
+	//
+	//	static Multiple sharedMultiple;
+	public void testDiamondInheritanceWithOneImplementor_bug351612a() {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	struct MyInterface {
+	//	    virtual void doIt() = 0;
+	//	};
+	//
+	//	struct Empty: virtual public MyInterface {};
+	//
+	//	struct Implementer: public MyInterface {
+	//	    virtual void doIt();
+	//	};
+	//
+	//	struct Multiple: public Empty, public Implementer {};
+	//
+	//	static Multiple sharedMultiple;
+	public void testDiamondInheritanceWithOneImplementor_bug351612b() {
+		loadCodeAndRun(getAboveComment());
+		checkErrorLine(13);
+	}
+
+	//	struct MyInterface {
+	//	    virtual void doIt() = 0;
+	//	};
+	//
+	//	struct Empty: public MyInterface {};
+	//
+	//	struct Implementer: virtual public MyInterface {
+	//	    virtual void doIt();
+	//	};
+	//
+	//	struct Multiple: public Empty, public Implementer {};
+	//
+	//	static Multiple sharedMultiple;
+	public void testDiamondInheritanceWithOneImplementor_bug351612c() {
+		loadCodeAndRun(getAboveComment());
+		checkErrorLine(13);
+	}
+
+	//	struct MyInterface {
+	//	    virtual void doIt() = 0;
+	//	};
+	//
+	//	struct Empty: virtual public MyInterface {};
+	//
+	//	struct Implementer: virtual public MyInterface {
+	//	    virtual void doIt();
+	//	};
+	//
+	//	struct Multiple: virtual public Implementer, virtual public Empty {};
+	//
+	//	static Multiple sharedMultiple;
+	public void testDiamondInheritanceWithOneImplementor_bug419938() {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	struct A {
+	//	    virtual void test(int) = 0;
+	//	    virtual ~A();
+	//	};
+	//
+	//	struct B : public A {
+	//	    using A::test;
+	//	    void test(const char*);
+	//	    void test(int);
+	//	};
+	//
+	//	int main() {
+	//	    B c;
+	//	}
+	public void testUsingDeclarationInDerivedClass_bug414279() {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	struct N {
+	//	    int node;
+	//	};
+	//
+	//	template <typename T>
+	//	struct List {
+	//	    template <int T::*>
+	//	    struct Base {};
+	//	};
+	//
+	//	List<N>::Base<&N::node> base;
+	public void testUnsafeMethodCallException_bug416284() throws Exception {
+		// Just check that codan runs without any exceptions being thrown.
+		loadCodeAndRun(getAboveComment());
+	}
 }

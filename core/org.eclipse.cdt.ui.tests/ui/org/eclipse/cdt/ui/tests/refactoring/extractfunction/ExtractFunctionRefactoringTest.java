@@ -1,11 +1,11 @@
 /*******************************************************************************
  * Rapperswil, University of applied sciences and others
- * All rights reserved. This program and the accompanying materials 
- * are made available under the terms of the Eclipse Public License v1.0 
- * which accompanies this distribution, and is available at 
- * http://www.eclipse.org/legal/epl-v10.html  
- *  
- * Contributors: 
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
+ *
+ * Contributors:
  *     Institute for Software - initial API and implementation
  *     Sergey Prigogin (Google)
  *******************************************************************************/
@@ -181,7 +181,6 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 		assertRefactoringSuccess();
 	}
 
-
 	//A.h
 	//#ifndef A_H_
 	//#define A_H_
@@ -308,7 +307,7 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 	public void testLocalVariableDeclaration_3() throws Exception {
 		assertRefactoringSuccess();
 	}
-	
+
 	//A.h
 	//#ifndef A_H_
 	//#define A_H_
@@ -569,6 +568,33 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 	public void testNamedTypedField() throws Exception {
 		assertRefactoringSuccess();
 	}
+
+	//A.cpp
+	//void test() {
+	//	for (int i = 0; i < 2; i++) {
+	//		/*$*/for (int j = 0; j < i; j++) {
+	//			for (int k = 0; k < j; k++) {
+	//			}
+	//		}/*$$*/
+	//	}
+	//}
+	//====================
+	//void extracted(int i) {
+	//	for (int j = 0; j < i; j++) {
+	//		for (int k = 0; k < j; k++) {
+	//		}
+	//	}
+	//}
+	//
+	//void test() {
+	//	for (int i = 0; i < 2; i++) {
+	//		extracted(i);
+	//	}
+	//}
+	public void testNestedLoops_Bug424876() throws Exception {
+		assertRefactoringSuccess();
+	}
+
 	//A.h
 	//#ifndef A_H_
 	//#define A_H_
@@ -1943,6 +1969,30 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 		assertRefactoringFailure();
 	}
 
+	//main.cpp
+	//void test() {
+	//	int b[10];
+	//	/*$*/for (auto a : b) {
+	//		if (a == 5)
+	//			continue;
+	//	}/*$$*/
+	//}
+	//====================
+	//void extracted(int b[10]) {
+	//	for (auto a : b) {
+	//		if (a == 5)
+	//			continue;
+	//	}
+	//}
+	//
+	//void test() {
+	//	int b[10];
+	//	extracted(b);
+	//}
+	public void testContinueInsideRangeBasedLoop() throws Exception {
+		assertRefactoringSuccess();
+	}
+
 	//Test.cpp
 	//#define ASSERTM(msg,cond) if (!(cond)) throw cute::test_failure((msg),__FILE__,__LINE__)
 	//#define ASSERT(cond) ASSERTM(#cond, cond)
@@ -2144,6 +2194,51 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 		assertRefactoringSuccess();
 	}
 
+	//Test.h
+	//#ifndef TEST_H_
+	//#define TEST_H_
+	//
+	//struct A {
+	//	typedef A B;
+	//	const B* m(const char* p);
+	//};
+	//
+	//#endif // TEST_H_
+	//====================
+	//#ifndef TEST_H_
+	//#define TEST_H_
+	//
+	//struct A {
+	//	typedef A B;
+	//	const B* m(const char* p);
+	//};
+	//
+	//#endif // TEST_H_
+
+	//Test.cpp
+	//#include "Test.h"
+	//
+	//void test() {
+	//	auto x = new A();
+	//	const auto* y = "";
+	//	auto r = /*$*/x->m(y)/*$$*/;
+	//}
+	//====================
+	//#include "Test.h"
+	//
+	//const A::B* extracted(A* x, const char* y) {
+	//	return x->m(y);
+	//}
+	//
+	//void test() {
+	//	auto x = new A();
+	//	const auto* y = "";
+	//	auto r = extracted(x, y);
+	//}
+	public void testAuto_Bug422727() throws Exception {
+		assertRefactoringSuccess();
+	}
+
 	//testString.h
 	//namespace test {
 	//
@@ -2277,7 +2372,7 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 	//====================
 	//#include "testString.h"
 	//
-	//const char endTag(test::string name) {
+	//const char* endTag(test::string name) {
 	//	return "</" + name + ">";
 	//}
 	//
@@ -2327,7 +2422,7 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 	//====================
 	//#include "testString.h"
 	//
-	//const char extracted() {
+	//const char* extracted() {
 	//	return ">" + "</";
 	//}
 	//
@@ -2851,6 +2946,7 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 	public void testDuplicates() throws Exception {
 		assertRefactoringSuccess();
 	}
+
 	//A.h
 	//#ifndef A_H_
 	//#define A_H_
@@ -4124,6 +4220,78 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 		assertRefactoringSuccess();
 	}
 
+	//test.cpp
+	//template<typename T>
+	//void p(T p) {}
+	//
+	//#define TRACE(var) p(__LINE__), p(": "), p(#var), p("="), p(var)
+	//
+	//void test(int x, int y) {
+	//	/*$*/TRACE(x);/*$$*/
+	//	TRACE(y);
+	//	TRACE(x);
+	//}
+	//====================
+	//template<typename T>
+	//void p(T p) {}
+	//
+	//#define TRACE(var) p(__LINE__), p(": "), p(#var), p("="), p(var)
+	//
+	//void extracted(int x) {
+	//	TRACE(x);
+	//}
+	//
+	//void test(int x, int y) {
+	//	extracted(x);
+	//	TRACE(y);
+	//	extracted(x);
+	//}
+	public void testLiteralFromMacro() throws Exception {
+		assertRefactoringSuccess();
+	}
+
+	//test.cpp
+	//#define LABEL(a, b) a ## b
+	//#define MACRO1(cond1, cond2, var, n) \
+	//if (cond1) { \
+	//  if (cond2) { \
+	//    var++; \
+	//    goto LABEL(label, n); \
+	//  } \
+	//} else LABEL(label, n): \
+	//  var--
+	//#define MACRO(var) MACRO1(true, false, var, __COUNTER__)
+	//
+	//void test1(int x, int y) {
+	//  MACRO(x);
+	//  MACRO(y);
+	//  /*$*/MACRO(x);/*$$*/
+	//}
+	//====================
+	//#define LABEL(a, b) a ## b
+	//#define MACRO1(cond1, cond2, var, n) \
+	//if (cond1) { \
+	//  if (cond2) { \
+	//    var++; \
+	//    goto LABEL(label, n); \
+	//  } \
+	//} else LABEL(label, n): \
+	//  var--
+	//#define MACRO(var) MACRO1(true, false, var, __COUNTER__)
+	//
+	//void extracted(int x) {
+	//	MACRO(x);
+	//}
+	//
+	//void test1(int x, int y) {
+	//	extracted(x);
+	//  MACRO(y);
+	//	extracted(x);
+	//}
+	public void testLabelFromMacro() throws Exception {
+		assertRefactoringSuccess();
+	}
+
 	//A.h
 	//#ifndef A_H_
 	//#define A_H_
@@ -4456,6 +4624,27 @@ public class ExtractFunctionRefactoringTest extends RefactoringTestBase {
 	// name="extracted" project="RegressionTestProject" replaceDuplicates="true" selection="99,13" visibility="private"/>
 	//</session>
 	public void testHistoryWithDuplicatesWithDifferentNames() throws Exception {
+		assertRefactoringSuccess();
+	}
+
+	//main.cpp
+	//int main() {
+	//	/*$*/int array[] = { 1, 2, 3 };
+	//	int i = array[0];/*$$*/
+	//	return i;
+	//}
+	//====================
+	//int extracted() {
+	//	int array[] = { 1, 2, 3 };
+	//	int i = array[0];
+	//	return i;
+	//}
+	//
+	//int main() {
+	//	int i = extracted();
+	//	return i;
+	//}
+	public void testExtractArrayInitializer_Bug412380() throws Exception {
 		assertRefactoringSuccess();
 	}
 }

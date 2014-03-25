@@ -39,8 +39,6 @@ import org.eclipse.cdt.internal.ui.editor.CEditor;
  */
 public class BasicOutlineTest extends BaseUITestCase {
 
-	private static final int INDEXER_WAIT_TIME = 10000;
-
 	public static TestSuite suite() {
 		return suite(BasicOutlineTest.class);
 	}
@@ -59,7 +57,7 @@ public class BasicOutlineTest extends BaseUITestCase {
 		closeAllEditors();
 		PreferenceConstants.getPreferenceStore().setToDefault(PreferenceConstants.OUTLINE_GROUP_MEMBERS);
 		PreferenceConstants.getPreferenceStore().setToDefault(PreferenceConstants.OUTLINE_GROUP_NAMESPACES);
-		if(fCProject != null) {
+		if (fCProject != null) {
 			CProjectHelper.delete(fCProject);
 		}
 		super.tearDown();
@@ -78,12 +76,12 @@ public class BasicOutlineTest extends BaseUITestCase {
 	}
 
 	private void waitForIndexer(IProject project, IFile source) throws Exception, CoreException {
-		waitForIndexer(CCorePlugin.getIndexManager().getIndex(fCProject), source, INDEXER_WAIT_TIME);
+		waitUntilFileIsIndexed(CCorePlugin.getIndexManager().getIndex(fCProject), source);
 	}
 
 	private void checkTreeItems(TreeItem[] items, String... labels) {
 		assertEquals(items.length, labels.length);
-		int i=0;
+		int i= 0;
 		for (TreeItem treeItem : items) {
 			assertEquals(labels[i++], treeItem.getText());
 		}
@@ -278,5 +276,4 @@ public class BasicOutlineTest extends BaseUITestCase {
 		expandTreeItem(item= checkTreeNode(tree, 1, 0, "Foo"));
 		checkTreeItems(item.getItems(), "bar() : void", "field : int", "foo() : void");
 	}
-
 }

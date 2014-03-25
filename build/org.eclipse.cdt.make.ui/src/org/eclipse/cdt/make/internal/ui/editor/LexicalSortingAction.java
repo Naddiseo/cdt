@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2002, 2010 QNX Software Systems and others.
+ * Copyright (c) 2002, 2013 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -22,7 +22,6 @@ import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.ViewerSorter;
 
 public class LexicalSortingAction extends Action {
-
 	private static final String ACTION_NAME = "LexicalSortingAction"; //$NON-NLS-1$
 	private static final String DIALOG_STORE_KEY = ACTION_NAME + ".sort"; //$NON-NLS-1$
 
@@ -34,7 +33,8 @@ public class LexicalSortingAction extends Action {
 
 		setDescription(MakeUIPlugin.getResourceString(ACTION_NAME + ".description")); //$NON-NLS-1$
 		setToolTipText(MakeUIPlugin.getResourceString(ACTION_NAME + ".tooltip")); //$NON-NLS-1$
-		MakeUIImages.setImageDescriptors(this, MakeUIImages.T_TOOL, MakeUIImages.IMG_TOOLS_ALPHA_SORTING);
+		setDisabledImageDescriptor(MakeUIImages.getImageDescriptor(MakeUIImages.IMG_DTOOL_ALPHA_SORTING));
+		setImageDescriptor(MakeUIImages.getImageDescriptor(MakeUIImages.IMG_ETOOL_ALPHA_SORTING));
 
 		fTreeViewer = treeViewer;
 		fSorter = new LexicalMakefileSorter();
@@ -59,7 +59,6 @@ public class LexicalSortingAction extends Action {
 	}
 
 	private class LexicalMakefileSorter extends ViewerSorter {
-
 		@Override
 		public int category(Object obj) {
 			if (obj instanceof IDirective) {

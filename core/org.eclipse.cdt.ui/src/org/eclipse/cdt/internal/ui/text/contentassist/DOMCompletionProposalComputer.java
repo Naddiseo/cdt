@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2011 QNX Software Systems and others.
+ * Copyright (c) 2007, 2012 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@
  *     Anton Leherbauer (Wind River Systems)
  *     Sergey Prigogin (Google)
  *     Jens Elmenthaler - http://bugs.eclipse.org/173458 (camel case completion)
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.internal.ui.text.contentassist;
 
@@ -36,6 +37,7 @@ import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNamedTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTPreprocessorFunctionStyleMacroDefinition;
 import org.eclipse.cdt.core.dom.ast.IASTPreprocessorMacroDefinition;
+import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.ICompositeType;
 import org.eclipse.cdt.core.dom.ast.IEnumeration;
@@ -78,9 +80,12 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPBuiltinVariable;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPImplicitFunction;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPImplicitMethod;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPImplicitTypedef;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.ClassTypeHelper;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.AccessContext;
 import org.eclipse.cdt.internal.core.parser.util.ContentAssistMatcherFactory;
 
+import org.eclipse.cdt.internal.ui.text.CHeuristicScanner;
+import org.eclipse.cdt.internal.ui.text.Symbols;
 import org.eclipse.cdt.internal.ui.viewsupport.CElementImageProvider;
 
 /**
@@ -89,7 +94,6 @@ import org.eclipse.cdt.internal.ui.viewsupport.CElementImageProvider;
  * @author Bryan Wilkinson
  */
 public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer {
-
 	/**
 	 * Default constructor is required (executable extension).
 	 */
@@ -148,6 +152,40 @@ public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer 
 		}
 
 		return proposals;
+	}
+
+	/**
+	 * Checks whether the invocation offset is inside a using-declaration.
+	 * 
+	 * @param context  the invocation context
+	 * @return {@code true} if the invocation offset is inside a using-declaration
+	 */
+	private boolean inUsingDeclaration(CContentAssistInvocationContext context) {
+		IDocument doc = context.getDocument();
+		int offset = context.getInvocationOffset();
+
+		// Look at the tokens preceding the invocation offset.
+		CHeuristicScanner.TokenStream tokenStream = new CHeuristicScanner.TokenStream(doc, offset);
+		int token = tokenStream.previousToken();
+
+		// There may be a partially typed identifier which is being completed.
+		if (token == Symbols.TokenIDENT)
+			token = tokenStream.previousToken();
+
+		// Before that, there may be any number of "namespace::" token pairs.
+		while (token == Symbols.TokenDOUBLECOLON) {
+			token = tokenStream.previousToken();
+			if (token == Symbols.TokenUSING) {  // there could also be a leading "::" for global namespace
+				return true;
+			} else if (token != Symbols.TokenIDENT) {
+				return false;
+			} else {
+				token = tokenStream.previousToken();
+			}
+		}
+
+		// Before that, there must be a "using" token.
+		return token == Symbols.TokenUSING;
 	}
 
 	/**
@@ -309,7 +347,7 @@ public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer 
 			if (binding instanceof ICPPClassType) {
 				handleClass((ICPPClassType) binding, astContext, cContext, baseRelevance, proposals);
 			} else if (binding instanceof IFunction) {
-				handleFunction((IFunction)binding, cContext, baseRelevance, proposals);
+				handleFunction((IFunction) binding, cContext, baseRelevance, proposals);
 			} else if (binding instanceof IVariable) {
 				handleVariable((IVariable) binding, cContext, baseRelevance, proposals);
 			} else if (!cContext.isContextInformationStyle()) {
@@ -375,10 +413,11 @@ public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer 
 
 		StringBuilder repStringBuff = new StringBuilder();
 		repStringBuff.append(function.getName());
+
 		repStringBuff.append('(');
 
 		StringBuilder dispargs = new StringBuilder(); // for the dispargString
-        StringBuilder idargs = new StringBuilder();   // for the idargString
+		StringBuilder idargs = new StringBuilder();   // for the idargString
 		boolean hasArgs = true;
 		String returnTypeStr = null;
 		IParameter[] params = function.getParameters();
@@ -386,12 +425,12 @@ public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer 
 			for (int i = 0; i < params.length; ++i) {
 				IType paramType = params[i].getType();
 				if (i > 0) {
-		            dispargs.append(',');
-		            idargs.append(',');
-		        }
+					dispargs.append(',');
+					idargs.append(',');
+				}
 
 				dispargs.append(ASTTypeUtil.getType(paramType, false));
-		        idargs.append(ASTTypeUtil.getType(paramType, false));
+				idargs.append(ASTTypeUtil.getType(paramType, false));
 				String paramName = params[i].getName();
 				if (paramName != null && paramName.length() > 0) {
 					dispargs.append(' ');
@@ -437,7 +476,17 @@ public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer 
         idStringBuff.append(')');
         String idString = idStringBuff.toString();
 
-        repStringBuff.append(')');
+		// In a using declaration, emitting parentheses after the function
+		// name is useless, since the user will just have to delete them.
+		// Instead, emitting a semicolon is useful.
+		boolean inUsingDeclaration = inUsingDeclaration(context);
+		if (inUsingDeclaration) {
+			repStringBuff.setLength(repStringBuff.length() - 1);  // Remove opening parenthesis
+			repStringBuff.append(';');
+		} else {
+			repStringBuff.append(')');
+		}
+
         String repString = repStringBuff.toString();
 
         final int relevance = function instanceof ICPPMethod ?
@@ -445,7 +494,7 @@ public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer 
 		CCompletionProposal proposal = createProposal(repString, dispString, idString,
 				context.getCompletionNode().getLength(), image, baseRelevance + relevance, context);
 		if (!context.isContextInformationStyle()) {
-			int cursorPosition = hasArgs ? (repString.length() - 1) : repString.length();
+			int cursorPosition = (!inUsingDeclaration && hasArgs) ? (repString.length() - 1) : repString.length();
 			proposal.setCursorPosition(cursorPosition);
 		}
 
@@ -466,7 +515,8 @@ public class DOMCompletionProposalComputer extends ParsingBasedProposalComputer 
 			t= unwindTypedefs(t);
 			if (t instanceof ICPPClassType) {
 				ICPPClassType classType= (ICPPClassType) t;
-				ICPPConstructor[] constructors = classType.getConstructors();
+				IASTTranslationUnit ast = context.getCompletionNode().getTranslationUnit();
+				ICPPConstructor[] constructors = ClassTypeHelper.getConstructors(classType, ast);
 				for (ICPPConstructor constructor : constructors) {
 					handleFunction(constructor, context, baseRelevance, proposals);
 				}

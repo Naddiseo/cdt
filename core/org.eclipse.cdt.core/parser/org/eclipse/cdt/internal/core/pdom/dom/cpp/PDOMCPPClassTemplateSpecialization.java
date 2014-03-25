@@ -1,16 +1,19 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2011 QNX Software Systems and others.
+ * Copyright (c) 2007, 2013 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Bryan Wilkinson (QNX) - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     Bryan Wilkinson (QNX) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.pdom.dom.cpp;
 
+import org.eclipse.cdt.core.CCorePlugin;
+import org.eclipse.cdt.core.dom.ast.DOMException;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IProblemBinding;
@@ -30,6 +33,7 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPDeferredClassInstance;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPInstanceCache;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPTemplates;
 import org.eclipse.cdt.internal.core.index.IIndexCPPBindingConstants;
+import org.eclipse.cdt.internal.core.pdom.db.Database;
 import org.eclipse.cdt.internal.core.pdom.dom.PDOMBinding;
 import org.eclipse.cdt.internal.core.pdom.dom.PDOMLinkage;
 import org.eclipse.cdt.internal.core.pdom.dom.PDOMNode;
@@ -38,21 +42,29 @@ import org.eclipse.core.runtime.CoreException;
 /**
  * Specialization of a class template.
  */
-class PDOMCPPClassTemplateSpecialization extends PDOMCPPClassSpecialization 
+class PDOMCPPClassTemplateSpecialization extends PDOMCPPClassSpecialization
 		implements ICPPClassTemplate, ICPPInstanceCache {
+	private static final int TEMPLATE_PARAMS = PDOMCPPClassSpecialization.RECORD_SIZE;
 
 	@SuppressWarnings("hiding")
-	protected static final int RECORD_SIZE = PDOMCPPClassSpecialization.RECORD_SIZE;
+	protected static final int RECORD_SIZE = TEMPLATE_PARAMS + Database.PTR_SIZE;
 
-	public PDOMCPPClassTemplateSpecialization(PDOMLinkage linkage, PDOMNode parent, ICPPClassTemplate template, PDOMBinding specialized)
-			throws CoreException {
+	private volatile IPDOMCPPTemplateParameter[] fTemplateParameters;
+
+	public PDOMCPPClassTemplateSpecialization(PDOMCPPLinkage linkage, PDOMNode parent,
+			ICPPClassTemplate template, PDOMBinding specialized) throws CoreException {
 		super(linkage, parent, template, specialized);
+		computeTemplateParameters(template);  // sets fTemplateParameters
+		final Database db = getDB();
+		long rec = PDOMTemplateParameterArray.putArray(db, fTemplateParameters);
+		db.putRecPtr(record + TEMPLATE_PARAMS, rec);
+		linkage.new ConfigureTemplateParameters(template.getTemplateParameters(), fTemplateParameters);
 	}
 
 	public PDOMCPPClassTemplateSpecialization(PDOMLinkage linkage, long bindingRecord) {
 		super(linkage, bindingRecord);
 	}
-	
+
 	@Override
 	protected int getRecordSize() {
 		return RECORD_SIZE;
@@ -62,28 +74,40 @@ class PDOMCPPClassTemplateSpecialization extends PDOMCPPClassSpecialization
 	public int getNodeType() {
 		return IIndexCPPBindingConstants.CPP_CLASS_TEMPLATE_SPECIALIZATION;
 	}
-		
+
 	@Override
 	public ICPPTemplateParameter[] getTemplateParameters() {
-		ICPPClassTemplate template = (ICPPClassTemplate) getSpecializedBinding();
-		return template.getTemplateParameters();
+		if (fTemplateParameters == null) {
+			try {
+				long rec = getDB().getRecPtr(record + TEMPLATE_PARAMS);
+				if (rec == 0) {
+					fTemplateParameters = IPDOMCPPTemplateParameter.EMPTY_ARRAY;
+				} else {
+					fTemplateParameters = PDOMTemplateParameterArray.getArray(this, rec);
+				}
+			} catch (CoreException e) {
+				CCorePlugin.log(e);
+				fTemplateParameters = IPDOMCPPTemplateParameter.EMPTY_ARRAY;
+			}
+		}
+		return fTemplateParameters;
 	}
 
 	@Override
 	public ICPPTemplateInstance getInstance(ICPPTemplateArgument[] arguments) {
-		return PDOMInstanceCache.getCache(this).getInstance(arguments);	
+		return PDOMInstanceCache.getCache(this).getInstance(arguments);
 	}
 
 	@Override
 	public void addInstance(ICPPTemplateArgument[] arguments, ICPPTemplateInstance instance) {
-		PDOMInstanceCache.getCache(this).addInstance(arguments, instance);	
+		PDOMInstanceCache.getCache(this).addInstance(arguments, instance);
 	}
 
 	@Override
 	public ICPPTemplateInstance[] getAllInstances() {
-		return PDOMInstanceCache.getCache(this).getAllInstances();	
+		return PDOMInstanceCache.getCache(this).getAllInstances();
 	}
-	
+
 	@Override
 	public boolean isSameType(IType type) {
 		if( type == this )
@@ -100,15 +124,15 @@ class PDOMCPPClassTemplateSpecialization extends PDOMCPPClassSpecialization
 		}
 
 		// require a class template specialization
-		if (type instanceof ICPPClassSpecialization == false || 
+		if (type instanceof ICPPClassSpecialization == false ||
 				type instanceof ICPPTemplateDefinition == false || type instanceof IProblemBinding)
 			return false;
-		
-		
+
+
 		final ICPPClassSpecialization classSpec2 = (ICPPClassSpecialization) type;
-		if (getKey() != classSpec2.getKey()) 
+		if (getKey() != classSpec2.getKey())
 			return false;
-		
+
 		if (!CharArrayUtils.equals(getNameCharArray(), classSpec2.getNameCharArray()))
 			return false;
 
@@ -155,19 +179,20 @@ class PDOMCPPClassTemplateSpecialization extends PDOMCPPClassSpecialization
 
 		return ((ICPPClassType) owner1).isSameType((ICPPClassType) owner2);
 	}
-	
+
 	@Override
 	public ICPPClassTemplatePartialSpecialization[] getPartialSpecializations() {
-		IASTNode point= null; // Instantiation of dependent expression may not work.
+		IASTNode point= null; // Instantiation of dependent expressions may not work.
 		ICPPClassTemplate origTemplate= (ICPPClassTemplate) getSpecializedBinding();
 		ICPPClassTemplatePartialSpecialization[] orig = origTemplate.getPartialSpecializations();
 		ICPPClassTemplatePartialSpecialization[] spec = new ICPPClassTemplatePartialSpecialization[orig.length];
+		ICPPClassSpecialization owner = (ICPPClassSpecialization) getOwner();
 		for (int i = 0; i < orig.length; i++) {
-			spec[i]= (ICPPClassTemplatePartialSpecialization) specializeMember(orig[i], point);
+			spec[i]= (ICPPClassTemplatePartialSpecialization) owner.specializeMember(orig[i], point);
 		}
 		return spec;
 	}
-	
+
 	@Override
 	public final ICPPDeferredClassInstance asDeferredInstance() {
 		PDOMInstanceCache cache= PDOMInstanceCache.getCache(this);
@@ -178,6 +203,19 @@ class PDOMCPPClassTemplateSpecialization extends PDOMCPPClassSpecialization
 				cache.putDeferredInstance(dci);
 			}
 			return dci;
+		}
+	}
+
+	private void computeTemplateParameters(ICPPClassTemplate originalTemplate) {
+		try {
+			fTemplateParameters = PDOMTemplateParameterArray.createPDOMTemplateParameters(getLinkage(),
+					this, originalTemplate.getTemplateParameters());
+		} catch (DOMException e) {
+			CCorePlugin.log(e);
+			fTemplateParameters = IPDOMCPPTemplateParameter.EMPTY_ARRAY;
+		} catch (CoreException e) {
+			CCorePlugin.log(e);
+			fTemplateParameters = IPDOMCPPTemplateParameter.EMPTY_ARRAY;
 		}
 	}
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     John Camelon (IBM) - Initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -36,6 +37,7 @@ public class CPPASTCompositeTypeSpecifier extends CPPASTBaseDeclSpecifier
 	private ICPPASTCompositeTypeSpecifier.ICPPASTBaseSpecifier[] baseSpecs;
 	private int baseSpecsPos = -1;
 	private boolean fAmbiguitiesResolved;
+	private boolean isFinal;
 
     public CPPASTCompositeTypeSpecifier() {
 	}
@@ -65,6 +67,7 @@ public class CPPASTCompositeTypeSpecifier extends CPPASTBaseDeclSpecifier
 			copy.addMemberDeclaration(member == null ? null : member.copy(style));
 		for (ICPPASTBaseSpecifier baseSpecifier : getBaseSpecifiers())
 			copy.addBaseSpecifier(baseSpecifier == null ? null : baseSpecifier.copy(style));
+		copy.isFinal = isFinal;
 		return super.copy(copy, style);
 	}
 
@@ -175,7 +178,10 @@ public class CPPASTCompositeTypeSpecifier extends CPPASTBaseDeclSpecifier
 			default: break;
 			}
 		}
-		
+
+		if (!acceptByAttributeSpecifiers(action))
+			return false;
+
 		if (fName != null && !fName.accept(action))
 			return false;
 
@@ -215,5 +221,16 @@ public class CPPASTCompositeTypeSpecifier extends CPPASTBaseDeclSpecifier
 				fActiveDeclarations= null;
 			}
 		}
+	}
+
+	@Override
+	public boolean isFinal() {
+		return isFinal;
+	}
+
+	@Override
+	public void setFinal(boolean value) {
+		assertNotFrozen();
+		isFinal = value;
 	}
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2010 Institute for Software, HSR Hochschule fuer Technik  
+ * Copyright (c) 2008, 2014 Institute for Software, HSR Hochschule fuer Technik  
  * Rapperswil, University of applied sciences and others
  * All rights reserved. This program and the accompanying materials 
  * are made available under the terms of the Eclipse Public License v1.0 
@@ -10,8 +10,11 @@
  *     Institute for Software - initial API and implementation
  *     Markus Schorn (Wind River Systems)
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.rewrite.astwriter;
+
+import java.util.EnumSet;
 
 import org.eclipse.cdt.core.dom.ast.IASTArrayDeclarator;
 import org.eclipse.cdt.core.dom.ast.IASTArrayModifier;
@@ -26,6 +29,7 @@ import org.eclipse.cdt.core.dom.ast.IASTPointer;
 import org.eclipse.cdt.core.dom.ast.IASTPointerOperator;
 import org.eclipse.cdt.core.dom.ast.IASTStandardFunctionDeclarator;
 import org.eclipse.cdt.core.dom.ast.IASTTypeId;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFunctionDeclarator;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTPointerToMember;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTReferenceOperator;
@@ -63,7 +67,7 @@ public class DeclaratorWriter extends NodeWriter {
 		}
 
 		visitor.setSpaceNeededBeforeName(false);
-		writeTrailingComments(declarator, false);			
+		writeTrailingComments(declarator, false);
 	}
 
 	protected void writeDefaultDeclarator(IASTDeclarator declarator) {
@@ -72,6 +76,7 @@ public class DeclaratorWriter extends NodeWriter {
 		IASTName name = declarator.getName();
 		name.accept(visitor);
 		writeNestedDeclarator(declarator);
+		writeAttributes(declarator, EnumSet.of(SpaceLocation.BEFORE));
 		IASTInitializer init = getInitializer(declarator);
 		if (init != null) {
 			init.accept(visitor);
@@ -80,14 +85,16 @@ public class DeclaratorWriter extends NodeWriter {
 
 	protected void writePointerOperators(IASTDeclarator declarator, IASTPointerOperator[] pointOps) {
 		for (IASTPointerOperator operator : pointOps) {
+			writeGCCAttributes(operator, EnumSet.noneOf(SpaceLocation.class));
 			writePointerOperator(operator);
+			writeCPPAttributes(operator, EnumSet.noneOf(SpaceLocation.class));
 		}
 	}
 
 	private void writeFunctionDeclarator(IASTStandardFunctionDeclarator funcDec) {
 		IASTPointerOperator[] pointOps = funcDec.getPointerOperators();
 		writePointerOperators(funcDec, pointOps);
-		// XXX: Lambda declarators happen to have null names rather than empty ones when parsed
+		// Lambda declarators happen to have null names rather than empty ones when parsed.
 		if (funcDec.getName() != null) {
 			funcDec.getName().accept(visitor);
 		}
@@ -139,10 +146,19 @@ public class DeclaratorWriter extends NodeWriter {
 			scribe.printSpace();
 			scribe.print(Keywords.MUTABLE);
 		}
+		if (funcDec.isOverride()) {
+			scribe.printSpace();
+			scribe.print(Keywords.cOVERRIDE);
+		}
+		if (funcDec.isFinal()) {
+			scribe.printSpace();
+			scribe.print(Keywords.cFINAL);
+		}
 		if (funcDec.isPureVirtual()) {
 			scribe.print(PURE_VIRTUAL);
 		}
-		writeExceptionSpecification(funcDec, funcDec.getExceptionSpecification());
+		writeExceptionSpecification(funcDec, funcDec.getExceptionSpecification(), funcDec.getNoexceptExpression());
+		writeAttributes(funcDec, EnumSet.of(SpaceLocation.BEFORE));
 		if (funcDec.getTrailingReturnType() != null) {
 			scribe.printSpace();
 			scribe.print(ARROW_OPERATOR);
@@ -151,13 +167,24 @@ public class DeclaratorWriter extends NodeWriter {
 		}
 	}
 
-	protected void writeExceptionSpecification(ICPPASTFunctionDeclarator funcDec, IASTTypeId[] exceptions) {
+	protected void writeExceptionSpecification(ICPPASTFunctionDeclarator funcDec, IASTTypeId[] exceptions,
+			ICPPASTExpression noexceptExpression) {
 		if (exceptions != ICPPASTFunctionDeclarator.NO_EXCEPTION_SPECIFICATION) {
 			scribe.printSpace();
 			scribe.printStringSpace(Keywords.THROW);
 			scribe.print('(');
 			writeNodeList(exceptions);
 			scribe.print(')');
+		}
+		if (noexceptExpression != null) {
+			scribe.printSpace();
+			scribe.print(Keywords.NOEXCEPT);
+			if (noexceptExpression != ICPPASTFunctionDeclarator.NOEXCEPT_DEFAULT) {
+				scribe.printSpace();
+				scribe.print('(');
+				noexceptExpression.accept(visitor);
+				scribe.print(')');
+			}
 		}
 	}
 
@@ -239,6 +266,7 @@ public class DeclaratorWriter extends NodeWriter {
 			ex.accept(visitor);
 		}
 		scribe.print(']');
+		writeAttributes(modifier, EnumSet.noneOf(SpaceLocation.class));
 	}
 
 	private void writeFieldDeclarator(IASTFieldDeclarator fieldDecl) {
@@ -266,7 +294,7 @@ public class DeclaratorWriter extends NodeWriter {
 
 	protected void writeKnRParameterDeclarations(ICASTKnRFunctionDeclarator knrFunct,
 			IASTDeclaration[] knrDeclarations) {
-		for (int i = 0; i < knrDeclarations.length;  ++i) {
+		for (int i = 0; i < knrDeclarations.length; ++i) {
 			scribe.noNewLines();
 			knrDeclarations[i].accept(visitor);
 			scribe.newLines();

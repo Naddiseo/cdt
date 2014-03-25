@@ -76,6 +76,7 @@ import org.eclipse.cdt.internal.core.pdom.db.IBTreeComparator;
 import org.eclipse.cdt.internal.core.pdom.db.IBTreeVisitor;
 import org.eclipse.cdt.internal.core.pdom.dom.BindingCollector;
 import org.eclipse.cdt.internal.core.pdom.dom.FindBinding;
+import org.eclipse.cdt.internal.core.pdom.dom.IPDOMIterator;
 import org.eclipse.cdt.internal.core.pdom.dom.IPDOMLinkageFactory;
 import org.eclipse.cdt.internal.core.pdom.dom.MacroContainerCollector;
 import org.eclipse.cdt.internal.core.pdom.dom.MacroContainerPatternCollector;
@@ -89,6 +90,7 @@ import org.eclipse.cdt.internal.core.pdom.dom.PDOMMacroReferenceName;
 import org.eclipse.cdt.internal.core.pdom.dom.PDOMName;
 import org.eclipse.cdt.internal.core.pdom.dom.PDOMNamedNode;
 import org.eclipse.cdt.internal.core.pdom.dom.PDOMNode;
+import org.eclipse.cdt.internal.core.pdom.tag.PDOMTagIndex;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.NullProgressMonitor;
@@ -103,7 +105,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 	private static final int BLOCKED_WRITE_LOCK_OUTPUT_INTERVAL = 30000;
 	private static final int LONG_WRITE_LOCK_REPORT_THRESHOLD = 1000;
 	private static final int LONG_READ_LOCK_WAIT_REPORT_THRESHOLD = 1000;
-	static boolean sDEBUG_LOCKS= false; // initialized in the PDOMManager, because IBM needs PDOM independent of runtime plugin.
+	static boolean sDEBUG_LOCKS= false; // Initialized in the PDOMManager, because IBM needs PDOM independent of runtime plugin.
 
 	/**
 	 * Identifier for PDOM format
@@ -208,7 +210,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 	 *  113.0 - Changed marshaling of values, bug 327878
 	 *  #114.0# - Partial specializations for class template specializations, bug 332884.
 	 *          - Corrected signatures for function templates, bug 335062.  <<CDT 8.0>>
-	 *  
+	 *
 	 *  CDT 8.1 development (versions not supported on the 8.0.x branch)
 	 *  120.0 - Enumerators in global index, bug 356235
 	 *  120.1 - Specializations of using declarations, bug 357293.
@@ -217,20 +219,47 @@ public class PDOM extends PlatformObject implements IPDOM {
 	 *  123.0 - Combined file size and encoding hash code.
 	 *  124.0 - GCC attributes and NO_RETURN flag for functions.
 	 *  #125.0# - Indexes for unresolved includes and files indexed with I/O errors. <<CDT 8.1>>
-	 *  
-	 *  CDT 8.2 development
-	 *  130.0 - Dependent expressions, bug 299911
+	 *
+	 *  CDT 8.2 development (versions not supported on the 8.1.x branch)
+	 *  130.0 - Dependent expressions, bug 299911.
+	 *  131.0 - Dependent expressions part 2, bug 299911.
+	 *  132.0 - Explicit virtual overrides, bug 380623.
+	 *  133.0 - Storing template arguments via direct marshalling, bug 299911.
+	 *  134.0 - Storing unknown bindings via direct marshalling, bug 381824.
+	 *  135.0 - Changed marshalling of EvalUnary, bug 391001.
+	 *  136.0 - Extended CPPTemplateTypeArgument to include the original type, bug 392278.
+	 *  137.0 - Fixed serialization of very large types and template arguments, bug 392278.
+	 *  138.0 - Constexpr functions, bug 395238.
+	 *  139.0 - More efficient and robust storage of types and template arguments, bug 395243.
+	 *  140.0 - Enumerators with dependent values, bug 389009.
+	 *  140.1 - Mechanism for tagging nodes with extended data, bug 400020
+	 *  141.0 - Storing enclosing template bindings for evaluations, bug 399829.
+	 *  142.0 - Changed marshalling of evaluations to allow more than 15 evaluation kinds, bug 401479.
+	 *  143.0 - Store implied object type in EvalFunctionSet, bug 402409.
+	 *  144.0 - Add support for storing function sets with zero functions in EvalFunctionSet, bug 402498.
+	 *  145.0 - Changed marshalling of CPPBasicType to store the associated numerical value, bug 407808.
+	 *  146.0 - Added visibility support on class type level, bug 402878.
+	 *  #147.0# - Store whether function name is qualified in EvalFunctionSet, bug 408296. <<CDT 8.2>>
+	 *
+	 *  CDT 8.3 development (versions not supported on the 8.2.x branch)
+	 *  160.0 - Store specialized template parameters of class/function template specializations, bug 407497.
+	 *  161.0 - Allow reference to PDOMBinding from other PDOMLinkages, bug 422681.
+	 *  162.0 - PDOMNode now stores the factoryId for loading, bug 422681.
+	 *  #163.0# - QtLinkage changed storage format of QObject to accommodate QGadget. <<CDT 8.3>>
+	 *
+	 *  CDT 8.4 development (versions not supported on the 8.3.x branch)
+	 *  170.0 - Unconditionally store arguments of EvalTypeId, bug 430230.
 	 */
-	private static final int MIN_SUPPORTED_VERSION= version(130, 0);
-	private static final int MAX_SUPPORTED_VERSION= version(130, Short.MAX_VALUE);
-	private static final int DEFAULT_VERSION = version(130, 0);
+	private static final int MIN_SUPPORTED_VERSION= version(170, 0);
+	private static final int MAX_SUPPORTED_VERSION= version(170, Short.MAX_VALUE);
+	private static final int DEFAULT_VERSION = version(170, 0);
 
 	private static int version(int major, int minor) {
 		return (major << 16) + minor;
 	}
 
 	/**
-	 * Returns the version that shall be used when creating new databases
+	 * Returns the version that shall be used when creating new databases.
 	 */
 	public static int getDefaultVersion() {
 		return DEFAULT_VERSION;
@@ -259,7 +288,8 @@ public class PDOM extends PlatformObject implements IPDOM {
 	public static final int INDEX_OF_DEFECTIVE_FILES = Database.DATA_AREA + 8;
 	public static final int INDEX_OF_FILES_WITH_UNRESOLVED_INCLUDES = Database.DATA_AREA + 12;
 	public static final int PROPERTIES = Database.DATA_AREA + 16;
-	public static final int END= Database.DATA_AREA + 20;
+	public static final int TAG_INDEX = Database.DATA_AREA + 20;
+	public static final int END= Database.DATA_AREA + 24;
 	static {
 		assert END <= Database.CHUNK_SIZE;
 	}
@@ -321,6 +351,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 	// Local caches
 	protected Database db;
 	private BTree fileIndex;
+	private PDOMTagIndex tagIndex;
 	private BTree indexOfDefectiveFiles;
 	private BTree indexOfFiledWithUnresolvedIncludes;
 	private final Map<Integer, PDOMLinkage> fLinkageIDCache = new HashMap<Integer, PDOMLinkage>();
@@ -449,6 +480,13 @@ public class PDOM extends PlatformObject implements IPDOM {
 		return fileIndex;
 	}
 
+	public PDOMTagIndex getTagIndex() throws CoreException {
+		if (tagIndex == null) {
+			tagIndex = new PDOMTagIndex(db, TAG_INDEX);
+		}
+		return tagIndex;
+	}
+
 	/**
 	 * Returns the index of files that were read with I/O errors.
 	 */
@@ -459,7 +497,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 	}
 
 	/**
-	 * Returns the index of files containg unresolved includes.
+	 * Returns the index of files containing unresolved includes.
 	 */
 	public BTree getIndexOfFilesWithUnresolvedIncludes() throws CoreException {
 		if (indexOfFiledWithUnresolvedIncludes == null) {
@@ -538,7 +576,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 		});
 		return files.toArray(new IIndexFragmentFile[files.size()]);
 	}
-		
+
 	protected IIndexFragmentFile addFile(int linkageID, IIndexFileLocation location,
 			ISignificantMacros sigMacros) throws CoreException {
 		PDOMLinkage linkage= createLinkage(linkageID);
@@ -722,8 +760,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 				} catch (CoreException e) {
 					if (e.getStatus() != Status.OK_STATUS)
 						throw e;
-					else
-						return IIndexFragmentBinding.EMPTY_INDEX_BINDING_ARRAY;
+					return IIndexFragmentBinding.EMPTY_INDEX_BINDING_ARRAY;
 				}
 			}
 		}
@@ -816,8 +853,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 				} catch (CoreException e) {
 					if (e.getStatus() != Status.OK_STATUS)
 						throw e;
-					else
-						return IIndexFragmentBinding.EMPTY_INDEX_BINDING_ARRAY;
+					return IIndexFragmentBinding.EMPTY_INDEX_BINDING_ARRAY;
 				}
 			}
 		}
@@ -1137,6 +1173,12 @@ public class PDOM extends PlatformObject implements IPDOM {
 					names.add(name);
 				}
 			}
+			IPDOMIterator<PDOMName> iterator = pdomBinding.getExternalReferences();
+			while(iterator.hasNext()) {
+				name = iterator.next();
+				if (isCommitted(name))
+					names.add(name);
+			}
 		}
 	}
 
@@ -1295,8 +1337,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 					result.addAll(visitor.getMacroList());
 				}
 			}
-		}
-		catch (OperationCanceledException e) {
+		} catch (OperationCanceledException e) {
 		}
 		return result.toArray(new IIndexFragmentBinding[result.size()]);
 	}
@@ -1347,6 +1388,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 
 	private void clearCaches() {
 		fileIndex= null;
+		tagIndex = null;
 		indexOfDefectiveFiles= null;
 		indexOfFiledWithUnresolvedIncludes= null;
 		fLinkageIDCache.clear();
@@ -1569,6 +1611,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 			fTraces.add(Thread.currentThread().getStackTrace());
 			return fTraces.size();
 		}
+
 		@SuppressWarnings("nls")
 		public void write(String threadName) {
 			System.out.println("Thread: '" + threadName + "': " + fReadLocks + " readlocks, " + fWriteLocks + " writelocks");
@@ -1579,6 +1622,7 @@ public class PDOM extends PlatformObject implements IPDOM {
 				}
 			}
 		}
+
 		public void inc(DebugLockInfo val) {
 			fReadLocks+= val.fReadLocks;
 			fWriteLocks+= val.fWriteLocks;

@@ -6,16 +6,15 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Bryan Wilkinson (QNX) - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
- *    Sergey Prigogin (Google)
+ *     Bryan Wilkinson (QNX) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.pdom.dom.cpp;
 
 import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.IPDOMVisitor;
 import org.eclipse.cdt.core.dom.ast.DOMException;
-import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.ITypedef;
@@ -24,7 +23,7 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateArgument;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameter;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateTypeParameter;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTName;
-import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPTemplateArgument;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPTemplateTypeArgument;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPUnknownBinding;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPUnknownType;
 import org.eclipse.cdt.internal.core.index.IIndexCPPBindingConstants;
@@ -42,7 +41,6 @@ import org.eclipse.core.runtime.CoreException;
 class PDOMCPPTemplateTypeParameter extends PDOMCPPBinding implements IPDOMMemberOwner,
 		ICPPTemplateTypeParameter, ICPPUnknownBinding, ICPPUnknownType, IIndexType,
 		IPDOMCPPTemplateParameter {
-
 	private static final int PACK_BIT = 1 << 31;
 
 	private static final int DEFAULT_TYPE = PDOMCPPBinding.RECORD_SIZE;	
@@ -155,7 +153,7 @@ class PDOMCPPTemplateTypeParameter extends PDOMCPPBinding implements IPDOMMember
 		if (d == null)
 			return null;
 		
-		return new CPPTemplateArgument(d);
+		return new CPPTemplateTypeArgument(d);
 	}
 	
 	@Override
@@ -169,11 +167,6 @@ class PDOMCPPTemplateTypeParameter extends PDOMCPPBinding implements IPDOMMember
 			fUnknownScope= new PDOMCPPUnknownScope(this, new CPPASTName(getNameCharArray()));
 		}
 		return fUnknownScope;
-	}
-
-	@Override
-	public IASTName getUnknownName() {
-		return new CPPASTName(getNameCharArray());
 	}
 
 	@Override

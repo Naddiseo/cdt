@@ -21,6 +21,8 @@ import org.eclipse.cdt.debug.core.ICDTLaunchConfigurationConstants;
 import org.eclipse.cdt.dsf.datamodel.IDMEvent;
 import org.eclipse.cdt.dsf.debug.service.IRunControl.ISuspendedDMEvent;
 import org.eclipse.cdt.dsf.gdb.IGDBLaunchConfigurationConstants;
+import org.eclipse.cdt.dsf.gdb.internal.GdbDebugOptions;
+import org.eclipse.cdt.dsf.gdb.internal.GdbPlugin;
 import org.eclipse.cdt.dsf.gdb.launching.GdbLaunch;
 import org.eclipse.cdt.dsf.mi.service.command.events.IMIDMEvent;
 import org.eclipse.cdt.dsf.mi.service.command.events.MIStoppedEvent;
@@ -32,16 +34,21 @@ import org.eclipse.cdt.tests.dsf.gdb.launching.TestsPlugin;
 import org.eclipse.cdt.utils.spawner.ProcessFactory;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.Platform;
+import org.eclipse.core.runtime.preferences.IEclipsePreferences;
+import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.debug.core.DebugException;
 import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.core.ILaunchConfiguration;
 import org.eclipse.debug.core.ILaunchConfigurationType;
 import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
 import org.eclipse.debug.core.ILaunchManager;
+import org.eclipse.debug.internal.core.IInternalDebugCoreConstants;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.rules.TestName;
 import org.junit.rules.TestRule;
@@ -55,6 +62,7 @@ import org.junit.rules.Timeout;
  * must call super.baseSetup or super.baseTeardown itself, if this
  * code is to be run.
  */
+@SuppressWarnings("restriction")
 public class BaseTestCase {
 	// Timeout value for each individual test
 	private final static int TEST_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -90,7 +98,9 @@ public class BaseTestCase {
 	
 	/** Event semaphore we set when the target has reached the breakpoint at main() */ 
 	final private String fTargetSuspendedSem = new String(); // just used as a semaphore
-	
+
+	private static boolean fgStatusHandlersEnabled = true;
+
     public GdbLaunch getGDBLaunch() { return fLaunch; }
     
     public void setLaunchAttribute(String key, Object value) { 
@@ -218,10 +228,10 @@ public class BaseTestCase {
  	protected void doLaunch() throws Exception {
  		boolean remote = launchAttributes.get(ICDTLaunchConfigurationConstants.ATTR_DEBUGGER_START_MODE).equals(IGDBLaunchConfigurationConstants.DEBUGGER_MODE_REMOTE);
  		
-    	System.out.println("====================================================================================================");
-		System.out.println(String.format("Running test: %s using GDB: %s remote %s", 
-				                         testName.getMethodName(), launchAttributes.get(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME), remote ? "on" : "off"));
-    	System.out.println("====================================================================================================");
+    	if(GdbDebugOptions.DEBUG) GdbDebugOptions.trace("===============================================================================================\n");
+		System.out.println(String.format("%s \"%s\" launching %s %s", 
+				                         GdbPlugin.getDebugTime(), testName.getMethodName(), launchAttributes.get(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME), remote ? "with gdbserver" : ""));
+		if(GdbDebugOptions.DEBUG) GdbDebugOptions.trace("===============================================================================================\n");
 		
  		boolean postMortemLaunch = launchAttributes.get(ICDTLaunchConfigurationConstants.ATTR_DEBUGGER_START_MODE)
 	                                               .equals(ICDTLaunchConfigurationConstants.DEBUGGER_MODE_CORE);
@@ -320,7 +330,7 @@ public class BaseTestCase {
                     BufferedReader reader = new BufferedReader(r);
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        System.out.println(line);
+                    	if(GdbDebugOptions.DEBUG) GdbDebugOptions.trace(line + "\n");
                         line = line.trim();
                         if (line.startsWith("Listening on port")) {
                             break;
@@ -351,8 +361,15 @@ public class BaseTestCase {
  	public static void setGdbProgramNamesLaunchAttributes(String version) {
 		// See bugzilla 303811 for why we have to append ".exe" on Windows
  		boolean isWindows = Platform.getOS().equals(Platform.OS_WIN32);
- 		setGlobalLaunchAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME, "gdb." + version + (isWindows ? ".exe" : ""));
- 		setGlobalLaunchAttribute(ATTR_DEBUG_SERVER_NAME, "gdbserver." + version + (isWindows ? ".exe" : ""));
+ 		String gdbPath = System.getProperty("cdt.tests.dsf.gdb.path");
+ 		String debugName = "gdb." + version + (isWindows ? ".exe" : "");
+ 		String debugServerName = "gdbserver." + version + (isWindows ? ".exe" : "");
+ 		if (gdbPath != null) {
+ 			debugName = gdbPath + "/" + debugName;
+ 			debugServerName = gdbPath + "/" + debugServerName;
+ 		}
+ 		setGlobalLaunchAttribute(IGDBLaunchConfigurationConstants.ATTR_DEBUG_NAME, debugName);
+ 		setGlobalLaunchAttribute(ATTR_DEBUG_SERVER_NAME, debugServerName);
  	}
 
  	protected void setGdbVersion() {
@@ -383,5 +400,19 @@ public class BaseTestCase {
  	 */
  	protected boolean reallyLaunchGDBServer() {
  		return true;
+ 	}
+
+	@BeforeClass
+ 	public static void setGlobalPreferences() {
+		IEclipsePreferences node = InstanceScope.INSTANCE.getNode(DebugPlugin.getUniqueIdentifier());
+		// Disable status handlers
+		fgStatusHandlersEnabled = Platform.getPreferencesService().getBoolean(DebugPlugin.getUniqueIdentifier(), IInternalDebugCoreConstants.PREF_ENABLE_STATUS_HANDLERS, true, null);
+		node.putBoolean(IInternalDebugCoreConstants.PREF_ENABLE_STATUS_HANDLERS, false);
+ 	}
+
+	@AfterClass
+	public static void restoreGlobalPreferences() {
+		IEclipsePreferences node = InstanceScope.INSTANCE.getNode(DebugPlugin.getUniqueIdentifier());
+		node.putBoolean(IInternalDebugCoreConstants.PREF_ENABLE_STATUS_HANDLERS, fgStatusHandlersEnabled);
  	}
 }

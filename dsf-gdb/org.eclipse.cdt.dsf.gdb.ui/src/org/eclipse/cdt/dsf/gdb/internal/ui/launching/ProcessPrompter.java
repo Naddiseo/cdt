@@ -34,10 +34,12 @@ public class ProcessPrompter implements IStatusHandler {
 
 	public static class PrompterInfo {
 		public boolean supportsNewProcess;
+		public boolean remote;
 		public IProcessExtendedInfo[] processList;
 		
-		public PrompterInfo(boolean supportsNew, IProcessExtendedInfo[] list) {
+		public PrompterInfo(boolean supportsNew, boolean remote, IProcessExtendedInfo[] list) {
 			supportsNewProcess = supportsNew;
+			this.remote = remote;
 			processList = list;
 		}
 	}
@@ -105,8 +107,15 @@ public class ProcessPrompter implements IStatusHandler {
 					
 					name = name.split("\\s", 2)[0]; //$NON-NLS-1$
 					
+					// on windows host, paths of style "sendmail:", "udisk-daemon:" 
+					// would be treated as device id with no path segments 
 					IPath path = new Path(name);
-					StringBuffer text = new StringBuffer(path.lastSegment());
+					StringBuilder text = new StringBuilder();
+					if (path.lastSegment() == null ) {
+						text.append(name);
+					} else {
+						text.append(path.lastSegment());
+					}
 					
 					String owner = info.getOwner();
 					if (owner != null) {
@@ -162,7 +171,8 @@ public class ProcessPrompter implements IStatusHandler {
 			};
 
 			// Display the list of processes and have the user choose
-			ProcessPrompterDialog dialog = new ProcessPrompterDialog(shell, provider, qprovider, prompterInfo.supportsNewProcess);
+			ProcessPrompterDialog dialog = 
+				new ProcessPrompterDialog(shell, provider, qprovider, prompterInfo.supportsNewProcess, prompterInfo.remote);
 			dialog.setTitle(LaunchUIMessages.getString("LocalAttachLaunchDelegate.Select_Process")); //$NON-NLS-1$
 			dialog.setMessage(LaunchUIMessages.getString("LocalAttachLaunchDelegate.Select_Process_to_attach_debugger_to")); //$NON-NLS-1$
 
@@ -172,9 +182,9 @@ public class ProcessPrompter implements IStatusHandler {
 			dialog.setElements(plist);
 			if (dialog.open() == Window.OK) {
 				// First check if the user pressed the New button
-				String binaryPath = dialog.getBinaryPath();
-				if (binaryPath != null) {
-					return binaryPath;
+				NewExecutableInfo execInfo = dialog.getExecutableInfo();
+				if (execInfo != null) {
+					return execInfo;
 				}
 				
 				Object[] results = dialog.getResult();

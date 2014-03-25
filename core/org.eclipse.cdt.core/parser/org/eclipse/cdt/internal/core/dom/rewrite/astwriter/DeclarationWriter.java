@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2010 Institute for Software, HSR Hochschule fuer Technik
+ * Copyright (c) 2008, 2014 Institute for Software, HSR Hochschule fuer Technik
  * Rapperswil, University of applied sciences and others
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -10,17 +10,24 @@
  *     Institute for Software - initial API and implementation
  *     Markus Schorn (Wind River Systems)
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.rewrite.astwriter;
 
+import java.util.EnumSet;
+
 import org.eclipse.cdt.core.dom.ast.IASTASMDeclaration;
+import org.eclipse.cdt.core.dom.ast.IASTAttributeOwner;
 import org.eclipse.cdt.core.dom.ast.IASTDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTDeclarator;
 import org.eclipse.cdt.core.dom.ast.IASTFunctionDefinition;
+import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTProblemDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTSimpleDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTSimpleDeclaration;
+import org.eclipse.cdt.core.dom.ast.IASTStatement;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTAliasDeclaration;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTCatchHandler;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConstructorChainInitializer;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTExplicitTemplateInstantiation;
@@ -32,6 +39,7 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNamespaceDefinition;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateDeclaration;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateParameter;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateSpecialization;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTypeId;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTUsingDeclaration;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTUsingDirective;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTVisibilityLabel;
@@ -93,6 +101,8 @@ public class DeclarationWriter extends NodeWriter {
 			writeUsingDirective((ICPPASTUsingDirective) declaration);
 		} else if (declaration instanceof ICPPASTVisibilityLabel) {
 			writeVisibilityLabel((ICPPASTVisibilityLabel) declaration);
+		} else if (declaration instanceof ICPPASTAliasDeclaration) {
+			writeAliasDeclaration((ICPPASTAliasDeclaration) declaration);
 		}
 
 		writeTrailingComments(declaration, addNewLine);
@@ -102,6 +112,21 @@ public class DeclarationWriter extends NodeWriter {
 			}
 			writeFreestandingComments(declaration);
 		}
+	}
+
+	private void writeAliasDeclaration(ICPPASTAliasDeclaration aliasDeclaration) {
+		scribe.printStringSpace(Keywords.USING);
+		IASTName alias = aliasDeclaration.getAlias();
+		if (alias != null) {
+			alias.accept(visitor);
+		}
+		writeAttributes(aliasDeclaration, EnumSet.of(SpaceLocation.BEFORE));
+		scribe.print(EQUALS);
+		ICPPASTTypeId aliasedType = aliasDeclaration.getMappingTypeId();
+		if (aliasedType != null) {
+			aliasedType.accept(visitor);
+		}
+		scribe.printSemicolon();
 	}
 
 	private void writeVisibilityLabel(ICPPASTVisibilityLabel visiblityLabel) {
@@ -126,9 +151,11 @@ public class DeclarationWriter extends NodeWriter {
 	}
 
 	private void writeUsingDirective(ICPPASTUsingDirective usingDirective) {
+		writeCPPAttributes(usingDirective, EnumSet.of(SpaceLocation.AFTER));
 		scribe.printStringSpace(Keywords.USING);
 		scribe.printStringSpace(Keywords.NAMESPACE);
 		usingDirective.getQualifiedName().accept(visitor);
+		writeGCCAttributes(usingDirective, EnumSet.of(SpaceLocation.BEFORE));
 		scribe.printSemicolon();
 	}
 
@@ -172,6 +199,7 @@ public class DeclarationWriter extends NodeWriter {
 	private void writeNamespaceDefinition(ICPPASTNamespaceDefinition namespaceDefinition) {
 		scribe.printStringSpace(Keywords.NAMESPACE);
 		namespaceDefinition.getName().accept(visitor);
+		writeGCCAttributes(namespaceDefinition, EnumSet.of(SpaceLocation.BEFORE));
 		if (!hasTrailingComments(namespaceDefinition.getName())) {
 			scribe.newLine();
 		}
@@ -255,6 +283,9 @@ public class DeclarationWriter extends NodeWriter {
 	}
 
 	private void writeFunctionDefinition(IASTFunctionDefinition funcDef) {
+		if (funcDef instanceof IASTAttributeOwner) {
+			writeAttributes((IASTAttributeOwner) funcDef, EnumSet.of(SpaceLocation.AFTER));
+		}
 		IASTDeclSpecifier declSpecifier = funcDef.getDeclSpecifier();
 		if (declSpecifier != null)
 			declSpecifier.accept(visitor);
@@ -277,10 +308,22 @@ public class DeclarationWriter extends NodeWriter {
 		if (funcDef instanceof ICPPASTFunctionDefinition) {
 			ICPPASTFunctionDefinition cppFuncDef= (ICPPASTFunctionDefinition) funcDef;
 			writeCtorChainInitializer(cppFuncDef, cppFuncDef.getMemberInitializers());
+			if (cppFuncDef.isDefaulted()) {
+				scribe.print(EQUALS);
+				scribe.print(Keywords.DEFAULT);
+				scribe.printSemicolon();
+			} else if (cppFuncDef.isDeleted()) {
+				scribe.print(EQUALS);
+				scribe.print(Keywords.DELETE);
+				scribe.printSemicolon();
+			}
 		}
 		scribe.newLine();
 
-		funcDef.getBody().accept(visitor);
+		IASTStatement body = funcDef.getBody();
+		if (body != null) {
+			body.accept(visitor);
+		}
 
 		if (funcDef instanceof ICPPASTFunctionWithTryBlock) {
 			ICPPASTFunctionWithTryBlock tryblock = (ICPPASTFunctionWithTryBlock) funcDef;
@@ -310,6 +353,7 @@ public class DeclarationWriter extends NodeWriter {
 		IASTDeclSpecifier declSpecifier = simpDec.getDeclSpecifier();
 		IASTDeclarator[] decls = simpDec.getDeclarators();
 
+		writeAttributes(simpDec, EnumSet.of(SpaceLocation.AFTER));
 		declSpecifier.accept(visitor);
 		boolean noSpace = false;
 		if (declSpecifier instanceof IASTSimpleDeclSpecifier) {

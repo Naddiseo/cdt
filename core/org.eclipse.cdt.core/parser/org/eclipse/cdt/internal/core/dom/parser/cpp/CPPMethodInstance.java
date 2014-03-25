@@ -1,13 +1,14 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2010 IBM Corporation and others.
+ * Copyright (c) 2005, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Andrew Niefer (IBM) - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     Andrew Niefer (IBM) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -22,16 +23,14 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateArgument;
  */
 public class CPPMethodInstance extends CPPFunctionInstance implements ICPPMethod {
 
-	public CPPMethodInstance(ICPPMethod orig, ICPPClassType owner, CPPTemplateParameterMap tpmap, ICPPTemplateArgument[] args, ICPPFunctionType type, IType[] exceptionSpecs) {
+	public CPPMethodInstance(ICPPMethod orig, ICPPClassType owner, CPPTemplateParameterMap tpmap,
+			ICPPTemplateArgument[] args, ICPPFunctionType type, IType[] exceptionSpecs) {
 		super(orig, owner, tpmap, args, type, exceptionSpecs);
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMember#getVisibility()
-	 */
 	@Override
 	public int getVisibility() {
-		return ((ICPPMethod)getTemplateDefinition()).getVisibility();
+		return ((ICPPMethod) getTemplateDefinition()).getVisibility();
 	}
 
 	@Override
@@ -39,20 +38,14 @@ public class CPPMethodInstance extends CPPFunctionInstance implements ICPPMethod
 		return (ICPPClassType) getOwner();
 	}
 	
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod#isVirtual()
-     */
     @Override
 	public boolean isVirtual() {
-        return ((ICPPMethod)getTemplateDefinition()).isVirtual();
+        return ((ICPPMethod) getTemplateDefinition()).isVirtual();
     }
 
-	/* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod#isPureVirtual()
-     */
 	@Override
 	public boolean isPureVirtual() {
-        return ((ICPPMethod)getTemplateDefinition()).isPureVirtual();
+        return ((ICPPMethod) getTemplateDefinition()).isPureVirtual();
 	}
 	
 	@Override
@@ -60,9 +53,6 @@ public class CPPMethodInstance extends CPPFunctionInstance implements ICPPMethod
 		return ((ICPPMethod) getTemplateDefinition()).isExplicit();
 	}
 
-	/* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod#isDestructor()
-     */
 	@Override
 	public boolean isDestructor() {
 		char[] name = getNameCharArray();
@@ -75,5 +65,15 @@ public class CPPMethodInstance extends CPPFunctionInstance implements ICPPMethod
 	@Override
 	public boolean isImplicit() {
 		return false;
+	}
+
+	@Override
+	public boolean isOverride() {
+        return ((ICPPMethod) getTemplateDefinition()).isOverride();
+	}
+
+	@Override
+	public boolean isFinal() {
+        return ((ICPPMethod) getTemplateDefinition()).isFinal();
 	}
 }

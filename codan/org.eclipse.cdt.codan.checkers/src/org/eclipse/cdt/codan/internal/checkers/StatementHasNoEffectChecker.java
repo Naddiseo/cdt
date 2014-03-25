@@ -26,7 +26,6 @@ import org.eclipse.cdt.core.dom.ast.IASTStatement;
 import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
 import org.eclipse.cdt.core.dom.ast.IASTUnaryExpression;
 import org.eclipse.cdt.core.dom.ast.IBasicType;
-import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.gnu.IGNUASTCompoundStatementExpression;
 
 /**
@@ -82,6 +81,8 @@ public class StatementHasNoEffectChecker extends AbstractIndexAstChecker {
 				IASTBinaryExpression binExpr = (IASTBinaryExpression) e;
 				if (isPossibleAssignment(binExpr))
 					return false;
+				if (usesOverloadedOperator(binExpr))
+					return false;
 				switch (binExpr.getOperator()) {
 					case IASTBinaryExpression.op_logicalOr:
 					case IASTBinaryExpression.op_logicalAnd:
@@ -91,6 +92,8 @@ public class StatementHasNoEffectChecker extends AbstractIndexAstChecker {
 			}
 			if (e instanceof IASTUnaryExpression) {
 				IASTUnaryExpression unaryExpr = (IASTUnaryExpression) e;
+				if (usesOverloadedOperator(unaryExpr))
+					return false;
 				int operator = unaryExpr.getOperator();
 				switch (operator) {
 					case IASTUnaryExpression.op_postFixDecr:
@@ -131,14 +134,14 @@ public class StatementHasNoEffectChecker extends AbstractIndexAstChecker {
 				CheckersMessages.GenericParameter_ParameterExceptionsItem);
 	}
 
-	public boolean isFilteredArg(String arg) {
+	private boolean isFilteredArg(String arg) {
 		return isFilteredArg(arg, getProblemById(ER_ID, getFile()), PARAM_EXCEPT_ARG_LIST);
 	}
 
 	/**
 	 * @return
 	 */
-	public boolean shouldReportInMacro() {
+	private boolean shouldReportInMacro() {
 		return (Boolean) getPreference(getProblemById(ER_ID, getFile()), PARAM_MACRO_ID);
 	}
 
@@ -157,15 +160,39 @@ public class StatementHasNoEffectChecker extends AbstractIndexAstChecker {
 			case IASTBinaryExpression.op_shiftRightAssign:
 				return true;
 		}
+		return false;
+	}
+	
+	private boolean usesOverloadedOperator(IASTBinaryExpression expr) {
 		if (expr instanceof IASTImplicitNameOwner) {
-			// Check whether the operator is overloaded
 			IASTImplicitName[] implicitNames = ((IASTImplicitNameOwner) expr).getImplicitNames();
 			if (implicitNames.length > 0)
 				return true;
-			IType expressionType = expr.getOperand1().getExpressionType();
-			if (!(expressionType instanceof IBasicType)) {
-				return true; // must be overloaded but parser could not
-				// find it
+			IASTExpression operand1 = expr.getOperand1();
+			IASTExpression operand2 = expr.getOperand2();
+			// This shouldn't happen, but if it does, it's better to have a
+			// false negative than a false positive warning. 
+			if (operand1 == null || operand2 == null)
+				return true;
+			if (!(operand1.getExpressionType() instanceof IBasicType && operand2.getExpressionType() instanceof IBasicType)) {
+				return true; // must be overloaded but parser could not find it
+			}
+		}
+		return false;
+	}
+	
+	private boolean usesOverloadedOperator(IASTUnaryExpression expr) {
+		if (expr instanceof IASTImplicitNameOwner) {
+			IASTImplicitName[] implicitNames = ((IASTImplicitNameOwner) expr).getImplicitNames();
+			if (implicitNames.length > 0)
+				return true;
+			IASTExpression operand = expr.getOperand();
+			// This shouldn't happen, but if it does, it's better to have a
+			// false negative than a false positive warning. 
+			if (operand == null)
+				return true;
+			if (!(operand.getExpressionType() instanceof IBasicType)) {
+				return true; // must be overloaded but parser could not find it
 			}
 		}
 		return false;

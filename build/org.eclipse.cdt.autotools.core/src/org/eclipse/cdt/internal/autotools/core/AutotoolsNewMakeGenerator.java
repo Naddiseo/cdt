@@ -853,6 +853,7 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 
 
 		ConsoleOutputStream consoleOutStream = null;
+		ErrorParserManager epm = null;
 		StringBuffer buf = new StringBuffer();
 
 		// Launch command - main invocation
@@ -891,7 +892,7 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 
 			// Hook up an error parser manager
 			URI uri = URIUtil.toURI(runPath);
-			ErrorParserManager epm = new ErrorParserManager(project, uri, this, new String[] {ErrorParser.ID});
+			epm = new ErrorParserManager(project, uri, this, new String[] {ErrorParser.ID});
 			epm.setOutputStream(consoleOutStream);
 			epm.addErrorParser(ErrorParser.ID, new ErrorParser(getSourcePath(), getBuildPath()));
 
@@ -968,13 +969,17 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 			// Write message on the console
 			consoleOutStream.write(buf.toString().getBytes());
 			consoleOutStream.flush();
+			
 			// // Generate any error markers that the build has discovered
 			// monitor.subTask(ManagedMakeMessages
 			// .getResourceString(MARKERS));
 			// epm.reportProblems();
 
 		} finally {
-			consoleOutStream.close();
+			if (consoleOutStream != null)
+				consoleOutStream.close();
+			if (epm != null)
+				epm.close();
 		}
 		
 		// If we have an error and no specific error markers, use the default error marker.
@@ -991,10 +996,24 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 			try {
 				CommandLauncher launcher = new CommandLauncher();
 				ByteArrayOutputStream out = new ByteArrayOutputStream();
+				// Fix Bug 423192 - use environment variables when checking the Win OS Type using
+				// a shell command as the path to sh may be specified there
+				IEnvironmentVariable variables[] = 
+						CCorePlugin.getDefault().getBuildEnvironmentManager().getVariables(cdesc, true);
+				String[] env = new String[0];
+				ArrayList<String> envList = new ArrayList<String>();
+				if (variables != null) {
+					for (int i = 0; i < variables.length; i++) {
+							envList.add(variables[i].getName()
+									+ "=" + variables[i].getValue()); //$NON-NLS-1$
+					}
+					env = (String[]) envList.toArray(new String[envList.size()]);
+				}
+
 				launcher.execute(
 						new Path(SHELL_COMMAND), //$NON-NLS-1$
 						new String[] { "-c", "echo $OSTYPE" }, //$NON-NLS-1$ //$NON-NLS-2$
-						new String[0],
+						env,
 						new Path("."), //$NON-NLS-1$
 						new NullProgressMonitor());
 				if (launcher.waitAndRead(out, out) == CommandLauncher.OK)
@@ -1019,6 +1038,14 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
             	}
             }
             return s;
+    }
+
+    // Fix any escape characters in sh -c command arguments
+    private String fixEscapeChars(String s) {
+        s = s.replaceAll("\\\\", "\\\\\\\\");
+        s = s.replaceAll("\\(",  "\\\\(");
+        s = s.replaceAll("\\)", "\\\\)");
+        return s;
     }
 
 	// Run an autotools script (e.g. configure, autogen.sh, config.status).
@@ -1078,7 +1105,7 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 				// fix for bug #356278
 				if (resolved.length() > 0 && resolved.charAt(0) != '-')
 					resolved = stripEnvVarsFromOption(resolved, additionalEnvs);
-				configTargets[i] = resolved;
+				configTargets[i] = fixEscapeChars(resolved);
 			} catch (BuildMacroException e) {
 			}
 		}
@@ -1091,6 +1118,7 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 
 
 		ConsoleOutputStream consoleOutStream = null;
+		ErrorParserManager epm = null;
 		StringBuffer buf = new StringBuffer();
 
 		// Launch command - main invocation
@@ -1138,9 +1166,20 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 					// For Windows/Mac, check for PWD environment variable being passed.
 					// Remove it for now as it is causing errors in configuration.
 					// Fix for bug #343879
-					if (!removePWD || !variables[i].getName().equals("PWD")) // $NON-NLS-1$
+					if (!removePWD || !variables[i].getName().equals("PWD")) { // $NON-NLS-1$
+						String value = variables[i].getValue();
+						// The following is a work-around for bug #407580.  Configure doesn't recognize
+						// a directory with a trailing separator at the end is equivalent to the same
+						// directory without that trailing separator.  This problem can cause
+						// configure to try and link a file to itself (e.g. projects with a GnuMakefile) and
+						// obliterate the contents.  Thus, we remove the trailing separator to be safe.
+						if (variables[i].getName().equals("PWD")) { // $NON-NLS-1$
+							if (value.charAt(value.length()-1) == IPath.SEPARATOR)
+								value = value.substring(0, value.length() - 1);	
+						}
 						envList.add(variables[i].getName()
-								+ "=" + variables[i].getValue()); //$NON-NLS-1$
+								+ "=" + value); //$NON-NLS-1$
+					}
 				}
 				if (additionalEnvs != null)
 					envList.addAll(additionalEnvs); // add any additional environment variables specified ahead of script
@@ -1149,7 +1188,7 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 
 			// Hook up an error parser manager
 			URI uri = URIUtil.toURI(runPath);
-			ErrorParserManager epm = new ErrorParserManager(project, uri, this, new String[] {ErrorParser.ID});
+			epm = new ErrorParserManager(project, uri, this, new String[] {ErrorParser.ID});
 			epm.setOutputStream(consoleOutStream);
 			epm.addErrorParser(ErrorParser.ID, new ErrorParser(getSourcePath(), getBuildPath()));
 
@@ -1233,7 +1272,10 @@ public class AutotoolsNewMakeGenerator extends MarkerGenerator {
 			// .getResourceString(MARKERS));
 			// epm.reportProblems();
 		} finally {
-			consoleOutStream.close();
+			if (consoleOutStream != null)
+				consoleOutStream.close();
+			if (epm != null)
+				epm.close();
 		}
 		
 		// If we have an error and no specific error markers, use the default error marker.

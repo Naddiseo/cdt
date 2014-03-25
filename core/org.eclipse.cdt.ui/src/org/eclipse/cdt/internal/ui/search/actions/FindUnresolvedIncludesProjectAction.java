@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008 Wind River Systems, Inc. and others.
+ * Copyright (c) 2008, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,22 +10,15 @@
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.ui.search.actions;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-
 import org.eclipse.jface.action.IAction;
-import org.eclipse.jface.viewers.ISelection;
-import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.search.ui.ISearchQuery;
 import org.eclipse.search.ui.NewSearchUI;
-import org.eclipse.ui.IObjectActionDelegate;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.IWorkbenchSite;
 
 import org.eclipse.cdt.core.model.ICProject;
 
-import org.eclipse.cdt.internal.ui.actions.SelectionConverter;
+import org.eclipse.cdt.internal.ui.actions.AbstractUpdateIndexAction;
 import org.eclipse.cdt.internal.ui.search.CSearchMessages;
 import org.eclipse.cdt.internal.ui.search.CSearchUnresolvedIncludesQuery;
 import org.eclipse.cdt.internal.ui.util.StatusLineHandler;
@@ -34,30 +27,20 @@ import org.eclipse.cdt.internal.ui.util.StatusLineHandler;
  * Searches projects for unresolved includes.
  * Could be extended to work on resource selections.
  */
-public class FindUnresolvedIncludesProjectAction implements IObjectActionDelegate {
-	private ISelection fSelection;
+public class FindUnresolvedIncludesProjectAction extends AbstractUpdateIndexAction {
 	private IWorkbenchSite fSite;
 
 	public FindUnresolvedIncludesProjectAction() {
 	}
 
 	@Override
-	public void run(IAction action) {
-		List<ICProject> projects= new ArrayList<ICProject>();
-		IStructuredSelection cElements= SelectionConverter.convertSelectionToCElements(fSelection);
-		for (Iterator<?> i = cElements.iterator(); i.hasNext();) {
-			Object elem = i.next();
-			if (elem instanceof ICProject) {
-				projects.add((ICProject) elem);
-			}
-		}
-		
-	 	if (projects.isEmpty()) {
+	protected void doRun(ICProject[] projects) {
+		if (projects.length == 0) {
 			StatusLineHandler.showStatusLineMessage(fSite, CSearchMessages.CSearchOperation_operationUnavailable_message);
 	 		return;
 	 	}
 
-	 	ISearchQuery searchJob= new CSearchUnresolvedIncludesQuery(projects.toArray(new ICProject[projects.size()]));
+	 	ISearchQuery searchJob= new CSearchUnresolvedIncludesQuery(projects);
 
 		StatusLineHandler.clearStatusLine(fSite);
 		NewSearchUI.activateSearchResultView();
@@ -70,7 +53,7 @@ public class FindUnresolvedIncludesProjectAction implements IObjectActionDelegat
 	}
 
 	@Override
-	public void selectionChanged(IAction action, ISelection selection) {
-		fSelection= selection;
+	protected int getUpdateOptions() {
+		return 0;
 	}
 }

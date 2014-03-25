@@ -33,6 +33,8 @@ public class GCCBuildCommandParser extends AbstractBuildCommandParser implements
 	static final AbstractOptionParser[] optionParsers = {
 			new IncludePathOptionParser("-I\\s*([\"'])(.*)\\1", "$2"),
 			new IncludePathOptionParser("-I\\s*([^\\s\"']*)", "$1"),
+			new IncludePathOptionParser("-isystem\\s*([\"'])(.*)\\1", "$2"),
+			new IncludePathOptionParser("-isystem\\s*([^\\s\"']*)", "$1"),
 			new IncludePathOptionParser("-(F|(iframework))\\s*([\"'])(.*)\\3", "$4", ICSettingEntry.FRAMEWORKS_MAC),
 			new IncludePathOptionParser("-(F|(iframework))\\s*([^\\s\"']*)", "$3", ICSettingEntry.FRAMEWORKS_MAC),
 			new IncludeFileOptionParser("-include\\s*([\"'])(.*)\\1", "$2"),
@@ -42,8 +44,8 @@ public class GCCBuildCommandParser extends AbstractBuildCommandParser implements
 			new MacroOptionParser("-D\\s*([^\\s=\"']*)=([\"'])(.*?)\\2", "$1", "$3"),
 			new MacroOptionParser("-D\\s*([^\\s=\"']*)(=([^\\s\"']*))?", "$1", "$3"),
 			new MacroOptionParser("-U\\s*([^\\s=\"']*)", "$1", ICSettingEntry.UNDEFINED),
-			new MacroFileOptionParser("-macros\\s*([\"'])(.*)\\1", "$2"),
-			new MacroFileOptionParser("-macros\\s*([^\\s\"']*)", "$1"),
+			new MacroFileOptionParser("-imacros\\s*([\"'])(.*)\\1", "$2"),
+			new MacroFileOptionParser("-imacros\\s*([^\\s\"']*)", "$1"),
 			new LibraryPathOptionParser("-L\\s*([\"'])(.*)\\1", "$2"),
 			new LibraryPathOptionParser("-L\\s*([^\\s\"']*)", "$1"),
 			new LibraryFileOptionParser("-l\\s*([^\\s\"']*)", "lib$1.a"), };

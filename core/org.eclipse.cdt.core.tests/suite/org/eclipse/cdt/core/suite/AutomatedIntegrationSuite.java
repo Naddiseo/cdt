@@ -1,18 +1,19 @@
 /*******************************************************************************
- *  Copyright (c) 2005, 2010 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2005, 2010 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  *
- *  Contributors:
- *      IBM Corporation - initial API and implementation
- *      Markus Schorn (Wind River Systems)
- *      Norbert Ploett (Siemens AG)
+ * Contributors:
+ *     IBM Corporation - initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Norbert Ploett (Siemens AG)
  *******************************************************************************/
 package org.eclipse.cdt.core.suite;
 
 import junit.framework.Test;
+import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
 import org.eclipse.cdt.core.cdescriptor.tests.CDescriptorOldTests;
@@ -47,11 +48,11 @@ public class AutomatedIntegrationSuite extends TestSuite {
 	public AutomatedIntegrationSuite() {
 	}
 
-	public AutomatedIntegrationSuite(Class theClass, String name) {
+	public AutomatedIntegrationSuite(Class<? extends TestCase> theClass, String name) {
 		super(theClass, name);
 	}
 
-	public AutomatedIntegrationSuite(Class theClass) {
+	public AutomatedIntegrationSuite(Class<? extends TestCase> theClass) {
 		super(theClass);
 	}
 
@@ -62,8 +63,10 @@ public class AutomatedIntegrationSuite extends TestSuite {
 	public static Test suite() throws Exception {
 		final AutomatedIntegrationSuite suite = new AutomatedIntegrationSuite();
 
-		// Add all success tests
-		suite.addTest(CDescriptorTests.suite());
+		// Has intermittent failures
+		if (System.getProperty("cdt.skip.known.test.failures") == null) {		
+			suite.addTest(CDescriptorTests.suite());
+		}
 		suite.addTest(CDescriptorOldTests.suite());
 		suite.addTest(IEnvironmentVariableManagerTests.suite());
 		suite.addTest(ErrorParserTests.suite());

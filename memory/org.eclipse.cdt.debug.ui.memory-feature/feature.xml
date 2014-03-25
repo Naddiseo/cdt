@@ -2,7 +2,7 @@
 <feature
       id="org.eclipse.cdt.debug.ui.memory"
       label="%featureName"
-      version="2.2.0.qualifier"
+      version="8.4.0.qualifier"
       provider-name="%providerName">
 
    <description>
@@ -17,10 +17,6 @@
       %license
    </license>
 
-   <url>
-      <update label="%updateSiteName" url="http://download.eclipse.org/tools/cdt/releases/indigo"/>
-   </url>
-
    <plugin
          id="org.eclipse.cdt.debug.ui.memory.search"
          download-size="0"
@@ -30,6 +26,13 @@
 
    <plugin
          id="org.eclipse.cdt.debug.ui.memory.traditional"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         unpack="false"/>
+         
+   <plugin
+         id="org.eclipse.cdt.debug.ui.memory.floatingpoint"
          download-size="0"
          install-size="0"
          version="0.0.0"

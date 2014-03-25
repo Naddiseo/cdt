@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2012 IBM Corporation and others.
+ * Copyright (c) 2005, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
  *     Rational Software - initial implementation
  *     Markus Schorn (Wind River Systems)
  *     Sergey Prigogin (Google)
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.ast;
 
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
+import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.ast.IBasicType.Kind;
 import org.eclipse.cdt.core.dom.ast.c.ICArrayType;
 import org.eclipse.cdt.core.dom.ast.c.ICQualifierType;
@@ -31,6 +33,9 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateArgument;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateInstance;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameter;
 import org.eclipse.cdt.core.dom.ast.gnu.cpp.IGPPQualifierType;
+import org.eclipse.cdt.core.index.IIndexBinding;
+import org.eclipse.cdt.core.index.IIndexFile;
+import org.eclipse.cdt.core.parser.GCCKeywords;
 import org.eclipse.cdt.core.parser.Keywords;
 import org.eclipse.cdt.core.parser.util.ArrayUtil;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeContainer;
@@ -41,9 +46,11 @@ import org.eclipse.cdt.internal.core.dom.parser.c.ICInternalBinding;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTTypeId;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPDeferredClassInstance;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPInternalBinding;
-import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPUnknownClassInstance;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPUnknownMemberClassInstance;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPVisitor;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.TypeOfDependentExpression;
+import org.eclipse.core.runtime.CoreException;
 
 /**
  * This is a utility class to help convert AST elements to Strings corresponding to
@@ -181,15 +188,17 @@ public class ASTTypeUtil {
 	private static void appendArgument(ICPPTemplateArgument arg, boolean normalize, StringBuilder buf) {
 		IValue val= arg.getNonTypeValue();
 		if (val != null) {
+			appendType(arg.getTypeOfNonTypeValue(), normalize, buf);
 			buf.append(val.getSignature());
 		} else {
-			appendType(arg.getTypeValue(), normalize, buf);
+			IType type = normalize ? arg.getTypeValue() : arg.getOriginalTypeValue();
+			appendType(type, normalize, buf);
 		}
 	}
 
 	/**
-	 * Returns an array of normalized string representations for the parameter types of the
-	 * given function type.
+	 * Returns an array of normalized string representations for the parameter types of the given
+	 * function type.
 	 * @see #getType(IType, boolean)
 	 */
 	public static String[] getParameterTypeStringArray(IFunctionType type) {
@@ -309,9 +318,17 @@ public class ASTTypeUtil {
 				if (needSpace) result.append(SPACE);
 				result.append(Keywords.FLOAT);
 				break;
+			case eFloat128:
+				if (needSpace) result.append(SPACE);
+				result.append(GCCKeywords.__FLOAT128);
+				break;
 			case eInt:
 				if (needSpace) result.append(SPACE);
 				result.append(Keywords.INT);
+				break;
+			case eInt128:
+				if (needSpace) result.append(SPACE);
+				result.append(GCCKeywords.__INT128);
 				break;
 			case eVoid:
 				if (needSpace) result.append(SPACE);
@@ -354,7 +371,7 @@ public class ASTTypeUtil {
 			boolean qualify = normalize || (type instanceof ITypedef && type instanceof ICPPSpecialization);
 			appendCppName((ICPPBinding) type, normalize, qualify, result);
 		} else if (type instanceof ICompositeType) {
-//			101114 fix, do not display class, and for consistency don't display struct/union as well
+			// Don't display class, and for consistency don't display struct/union as well (bug 101114).
 			appendNameCheckAnonymous((ICompositeType) type, result);
 		} else if (type instanceof ITypedef) {
 			result.append(((ITypedef) type).getNameCharArray());
@@ -398,6 +415,8 @@ public class ASTTypeUtil {
 			
 			IQualifierType qt= (IQualifierType) type;
 			needSpace= appendCVQ(result, needSpace, qt.isConst(), qt.isVolatile(), false);
+		} else if (type instanceof TypeOfDependentExpression) {
+			result.append(((TypeOfDependentExpression) type).getSignature());
 		} else if (type instanceof ISemanticProblem) {
 			result.append('?');
 		} else if (type != null) {
@@ -409,6 +428,8 @@ public class ASTTypeUtil {
 		if (normalize) {
 			result.append('#');
 			result.append(Integer.toString(type.getParameterID(), 16));
+			if (type.isParameterPack())
+				result.append("(...)");  //$NON-NLS-1$
 		} else {
 			result.append(type.getName());
 		}
@@ -494,26 +515,26 @@ public class ASTTypeUtil {
 				}
 			} else {
 				if (type instanceof ICPPReferenceType) {
-					// reference types ignore cv-qualifiers
+					// Reference types ignore cv-qualifiers
 					cvq= null;
-					// lvalue references win over rvalue references
+					// Lvalue references win over rvalue references
 					if (ref == null || ref.isRValueReference()) {
-						// delay reference to see if there are more
+						// Delay reference to see if there are more
 						ref= (ICPPReferenceType) type;
 					}
 				} else {
 					if (cvq != null) {
-						// merge cv qualifiers
+						// Merge cv qualifiers
 						if (type instanceof IQualifierType || type instanceof IPointerType) {
 							type= SemanticUtil.addQualifiers(type, cvq.isConst(), cvq.isVolatile(), false);
 							cvq= null;
 						} 
 					} 
 					if (type instanceof IQualifierType) {
-						// delay cv qualifier to merge it with others
+						// Delay cv qualifier to merge it with others
 						cvq= (IQualifierType) type;
 					} else {
-						// no reference, no cv qualifier: output reference and cv-qualifier
+						// No reference, no cv qualifier: output reference and cv-qualifier
 						if (ref != null) {
 							types = ArrayUtil.append(IType.class, types, ref);
 							ref= null;
@@ -535,12 +556,12 @@ public class ASTTypeUtil {
 			}
 		}	 
 		
-		// pop all of the types off of the stack, and build the string representation while doing so
+		// Pop all of the types off of the stack, and build the string representation while doing so.
 		List<IType> postfix= null;
 		BitSet parenthesis= null;
 		boolean needParenthesis= false;
 		boolean needSpace= false;
-		for (int j = types.length - 1; j >= 0; j--) {
+		for (int j = types.length; --j >= 0;) {
 			IType tj = types[j];
 			if (tj != null) {
 				if (j > 0 && types[j - 1] instanceof IQualifierType) {
@@ -552,7 +573,7 @@ public class ASTTypeUtil {
 					needSpace= true;
 					--j;
 				} else {
-					// handle post-fix 
+					// Handle post-fix 
 					if (tj instanceof IFunctionType || tj instanceof IArrayType) {
 						if (j == 0) {
 							if (needSpace)
@@ -574,7 +595,7 @@ public class ASTTypeUtil {
 							if (parenthesis == null) {
 								parenthesis= new BitSet();
 							}
-							parenthesis.set(postfix.size()-1);
+							parenthesis.set(postfix.size() - 1);
 						}
 						appendTypeString(tj, normalize, result);
 						needParenthesis= false;
@@ -718,6 +739,18 @@ public class ASTTypeUtil {
 				if (owner instanceof ICPPNamespace || owner instanceof IType) {
 					int pos= result.length();
 					appendCppName(owner, normalize, qualify, result);
+					if (binding instanceof IIndexBinding && owner instanceof ICPPNamespace && owner.getNameCharArray().length == 0) {
+						try {
+							IIndexFile file = ((IIndexBinding) binding).getLocalToFile();
+							if (file != null) {
+								result.append('{');
+								result.append(file.getLocation().getURI().toString());
+								result.append('}');
+							}
+						} catch (CoreException e) {
+							CCorePlugin.log(e);
+						}
+					}
 					if (result.length() > pos)
 						result.append("::"); //$NON-NLS-1$
 				}
@@ -727,8 +760,8 @@ public class ASTTypeUtil {
 		
 		if (binding instanceof ICPPTemplateInstance) {
 			appendArgumentList(((ICPPTemplateInstance) binding).getTemplateArguments(), normalize, result);
-		} else if (binding instanceof ICPPUnknownClassInstance) {
-			appendArgumentList(((ICPPUnknownClassInstance) binding).getArguments(), normalize, result);
+		} else if (binding instanceof ICPPUnknownMemberClassInstance) {
+			appendArgumentList(((ICPPUnknownMemberClassInstance) binding).getArguments(), normalize, result);
 		}
 	}
 	
@@ -786,9 +819,11 @@ public class ASTTypeUtil {
 				char[] fname= loc.getFileName().toCharArray();
 				int fnamestart= findFileNameStart(fname);
 				buf.append('{');
-				buf.append(fname, fnamestart, fname.length-fnamestart);
-				buf.append(':');
-				buf.append(loc.getNodeOffset());
+				buf.append(fname, fnamestart, fname.length - fnamestart);
+				if (!(binding instanceof ICPPNamespace)) {
+					buf.append(':');
+					buf.append(loc.getNodeOffset());
+				}
 				buf.append('}');
 			}
 		}

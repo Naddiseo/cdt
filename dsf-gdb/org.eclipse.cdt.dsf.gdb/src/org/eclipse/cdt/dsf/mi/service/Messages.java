@@ -18,9 +18,11 @@ import org.eclipse.osgi.util.NLS;
  * @since 3.0
  */
 class Messages extends NLS {
+	public static String Breakpoint_attribute_detailed_problem;
 	public static String Breakpoint_attribute_problem;
 	public static String Breakpoint_installation_failed;
 	public static String MIExpressions_NotAvailableBecauseChildOfDynamicVarobj;
+	public static String MIExpressions_ReturnValueAlias;
 	
 	static {
 		// initialize resource bundle

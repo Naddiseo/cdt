@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010, 2012 Ericsson and others.
+ * Copyright (c) 2010, 2014 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,8 @@
  *     Ericsson   - Initial API and implementation
  *     Ericsson   - Added support for Mac OS
  *     Sergey Prigogin (Google)
+ *     Marc Khouzam (Ericsson) - Add timer when fetching GDB version (Bug 376203)
+ *     Marc Khouzam (Ericsson) - Better error reporting when obtaining GDB version (Bug 424996)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.launching;
 
@@ -48,11 +50,13 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
+import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.MultiStatus;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.core.variables.VariablesPlugin;
 import org.eclipse.debug.core.DebugException;
 import org.eclipse.debug.core.ILaunchConfiguration;
@@ -247,8 +251,9 @@ public class LaunchUtils {
 		// GNU gdb (Ericsson GDB 1.0-10) 6.8.50.20080730-cvs
         // GNU gdb (GDB) Fedora (7.0-3.fc12)
         // GNU gdb Red Hat Linux (6.3.0.0-1.162.el4rh)
+        // GNU gdb (GDB) STMicroelectronics/Linux Base 7.4-71 [build Mar  1 2013]
 
-        Pattern pattern = Pattern.compile(" gdb( \\(.*?\\))? (\\w* )*\\(?(\\d*(\\.\\d*)*)",  Pattern.MULTILINE); //$NON-NLS-1$
+        Pattern pattern = Pattern.compile(" gdb( \\(.*?\\))? (\\D* )*\\(?(\\d*(\\.\\d*)*)",  Pattern.MULTILINE); //$NON-NLS-1$
 
 		Matcher matcher = pattern.matcher(versionOutput);
 		if (matcher.find()) {
@@ -285,49 +290,102 @@ public class LaunchUtils {
 	}
 	
 	/**
-	 * This method actually launches 'gdb --vesion' to determine the version
+	 * This method actually launches 'gdb --version' to determine the version
 	 * of the GDB that is being used.  This method should ideally be called
-	 * only once and the resulting version string stored for future uses.
+	 * only once per session and the resulting version string stored for future uses.
+	 * 
+	 * A timeout is scheduled which will kill the process if it takes too long.
 	 */
 	public static String getGDBVersion(final ILaunchConfiguration configuration) throws CoreException {        
-        Process process = null;
         String cmd = getGDBPath(configuration).toOSString() + " --version"; //$NON-NLS-1$ 
+        Process process = null;
+        Job timeoutJob = null;
         try {
         	process = ProcessFactory.getFactory().exec(cmd, getLaunchEnvironment(configuration));
-        } catch(IOException e) {
-        	throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, 
-        			"Error while launching command: " + cmd, e.getCause()));//$NON-NLS-1$
-        }
 
-        InputStream stream = null;
+            // Start a timeout job to make sure we don't get stuck waiting for
+            // an answer from a gdb that is hanging
+            // Bug 376203
+        	final Process finalProc = process;
+            timeoutJob = new Job("GDB version timeout job") { //$NON-NLS-1$
+    			{ setSystem(true); }
+    			@Override
+    			protected IStatus run(IProgressMonitor arg) {
+    				// Took too long.  Kill the gdb process and 
+    				// let things clean up.
+    	        	finalProc.destroy();
+    				return Status.OK_STATUS;
+    			}
+    		};
+    		timeoutJob.schedule(10000);
+
+        	String streamOutput = readStream(process.getInputStream());
+
+        	String gdbVersion = getGDBVersionFromText(streamOutput);
+        	if (gdbVersion == null || gdbVersion.isEmpty()) {
+        		Exception detailedException = null;
+        		if (!streamOutput.isEmpty()) {
+        			// We got some output but couldn't parse it.  Make that output visible to the user in the error dialog.
+        			detailedException = new Exception("Unexpected output format: \n\n" + streamOutput);  //$NON-NLS-1$        		
+        		} else {
+        			// We got no output.  Check if we got something on the error stream.
+        			streamOutput = readStream(process.getErrorStream());
+        			if (!streamOutput.isEmpty()) {
+        				detailedException = new Exception(streamOutput);
+        			}
+        		}
+        		
+        		throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, 
+        				"Could not determine GDB version using command: " + cmd, //$NON-NLS-1$ 
+        				detailedException));
+        	}
+        	return gdbVersion;
+        } catch (IOException e) {
+        	throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, 
+        			"Error with command: " + cmd, e));//$NON-NLS-1$
+        } finally {
+        	// If we get here we are obviously not stuck reading the stream so we can cancel the timeout job.
+        	// Note that it may already have executed, but that is not a problem.
+        	if (timeoutJob != null) {
+        		timeoutJob.cancel();
+        	}
+
+        	if (process != null) {
+        		process.destroy();
+        	}
+        }
+	}
+	
+	/**
+	 * Read from the specified stream and return what was read.
+	 * 
+	 * @param stream The input stream to be used to read the data.  This method will close the stream.
+	 * @return The data read from the stream
+	 * @throws IOException If an IOException happens when reading the stream
+	 */
+	private static String readStream(InputStream stream) throws IOException {
         StringBuilder cmdOutput = new StringBuilder(200);
         try {
-        	stream = process.getInputStream();
         	Reader r = new InputStreamReader(stream);
         	BufferedReader reader = new BufferedReader(r);
         	
         	String line;
         	while ((line = reader.readLine()) != null) {
         		cmdOutput.append(line);
+        		cmdOutput.append('\n');
         	}
-        } catch (IOException e) {
-        	throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, 
-        			"Error reading GDB STDOUT after sending: " + cmd, e.getCause()));//$NON-NLS-1$
+        	return cmdOutput.toString();
         } finally {
         	// Cleanup to avoid leaking pipes
-        	// Close the stream we used, and then destroy the process
         	// Bug 345164
         	if (stream != null) {
 				try { 
 					stream.close(); 
 				} catch (IOException e) {}
         	}
-        	process.destroy();
         }
-
-        return getGDBVersionFromText(cmdOutput.toString());
 	}
-	
+        
 	public static boolean getIsAttach(ILaunchConfiguration config) {
     	try {
     		String debugMode = config.getAttribute( ICDTLaunchConfigurationConstants.ATTR_DEBUGGER_START_MODE, ICDTLaunchConfigurationConstants.DEBUGGER_MODE_RUN );
@@ -412,7 +470,11 @@ public class LaunchUtils {
 		ICdtVariable[] build_vars = CCorePlugin.getDefault().getCdtVariableManager().getVariables(cfg);
 		for (ICdtVariable var : build_vars) {
 			try {
-				envMap.put(var.getName(), var.getStringValue());
+				// The project_classpath variable contributed by JDT is useless for running C/C++
+				// binaries, but it can be lethal if it has a very large value that exceeds shell
+				// limit. See http://bugs.eclipse.org/bugs/show_bug.cgi?id=408522
+				if (!"project_classpath".equals(var.getName())) //$NON-NLS-1$
+					envMap.put(var.getName(), var.getStringValue());
 			} catch (CdtVariableException e) {
 				// Some Eclipse dynamic variables can't be resolved dynamically... we don't care.
 			}

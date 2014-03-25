@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010, 2012 Google, Inc and others.
+ * Copyright (c) 2010, 2013 Google, Inc and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,6 +7,7 @@
  *
  * Contributors:
  * 	   Sergey Prigogin (Google) - initial API and implementation
+ * 	   Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.ui.refactoring;
 
@@ -21,6 +22,7 @@ import org.eclipse.ltk.core.refactoring.RefactoringContext;
 import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
 import org.eclipse.cdt.core.index.IIndex;
+import org.eclipse.cdt.core.index.IIndexManager;
 import org.eclipse.cdt.core.model.CoreModel;
 import org.eclipse.cdt.core.model.ICProject;
 import org.eclipse.cdt.core.model.ITranslationUnit;
@@ -40,7 +42,6 @@ import org.eclipse.cdt.internal.ui.editor.ASTProvider;
 public class CRefactoringContext extends RefactoringContext {
 	private static final int PARSE_MODE = ITranslationUnit.AST_SKIP_ALL_HEADERS
 			| ITranslationUnit.AST_CONFIGURE_USING_SOURCE_CONTEXT
-			| ITranslationUnit.AST_SKIP_TRIVIAL_EXPRESSIONS_IN_AGGREGATE_INITIALIZERS
 			| ITranslationUnit.AST_PARSE_INACTIVE_CODE;
 
 	private final Map<ITranslationUnit, IASTTranslationUnit> fASTCache;
@@ -84,8 +85,13 @@ public class CRefactoringContext extends RefactoringContext {
     		} else {
 	        	ast = ASTProvider.getASTProvider().acquireSharedAST(tu, fIndex,
 	        			ASTProvider.WAIT_ACTIVE_ONLY, pm);
+				if (ast != null && ast.hasNodesOmitted()) {
+					// Don't use an incomplete AST.
+					ASTProvider.getASTProvider().releaseSharedAST(ast);
+					ast = null;
+				}
 	        	if (ast == null) {
-					if (pm != null && pm.isCanceled())
+	        		if (pm != null && pm.isCanceled())
 						throw new OperationCanceledException();
 					ast= tu.getAST(fIndex, PARSE_MODE);
 		        	fASTCache.put(tu, ast);
@@ -113,7 +119,8 @@ public class CRefactoringContext extends RefactoringContext {
 			throw new IllegalStateException("CRefactoringContext is already disposed."); //$NON-NLS-1$
 		if (fIndex == null) {
 			ICProject[] projects = CoreModel.getDefault().getCModel().getCProjects();
-			IIndex index = CCorePlugin.getIndexManager().getIndex(projects);
+			IIndex index = CCorePlugin.getIndexManager().getIndex(projects,
+					IIndexManager.ADD_EXTENSION_FRAGMENTS_EDITOR);
 			try {
 				index.acquireReadLock();
 			} catch (InterruptedException e) {

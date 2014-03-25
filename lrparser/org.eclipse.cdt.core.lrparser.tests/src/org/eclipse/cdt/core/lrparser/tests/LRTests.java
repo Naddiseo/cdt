@@ -54,17 +54,17 @@ public class LRTests extends AST2Tests {
 	@Override
 	public void testTypenameInExpression() throws Exception {}
 	@Override
-	public void testParamWithFunctionType_Bug84242() throws Exception {}
+	public void testParamWithFunctionType_84242() throws Exception {}
 	@Override
-	public void testParamWithFunctionTypeCpp_Bug84242() throws Exception {}
+	public void testParamWithFunctionTypeCpp_84242() throws Exception {}
 	@Override
-	public void testFunctionReturningPtrToArray_Bug216609() throws Exception {}
+	public void testFunctionReturningPtrToArray_216609() throws Exception {}
 	@Override
 	public void testNestedFunctionDeclarators() throws Exception {}
 	@Override
 	public void testConstantExpressionBinding() throws Exception {}
 	@Override
-	public void testAmbiguousDeclaration_Bug259373() throws Exception {}
+	public void testAmbiguousDeclaration_259373() throws Exception {}
 	@Override
 	public void testSizeofFunctionType_252243() throws Exception {}
 	@Override
@@ -76,20 +76,26 @@ public class LRTests extends AST2Tests {
 	@Override
 	public void testEmptyTrailingMacro_303152() throws Exception {}
 	@Override // not applicable to lr parser memory usage.
-	public void testLargeTrivialAggregateInitializer_Bug253690() throws Exception{}
+	public void testLargeTrivialAggregateInitializer_253690() throws Exception {}
+	@Override
+	public void testMaximumTrivialExpressionsInInitializers_412380() throws Exception {}
+	@Override
+	public void testNoSkipTrivialAggregateInitializer_412380() throws Exception {}
+	@Override
+	public void testNoSkipNonTrivialAggregateInitializer_412380() throws Exception {}
 	 
     @Override
 	protected IASTTranslationUnit parse( String code, ParserLanguage lang, boolean useGNUExtensions, boolean expectNoProblems ) throws ParserException {
-    	return parse(code, lang, useGNUExtensions, expectNoProblems, false);
+    	return parse(code, lang, useGNUExtensions, expectNoProblems, -1);
     }
     
     @Override
-	protected IASTTranslationUnit parse( String code, ParserLanguage lang, boolean useGNUExtensions, boolean expectNoProblems, boolean skipTrivialInitializers) throws ParserException {
+	protected IASTTranslationUnit parse( String code, ParserLanguage lang, boolean useGNUExtensions, boolean expectNoProblems, int limitTrivialInitializers) throws ParserException {
     	ILanguage language = lang.isCPP() ? getCPPLanguage() : getCLanguage();
     	ParseHelper.Options options = new ParseHelper.Options();
     	options.setCheckSyntaxProblems(expectNoProblems);
     	options.setCheckPreprocessorProblems(expectNoProblems);
-    	options.setSkipTrivialInitializers(skipTrivialInitializers);
+    	options.setLimitTrivialInitializers(limitTrivialInitializers);
     	return ParseHelper.parse(code, language, options);
 	}
     
@@ -162,10 +168,10 @@ public class LRTests extends AST2Tests {
      * it would be easy to fix this bug.
 	 */
 	@Override
-	public void	testScalabilityOfLargeTrivialInitializer_Bug253690() { }
-	public void	_testScalabilityOfLargeTrivialInitializer_Bug253690() throws Exception {
+	public void	testScalabilityOfLargeTrivialInitializer_253690() { }
+	public void	_testScalabilityOfLargeTrivialInitializer_253690() throws Exception {
 		
-		super.testScalabilityOfLargeTrivialInitializer_Bug253690();
+		super.testScalabilityOfLargeTrivialInitializer_253690();
 	}
 	
 	
@@ -175,9 +181,9 @@ public class LRTests extends AST2Tests {
 	 * difficult so defer it to the future.
 	 */
 	@Override
-	public void testBinaryVsCastAmbiguities_Bug237057() { }
-	public void _testBinaryVsCastAmbiguities_Bug237057()  throws Exception { 
-		super.testBinaryVsCastAmbiguities_Bug237057();
+	public void testBinaryVsCastAmbiguities_237057() { }
+	public void _testBinaryVsCastAmbiguities_237057()  throws Exception { 
+		super.testBinaryVsCastAmbiguities_237057();
 	}
 	
 	
@@ -187,19 +193,17 @@ public class LRTests extends AST2Tests {
 	 * difficult so defer it to the future.
 	 */
 	@Override
-	public void testCastVsFunctionCallAmbiguities_Bug237057() { }
-	public void _testCastVsFunctionCallAmbiguities_Bug237057() throws Exception { 
-		super.testCastVsFunctionCallAmbiguities_Bug237057();
+	public void testCastVsFunctionCallAmbiguities_237057() { }
+	public void _testCastVsFunctionCallAmbiguities_237057() throws Exception { 
+		super.testCastVsFunctionCallAmbiguities_237057();
 	}
-	
 	
 	/* The LR parser generates the AST for switch statements
 	 * differently than the DOM parser.
 	 */
 	@Override
-	public void testCaseRange_Bug211882() { }
-	public void _testCaseRange_Bug211882() throws Exception { 
-		super.testCaseRange_Bug211882();
+	public void testCaseRange_211882() { }
+	public void _testCaseRange_211882() throws Exception { 
+		super.testCaseRange_211882();
 	}
-
 }

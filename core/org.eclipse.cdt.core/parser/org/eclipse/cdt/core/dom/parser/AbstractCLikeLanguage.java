@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2009 IBM Corporation and others.
+ * Copyright (c) 2007, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,8 @@
  *     Anton Leherbauer (Wind River Systems) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
  *     Mike Kucera (IBM)
+ *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.parser;
 
@@ -26,14 +28,17 @@ import org.eclipse.cdt.core.model.AbstractLanguage;
 import org.eclipse.cdt.core.model.ICLanguageKeywords;
 import org.eclipse.cdt.core.model.IContributedModelBuilder;
 import org.eclipse.cdt.core.model.ITranslationUnit;
+import org.eclipse.cdt.core.parser.ExtendedScannerInfo;
 import org.eclipse.cdt.core.parser.FileContent;
 import org.eclipse.cdt.core.parser.IParserLogService;
+import org.eclipse.cdt.core.parser.IParserSettings;
 import org.eclipse.cdt.core.parser.IScanner;
 import org.eclipse.cdt.core.parser.IScannerInfo;
 import org.eclipse.cdt.core.parser.IncludeFileContentProvider;
+import org.eclipse.cdt.core.parser.ParseError;
+import org.eclipse.cdt.core.parser.ParseError.ParseErrorKind;
 import org.eclipse.cdt.core.parser.ParserLanguage;
 import org.eclipse.cdt.core.parser.ParserMode;
-import org.eclipse.cdt.internal.core.dom.parser.AbstractGNUSourceCodeParser;
 import org.eclipse.cdt.internal.core.parser.scanner.CPreprocessor;
 import org.eclipse.cdt.internal.core.util.ICancelable;
 import org.eclipse.cdt.internal.core.util.ICanceler;
@@ -44,24 +49,19 @@ import org.eclipse.core.runtime.CoreException;
  * for the DOM parser framework.
  * 
  * This class uses the template method pattern, derived classes need only implement
- * {@link AbstractCLikeLanguage#getScannerExtensionConfiguration()},
+ * {@link AbstractCLikeLanguage#getScannerExtensionConfiguration(IScannerInfo info)},
  * {@link AbstractCLikeLanguage#getParserLanguage()} and
  * {@link AbstractCLikeLanguage#createParser(IScanner scanner, ParserMode parserMode,
  *                                           IParserLogService logService, IIndex index)}.
- * 
- * <p>
- * <strong>EXPERIMENTAL</strong>. This class or interface has been added as
- * part of a work in progress. There is no guarantee that this API will work or
- * that it will remain the same. Please do not use this API without consulting
- * with the CDT team.
- * </p>
  * 
  * @see AbstractScannerExtensionConfiguration
  * 
  * @since 5.0
  */
 public abstract class AbstractCLikeLanguage extends AbstractLanguage implements ICLanguageKeywords {
-	
+	private static final AbstractScannerExtensionConfiguration DUMMY_SCANNER_EXTENSION_CONFIGURATION =
+			new AbstractScannerExtensionConfiguration() {};
+
 	static class NameCollector extends ASTVisitor {
 		{
 			shouldVisitNames= true;
@@ -69,7 +69,8 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 
 		private List<IASTName> nameList= new ArrayList<IASTName>();
 
-		@Override public int visit(IASTName name) {
+		@Override
+		public int visit(IASTName name) {
 			nameList.add(name);
 			return PROCESS_CONTINUE;
 		}
@@ -80,14 +81,17 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 	}
 	
 	/**
-	 * @return the scanner extension configuration for this language, may not
-	 *         return <code>null</code>
+	 * @nooverride This method is not intended to be re-implemented or extended by clients.
+	 * @deprecated Do not override this method.
+	 *     Override {@link #getScannerExtensionConfiguration(IScannerInfo)} instead.
 	 */
-	protected abstract IScannerExtensionConfiguration getScannerExtensionConfiguration();
+	@Deprecated
+	protected IScannerExtensionConfiguration getScannerExtensionConfiguration() {
+		return DUMMY_SCANNER_EXTENSION_CONFIGURATION;
+	}
 
 	/**
-	 * @return the scanner extension configuration for this language, may not
-	 *         return <code>null</code>
+	 * @return the scanner extension configuration for this language. May not return {@code null}.
 	 * @since 5.4
 	 */
 	protected IScannerExtensionConfiguration getScannerExtensionConfiguration(IScannerInfo info) {
@@ -99,6 +103,15 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 	 */
 	protected abstract ISourceCodeParser createParser(IScanner scanner, ParserMode parserMode,
 			IParserLogService logService, IIndex index);
+	
+	/**
+	 * @returns the actual parser object, configured with additional settings.
+	 * @since 5.6
+	 */
+	protected ISourceCodeParser createParser(IScanner scanner, ParserMode parserMode,
+			IParserLogService logService, IIndex index, int options, IParserSettings settings) {
+		return createParser(scanner, parserMode, logService, index);
+	}
 	
 	/**
 	 * @return The ParserLanguage value corresponding to the language supported.
@@ -130,9 +143,14 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 		scanner.setComputeImageLocations((options & OPTION_NO_IMAGE_LOCATIONS) == 0);
 		scanner.setProcessInactiveCode((options & OPTION_PARSE_INACTIVE_CODE) != 0);
 
-		final ISourceCodeParser parser= createParser(scanner, log, index, false, options);
+		IParserSettings parserSettings= null;
+		if (scanInfo instanceof ExtendedScannerInfo) {
+			ExtendedScannerInfo extendedScannerInfo = (ExtendedScannerInfo) scanInfo;
+			parserSettings = extendedScannerInfo.getParserSettings();
+		}
+		final ISourceCodeParser parser= createParser(scanner, log, index, false, options, parserSettings);
 
-		// make it possible to cancel parser by reconciler - http://bugs.eclipse.org/226682
+		// Make it possible to cancel parser by reconciler - http://bugs.eclipse.org/226682
 		ICanceler canceler= null;
 		if (log instanceof ICanceler) {
 			canceler= (ICanceler) log;
@@ -143,12 +161,26 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 					parser.cancel();
 				}});
 		}
-		
+
 		try {
 			// Parse
 			IASTTranslationUnit ast= parser.parse();
 			ast.setIsHeaderUnit((options & OPTION_IS_SOURCE_UNIT) == 0);
 			return ast;
+		} catch(ParseError e) {
+			// Only the TOO_MANY_TOKENS error can be handled here.
+			if (e.getErrorKind() != ParseErrorKind.TOO_MANY_TOKENS)
+				throw e;
+
+			// Otherwise generate a log because parsing was stopped because of a user preference.
+			if (log != null) {
+				String tuName = null;
+				if (scanner.getLocationResolver() != null)
+					tuName = scanner.getLocationResolver().getTranslationUnitPath();
+
+				log.traceLog(e.getMessage() + (tuName == null ? new String() : (" while parsing " + tuName))); //$NON-NLS-1$
+			}
+			return null;
 		} finally {
 			if (canceler != null) {
 				canceler.setCancelable(null);
@@ -159,16 +191,16 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 	@Deprecated
 	@Override
 	public IASTCompletionNode getCompletionNode(org.eclipse.cdt.core.parser.CodeReader reader,
-			IScannerInfo scanInfo, org.eclipse.cdt.core.dom.ICodeReaderFactory fileCreator, IIndex index,
-			IParserLogService log, int offset) throws CoreException {
-		return getCompletionNode(FileContent.adapt(reader), scanInfo, IncludeFileContentProvider
-				.adapt(fileCreator), index, log, offset);
+			IScannerInfo scanInfo, org.eclipse.cdt.core.dom.ICodeReaderFactory fileCreator,
+			IIndex index, IParserLogService log, int offset) throws CoreException {
+		return getCompletionNode(FileContent.adapt(reader), scanInfo,
+				IncludeFileContentProvider.adapt(fileCreator), index, log, offset);
 	}
 		
 	@Override
 	public IASTCompletionNode getCompletionNode(FileContent reader, IScannerInfo scanInfo,
-			IncludeFileContentProvider fileCreator, IIndex index, IParserLogService log, int offset) throws CoreException {
-
+			IncludeFileContentProvider fileCreator, IIndex index, IParserLogService log, int offset)
+			throws CoreException {
 		IScanner scanner= createScanner(reader, scanInfo, fileCreator, log);
 		scanner.setContentAssistMode(offset);
 
@@ -187,26 +219,41 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 	 * @param log  the parser log service
 	 * @param index  the index to help resolve bindings
 	 * @param forCompletion  whether the parser is used for code completion
-	 * @param options for valid options see {@link AbstractLanguage#getASTTranslationUnit(FileContent, IScannerInfo, IncludeFileContentProvider, IIndex, int, IParserLogService)}
+	 * @param options for valid options see
+	 *     {@link AbstractLanguage#getASTTranslationUnit(FileContent, IScannerInfo, IncludeFileContentProvider, IIndex, int, IParserLogService)}
 	 * @return  an instance of ISourceCodeParser
 	 */
 	protected ISourceCodeParser createParser(IScanner scanner, IParserLogService log, IIndex index, boolean forCompletion, int options) {
-		ParserMode mode;
+		ParserMode mode = createParserMode(forCompletion, options);
+		return createParser(scanner, mode, log, index);
+	}
+	
+	/**
+	 * Create the parser with additional settings.
+	 * 
+	 * @param scanner  the IScanner to get tokens from
+	 * @param log  the parser log service
+	 * @param index  the index to help resolve bindings
+	 * @param forCompletion  whether the parser is used for code completion
+	 * @param options for valid options see
+	 *     {@link AbstractLanguage#getASTTranslationUnit(FileContent, IScannerInfo, IncludeFileContentProvider, IIndex, int, IParserLogService)}
+	 * @param settings for the parser
+	 * @return  an instance of ISourceCodeParser
+	 * @since 5.6
+	 */
+	protected ISourceCodeParser createParser(IScanner scanner, IParserLogService log, IIndex index, boolean forCompletion, int options, IParserSettings settings) {
+		ParserMode mode = createParserMode(forCompletion, options);
+		return createParser(scanner, mode, log, index, options, settings);
+	}
+	
+	private ParserMode createParserMode(boolean forCompletion, int options) {
 		if (forCompletion) {
-			mode= ParserMode.COMPLETION_PARSE;
+			return ParserMode.COMPLETION_PARSE;
 		} else if ((options & OPTION_SKIP_FUNCTION_BODIES) != 0) {
-			mode= ParserMode.STRUCTURAL_PARSE;
+			return ParserMode.STRUCTURAL_PARSE;
 		} else {
-			mode= ParserMode.COMPLETE_PARSE;
+			return ParserMode.COMPLETE_PARSE;
 		}
-
-		ISourceCodeParser parser= createParser(scanner, mode, log, index);
-		if ((options & OPTION_SKIP_TRIVIAL_EXPRESSIONS_IN_AGGREGATE_INITIALIZERS) != 0) {
-			if (parser instanceof AbstractGNUSourceCodeParser) {
-				((AbstractGNUSourceCodeParser) parser).setSkipTrivialExpressionsInAggregateInitializers(true);
-			}
-		}
-		return parser;
 	}
 	
 	/**
@@ -250,18 +297,20 @@ public abstract class AbstractCLikeLanguage extends AbstractLanguage implements 
 	
 	@Override
 	public IContributedModelBuilder createModelBuilder(ITranslationUnit tu) {
-		// use default model builder
+		// Use default model builder.
 		return null;
 	}
 
 	private ICLanguageKeywords cLanguageKeywords;
-	
+
 	private synchronized ICLanguageKeywords getCLanguageKeywords() {
-		if (cLanguageKeywords == null)
-			cLanguageKeywords = new CLanguageKeywords(getParserLanguage(), getScannerExtensionConfiguration());
+		if (cLanguageKeywords == null) {
+			cLanguageKeywords = new CLanguageKeywords(getParserLanguage(),
+					getScannerExtensionConfiguration(new ExtendedScannerInfo()));
+		}
 		return cLanguageKeywords;
 	}
-	
+
 	@Override
 	@SuppressWarnings("rawtypes")
 	public Object getAdapter(Class adapter) {

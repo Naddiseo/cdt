@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2008 Wind River Systems, Inc. and others.
+ * Copyright (c) 2007, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,41 +10,22 @@
  *******************************************************************************/
 package org.eclipse.cdt.internal.ui.actions;
 
-import java.util.Iterator;
-
-import org.eclipse.jface.action.IAction;
-import org.eclipse.jface.viewers.ISelection;
-import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.ui.IActionDelegate;
-import org.eclipse.ui.IObjectActionDelegate;
-import org.eclipse.ui.IWorkbenchPart;
-
 import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.model.ICProject;
 
-public class RebuildIndexAction implements IObjectActionDelegate {
-	private ISelection fSelection;
-
+public class RebuildIndexAction extends AbstractUpdateIndexAction {
+	
 	@Override
-	public void setActivePart(IAction action, IWorkbenchPart targetPart) {
-	}
-
-	@Override
-	public void run(IAction action) {
-		IStructuredSelection cElements= SelectionConverter.convertSelectionToCElements(fSelection);
-		for (Iterator<?> i = cElements.iterator(); i.hasNext();) {
-			Object elem = i.next();
-			if (elem instanceof ICProject) {
-				CCorePlugin.getIndexManager().reindex((ICProject) elem);
+	protected void doRun(ICProject[] projects) {
+		for (ICProject proj : projects) {
+			if(proj != null) {
+				CCorePlugin.getIndexManager().reindex(proj);
 			}
 		}
 	}
 
-	/**
-	 * @see IActionDelegate#selectionChanged(IAction, ISelection)
-	 */
 	@Override
-	public void selectionChanged(IAction action, ISelection selection) {
-		fSelection= selection;
+	protected int getUpdateOptions() {
+		return 0;
 	}
 }

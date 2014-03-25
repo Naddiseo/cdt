@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2012 Institute for Software, HSR Hochschule fuer Technik  
+ * Copyright (c) 2008, 2014 Institute for Software, HSR Hochschule fuer Technik
  * Rapperswil, University of applied sciences and others
  * All rights reserved. This program and the accompanying materials 
  * are made available under the terms of the Eclipse Public License v1.0 
@@ -9,9 +9,13 @@
  * Contributors: 
  * 	   Institute for Software - initial API and implementation
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.rewrite.astwriter;
 
+import java.util.EnumSet;
+
+import org.eclipse.cdt.core.dom.ast.IASTAttributeOwner;
 import org.eclipse.cdt.core.dom.ast.IASTCompositeTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
@@ -33,6 +37,7 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTElaboratedTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNamedTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTSimpleDeclSpecifier;
+import org.eclipse.cdt.core.parser.GCCKeywords;
 import org.eclipse.cdt.core.parser.Keywords;
 import org.eclipse.cdt.internal.core.dom.rewrite.commenthandler.NodeCommentMap;
 
@@ -78,11 +83,15 @@ public class DeclSpecWriter extends NodeWriter {
 			return Keywords.CHAR;
 		case IASTSimpleDeclSpecifier.t_int:
 			return Keywords.INT;
+		case IASTSimpleDeclSpecifier.t_int128:
+			return GCCKeywords.__INT128;
 
 		case IASTSimpleDeclSpecifier.t_float:
 			return Keywords.FLOAT;
 		case IASTSimpleDeclSpecifier.t_double:
 			return Keywords.DOUBLE;
+		case IASTSimpleDeclSpecifier.t_float128:
+			return GCCKeywords.__FLOAT128;
 			
 		case IASTSimpleDeclSpecifier.t_bool:
 			return isCpp ? Keywords.BOOL : Keywords._BOOL;
@@ -147,6 +156,9 @@ public class DeclSpecWriter extends NodeWriter {
 
 	private void writeElaboratedTypeSec(IASTElaboratedTypeSpecifier elabType) {
 		scribe.printStringSpace(getElabTypeString(elabType.getKind()));
+		if (elabType instanceof IASTAttributeOwner) {
+			writeAttributes((IASTAttributeOwner) elabType, EnumSet.of(SpaceLocation.AFTER));
+		}
 		elabType.getName().accept(visitor);
 	}
 
@@ -201,6 +213,9 @@ public class DeclSpecWriter extends NodeWriter {
 
 	private void writeEnumSpec(IASTEnumerationSpecifier enumSpec) {
 		scribe.printStringSpace(Keywords.ENUM);
+		if (enumSpec instanceof IASTAttributeOwner) {
+			writeAttributes((IASTAttributeOwner) enumSpec, EnumSet.of(SpaceLocation.AFTER));
+		}
 		enumSpec.getName().accept(visitor);
 		scribe.print('{');
 		scribe.printSpace();
@@ -227,9 +242,16 @@ public class DeclSpecWriter extends NodeWriter {
 	private void writeCompositeTypeSpecifier(IASTCompositeTypeSpecifier compDeclSpec) {
 		boolean hasTrailingComments = hasTrailingComments(compDeclSpec.getName());
 		scribe.printStringSpace(getCPPCompositeTypeString(compDeclSpec.getKey()));
+		if (compDeclSpec instanceof IASTAttributeOwner) {
+			writeAttributes((IASTAttributeOwner) compDeclSpec, EnumSet.of(SpaceLocation.AFTER));
+		}
 		compDeclSpec.getName().accept(visitor);
 		if (compDeclSpec instanceof ICPPASTCompositeTypeSpecifier) {
 			ICPPASTCompositeTypeSpecifier cppComp = (ICPPASTCompositeTypeSpecifier) compDeclSpec;
+			if (cppComp.isFinal()) {
+				scribe.printSpace();
+				scribe.print(Keywords.cFINAL);
+			}
 			ICPPASTBaseSpecifier[] baseSpecifiers = cppComp.getBaseSpecifiers();
 			if (baseSpecifiers.length > 0) {
 				scribe.print(SPACE_COLON_SPACE);
@@ -272,7 +294,7 @@ public class DeclSpecWriter extends NodeWriter {
 		return compDeclSpec.getMembers();
 	}
 
-	private void writeBaseSpecifiers(ICPPASTBaseSpecifier specifier) {
+	public void writeBaseSpecifiers(ICPPASTBaseSpecifier specifier) {
 		switch (specifier.getVisibility()) {
 		case ICPPASTBaseSpecifier.v_public:
 			scribe.printStringSpace(Keywords.PUBLIC);
@@ -283,6 +305,10 @@ public class DeclSpecWriter extends NodeWriter {
 		case ICPPASTBaseSpecifier.v_private:
 			scribe.printStringSpace(Keywords.PRIVATE);
 			break;
+		}
+		
+		if (specifier.isVirtual()) {
+			scribe.printStringSpace(Keywords.VIRTUAL);
 		}
 		specifier.getName().accept(visitor);
 	}
@@ -342,6 +368,7 @@ public class DeclSpecWriter extends NodeWriter {
 	private void writeCPPSimpleDeclSpec(ICPPASTSimpleDeclSpecifier simpDeclSpec) {
 		printQualifiers(simpDeclSpec);
 		scribe.print(getCPPSimpleDecSpecifier(simpDeclSpec));
+		writeAttributes(simpDeclSpec, EnumSet.of(SpaceLocation.BEFORE));
 		if (simpDeclSpec.getType() == IASTSimpleDeclSpecifier.t_typeof) {
 			scribe.printSpace();
 			visitNodeIfNotNull(simpDeclSpec.getDeclTypeExpression());
@@ -363,7 +390,7 @@ public class DeclSpecWriter extends NodeWriter {
 			scribe.printStringSpace(Keywords.SHORT);
 		} else if (simpDeclSpec.isLong()) {
 			scribe.printStringSpace(Keywords.LONG);
-		} else if (simpDeclSpec.isLongLong()) {			
+		} else if (simpDeclSpec.isLongLong()) {
 			scribe.printStringSpace(Keywords.LONG);
 			scribe.printStringSpace(Keywords.LONG);
 		}

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2012 QNX Software Systems and others.
+ * Copyright (c) 2000, 2013 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -58,13 +58,13 @@ import org.eclipse.cdt.core.model.ITranslationUnit;
 import org.eclipse.cdt.core.model.IUsing;
 import org.eclipse.cdt.core.model.IWorkingCopy;
 import org.eclipse.cdt.core.model.LanguageManager;
+import org.eclipse.cdt.core.parser.ExtendedScannerInfo;
 import org.eclipse.cdt.core.parser.FileContent;
 import org.eclipse.cdt.core.parser.IParserLogService;
 import org.eclipse.cdt.core.parser.IScannerInfo;
 import org.eclipse.cdt.core.parser.IScannerInfoProvider;
 import org.eclipse.cdt.core.parser.IncludeFileContentProvider;
 import org.eclipse.cdt.core.parser.ParserUtil;
-import org.eclipse.cdt.core.parser.ScannerInfo;
 import org.eclipse.cdt.core.settings.model.ICConfigurationDescription;
 import org.eclipse.cdt.core.settings.model.ICProjectDescription;
 import org.eclipse.cdt.internal.core.dom.parser.ASTTranslationUnit;
@@ -915,7 +915,7 @@ public class TranslationUnit extends Openable implements ITranslationUnit {
 						for (IIndexFile indexFile : index.getFiles(linkageID, ifl)) {
 							int score= indexFile.getMacros().length * 2;
 							IIndexFile context= getParsedInContext(indexFile);
-							if (isSourceFile(context))
+							if (isSourceFile(context, getCProject().getProject()))
 								score++;
 							if (score > bestScore) {
 								bestScore= score;
@@ -936,7 +936,7 @@ public class TranslationUnit extends Openable implements ITranslationUnit {
 		return null;
 	}
 
-	private IIndexFile getParsedInContext(IIndexFile indexFile) throws CoreException {
+	public static IIndexFile getParsedInContext(IIndexFile indexFile) throws CoreException {
 		HashSet<IIndexFile> visited= new HashSet<IIndexFile>();
 		// Bug 199412, may recurse.
 		while (visited.add(indexFile)) {
@@ -949,12 +949,12 @@ public class TranslationUnit extends Openable implements ITranslationUnit {
 	}
 
 	/**
-	 * Returns <code>true</code> if the given file was parsed in a context of a source file.
+	 * Returns <code>true</code> if the given file is a source file.
 	 * @throws CoreException
 	 */
-	private boolean isSourceFile(IIndexFile indexFile) throws CoreException {
+	public static boolean isSourceFile(IIndexFile indexFile, IProject project) throws CoreException {
 		String path = indexFile.getLocation().getURI().getPath();
-		IContentType cType = CCorePlugin.getContentType(getCProject().getProject(), path);
+		IContentType cType = CCorePlugin.getContentType(project, path);
 		if (cType == null)
 			return false;
 
@@ -1045,14 +1045,15 @@ public class TranslationUnit extends Openable implements ITranslationUnit {
 				return scanInfo;
 		}
 		if (force) {
-			return new ScannerInfo();
+			return new ExtendedScannerInfo();
 		}
 		return null;
 	}
 
 	/**
 	 * Return the language of the context this file was parsed in. Works only after using
-	 * {@link #getAST(IIndex, int, IProgressMonitor)} with the flag {@link ITranslationUnit#AST_CONFIGURE_USING_SOURCE_CONTEXT}.
+	 * {@link #getAST(IIndex, int, IProgressMonitor)} with the flag
+	 * {@link ITranslationUnit#AST_CONFIGURE_USING_SOURCE_CONTEXT}.
 	 */
 	public ILanguage getLanguageOfContext() throws CoreException {
 		final ILanguage result= fLanguageOfContext;

@@ -17,6 +17,7 @@ import java.util.List;
 import junit.framework.TestSuite;
 
 import org.eclipse.cdt.core.AbstractExecutableExtensionBase;
+import org.eclipse.cdt.core.settings.model.CIncludeFileEntry;
 import org.eclipse.cdt.core.settings.model.CIncludePathEntry;
 import org.eclipse.cdt.core.settings.model.CMacroEntry;
 import org.eclipse.cdt.core.settings.model.ICConfigurationDescription;
@@ -27,6 +28,7 @@ import org.eclipse.cdt.core.testplugin.CModelMock;
 import org.eclipse.cdt.core.testplugin.ResourceHelper;
 import org.eclipse.cdt.core.testplugin.util.BaseTestCase;
 import org.eclipse.cdt.internal.core.language.settings.providers.LanguageSettingsProvidersSerializer;
+import org.eclipse.cdt.internal.core.language.settings.providers.ReferencedProjectsLanguageSettingsProvider;
 import org.eclipse.cdt.internal.core.settings.model.CConfigurationDescription;
 import org.eclipse.cdt.internal.core.settings.model.CProjectDescriptionManager;
 import org.eclipse.core.resources.IFile;
@@ -67,7 +69,7 @@ public class LanguageSettingsManagerTests extends BaseTestCase {
 			super(id);
 		}
 		@Override
-		public void setLanguageSettingProviders(List<ILanguageSettingsProvider> providers) {
+		public void setLanguageSettingProviders(List<? extends ILanguageSettingsProvider> providers) {
 			this.providers = new ArrayList<ILanguageSettingsProvider>(providers);
 		}
 		@Override
@@ -650,6 +652,38 @@ public class LanguageSettingsManagerTests extends BaseTestCase {
 	}
 
 	/**
+	 * Test ability to get entries by kind.
+	 */
+	public void testEntriesByKind_CompositeKind() throws Exception {
+		MockConfigurationDescription cfgDescription = new MockConfigurationDescription(CFG_ID);
+
+		// contribute the entries
+		List<ICLanguageSettingEntry> entries = new ArrayList<ICLanguageSettingEntry>();
+		entries.add(new CIncludePathEntry("path0", 0));
+		entries.add(new CMacroEntry("MACRO0", "value0",0));
+		entries.add(new CIncludePathEntry("path1", 0));
+		entries.add(new CMacroEntry("MACRO1", "value1",0));
+		entries.add(new CIncludePathEntry("path2", 0));
+
+		entries.add(new CIncludeFileEntry("include-path-file", 0));
+
+		ILanguageSettingsProvider provider0 = new MockProvider(PROVIDER_0, PROVIDER_NAME_0, entries);
+		List<ILanguageSettingsProvider> providers = new ArrayList<ILanguageSettingsProvider>();
+		providers.add(provider0);
+		cfgDescription.setLanguageSettingProviders(providers);
+
+		// retrieve entries by kind
+		List<ICLanguageSettingEntry> result = LanguageSettingsProvidersSerializer
+			.getSettingEntriesByKind(cfgDescription, FILE_0, LANG_ID, ICSettingEntry.INCLUDE_PATH | ICSettingEntry.MACRO);
+		assertEquals(new CIncludePathEntry("path0", 0), result.get(0));
+		assertEquals(new CMacroEntry("MACRO0", "value0",0), result.get(1));
+		assertEquals(new CIncludePathEntry("path1", 0), result.get(2));
+		assertEquals(new CMacroEntry("MACRO1", "value1",0), result.get(3));
+		assertEquals(new CIncludePathEntry("path2", 0), result.get(4));
+		assertEquals(5, result.size());
+	}
+
+	/**
 	 * Test ability to serialize providers for a configuration.
 	 */
 	public void testConfigurationDescription_SerializeProviders() throws Exception {
@@ -662,12 +696,17 @@ public class LanguageSettingsManagerTests extends BaseTestCase {
 		ICConfigurationDescription cfgDescription = cfgDescriptions[0];
 		assertTrue(cfgDescription instanceof CConfigurationDescription);
 
+		// Select a sample workspace provider for the test
 		ILanguageSettingsProvider workspaceProvider = LanguageSettingsManager.getWorkspaceProvider(EXTENSION_BASE_PROVIDER_ID);
 		assertNotNull(workspaceProvider);
+
 		{
-			// ensure no test provider is set yet
+			// ensure no test provider is set yet but default providers
 			List<ILanguageSettingsProvider> providers = ((ILanguageSettingsProvidersKeeper) cfgDescription).getLanguageSettingProviders();
-			assertEquals(0, providers.size());
+			assertEquals(ScannerDiscoveryLegacySupport.USER_LANGUAGE_SETTINGS_PROVIDER_ID, providers.get(0).getId());
+			assertEquals(ReferencedProjectsLanguageSettingsProvider.ID, providers.get(1).getId());
+			assertEquals(ScannerDiscoveryLegacySupport.MBS_LANGUAGE_SETTINGS_PROVIDER_ID, providers.get(2).getId());
+			assertEquals(3, providers.size());
 		}
 		{
 			// set test provider

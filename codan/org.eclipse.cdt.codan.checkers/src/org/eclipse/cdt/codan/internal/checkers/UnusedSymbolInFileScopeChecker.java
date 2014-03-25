@@ -25,6 +25,7 @@ import org.eclipse.cdt.codan.core.model.IProblem;
 import org.eclipse.cdt.codan.core.model.IProblemWorkingCopy;
 import org.eclipse.cdt.codan.core.param.ListProblemPreference;
 import org.eclipse.cdt.core.dom.ast.ASTVisitor;
+import org.eclipse.cdt.core.dom.ast.IASTASMDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTDeclarator;
@@ -47,6 +48,8 @@ import org.eclipse.cdt.core.dom.ast.IVariable;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConstructorInitializer;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPDeferredFunction;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
 import org.eclipse.cdt.core.parser.util.AttributeUtil;
 
@@ -226,6 +229,7 @@ public class UnusedSymbolInFileScopeChecker extends AbstractIndexAstChecker {
 			ast.accept(new ASTVisitor() {
 				{
 					shouldVisitNames = true;
+					shouldVisitDeclarations = true;
 				}
 
 				@Override
@@ -242,6 +246,19 @@ public class UnusedSymbolInFileScopeChecker extends AbstractIndexAstChecker {
 						filterOutByPlainName(staticFunctionDefinitions, plainName);
 						filterOutByPlainName(externVariableDeclarations, plainName);
 						filterOutByPlainName(staticVariableDeclarations, plainName);
+					}
+					
+					if (binding instanceof ICPPDeferredFunction) {
+						// Function call inside a template - we don't know which overload(s)
+						// it might match, so to avoid false positives we consider all
+						// candidates to be potentially used.
+						ICPPFunction[] candidates = ((ICPPDeferredFunction) binding).getCandidates();
+						if (candidates != null) {
+							for (ICPPFunction candidate : candidates) {
+								externFunctionDeclarations.remove(candidate);
+								staticFunctionDefinitions.remove(candidate);
+							}
+						}
 					}
 
 					IASTNode parentNode = name.getParent();
@@ -266,7 +283,36 @@ public class UnusedSymbolInFileScopeChecker extends AbstractIndexAstChecker {
 
 					return PROCESS_CONTINUE;
 				}
+				
+				@Override
+				public int visit(IASTDeclaration declaration) {
+					// Bug 393129: A variable could be used inside assembly code.
+					if (declaration instanceof IASTASMDeclaration) {
+						String assembly = ((IASTASMDeclaration) declaration).getAssembly();
+						filterOutByAssembly(externFunctionDeclarations, assembly);
+						filterOutByAssembly(staticFunctionDeclarations, assembly);
+						filterOutByAssembly(staticFunctionDefinitions, assembly);
+						filterOutByAssembly(externVariableDeclarations, assembly);
+						filterOutByAssembly(staticVariableDeclarations, assembly);
+					}
+					
+					if (!isAnyCandidate())
+						return PROCESS_ABORT;
+					
+					return PROCESS_CONTINUE;
+				}
 
+				private void filterOutByAssembly(Map<IBinding, IASTDeclarator> declarators, String assembly) {
+					Iterator<Entry<IBinding, IASTDeclarator>> iter = declarators.entrySet().iterator();
+					while (iter.hasNext()) {
+						Entry<IBinding, IASTDeclarator> entry = iter.next();
+						IASTDeclarator decl = entry.getValue();
+						IASTName astName = getAstName(decl);
+						if (assembly.contains(astName.toString()))
+							iter.remove();
+					}
+				}
+				
 				private void filterOutByPlainName(Map<IBinding, IASTDeclarator> declarators, String id) {
 					Iterator<Entry<IBinding, IASTDeclarator>> iter = declarators.entrySet().iterator();
 					while (iter.hasNext()) {

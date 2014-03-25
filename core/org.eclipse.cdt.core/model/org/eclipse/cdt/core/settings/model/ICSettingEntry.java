@@ -1,12 +1,12 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2010 Intel Corporation and others.
+ * Copyright (c) 2007, 2013 Intel Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- * Intel Corporation - Initial API and implementation
+ *     Intel Corporation - Initial API and implementation
  *******************************************************************************/
 package org.eclipse.cdt.core.settings.model;
 
@@ -24,6 +24,12 @@ import org.eclipse.cdt.core.settings.model.util.CDataUtil;
  */
 public interface ICSettingEntry {
 	/**
+	 * A constant known to be zero (0), used to indicate that no flags are set.
+	 * @since 5.6
+	 */
+	int NONE = 0;
+
+	/**
 	 * Flag {@code BUILTIN} indicates settings built in a tool (compiler) itself.
 	 * That kind of settings are not passed as options to a compiler but indexer
 	 * or other clients might need them.
@@ -38,7 +44,8 @@ public interface ICSettingEntry {
 	/**
 	 * Flag {@code LOCAL} is used during creation of {@link IIncludeEntry}
 	 * to indicate that an include path is not a system path.
-	 * It does not appear it is used anywhere else.
+	 * "System" path is denoted by angle brackets as in #include <x.h>
+	 * "Local" path is denoted by quotes as in #include "x.h"
 	 */
 	int LOCAL = 1 << 2;
 
@@ -72,6 +79,15 @@ public interface ICSettingEntry {
 	 */
 	int FRAMEWORKS_MAC = 1 << 6;
 
+	/**
+	 * Flag {@code UNDEFINED} indicates that the entry is "Exported" to referencing projects.
+	 * It will be passed to the projects configurations referencing the configuration the entry
+	 * belongs to.
+	 * 
+	 * @since 5.6
+	 */
+	int EXPORTED = 1 << 7;
+
 	int INCLUDE_PATH = 1;
 	int INCLUDE_FILE = 1 << 1;
 	int MACRO = 1 << 2;
@@ -99,5 +115,4 @@ public interface ICSettingEntry {
 	boolean equalsByContents(ICSettingEntry entry);
 
 	int getFlags();
-
 }

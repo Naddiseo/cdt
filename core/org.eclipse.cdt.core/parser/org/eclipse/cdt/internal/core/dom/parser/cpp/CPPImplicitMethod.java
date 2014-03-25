@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2010 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     Andrew Niefer (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -60,17 +61,18 @@ public class CPPImplicitMethod extends CPPImplicitFunction implements ICPPMethod
 		}
 		if (parent instanceof IASTCompositeTypeSpecifier) {
 			IASTCompositeTypeSpecifier cls = (IASTCompositeTypeSpecifier) decl.getParent();
-			IASTDeclaration [] members = cls.getMembers();
+			IASTDeclaration[] members = cls.getMembers();
 			ICPPASTVisibilityLabel vis = null;
 			for (IASTDeclaration member : members) {
-				if( member instanceof ICPPASTVisibilityLabel )
+				if (member instanceof ICPPASTVisibilityLabel) {
 					vis = (ICPPASTVisibilityLabel) member;
-				else if( member == decl )
+				} else if (member == decl) {
 					break;
+				}
 			}
-			if( vis != null ){
+			if (vis != null) {
 				return vis.getVisibility();
-			} else if( cls.getKey() == ICPPASTCompositeTypeSpecifier.k_class ){
+			} else if (cls.getKey() == ICPPASTCompositeTypeSpecifier.k_class) {
 				return ICPPASTVisibilityLabel.v_private;
 			} 
 		}
@@ -79,7 +81,7 @@ public class CPPImplicitMethod extends CPPImplicitFunction implements ICPPMethod
 	
 	@Override
 	public ICPPClassType getClassOwner() {
-		ICPPClassScope scope = (ICPPClassScope)getScope();
+		ICPPClassScope scope = (ICPPClassScope) getScope();
 		return scope.getClassType();
 	}
 	
@@ -166,8 +168,8 @@ public class CPPImplicitMethod extends CPPImplicitFunction implements ICPPMethod
 
 	@Override
 	public boolean isDestructor() {
-		char [] n = getNameCharArray();
-		if( n != null && n.length > 0 )
+		char[] n = getNameCharArray();
+		if (n != null && n.length > 0)
 			return n[0] == '~';
 		return false;
 	}
@@ -188,12 +190,22 @@ public class CPPImplicitMethod extends CPPImplicitFunction implements ICPPMethod
 	}
 
 	@Override
+	public boolean isOverride() {
+		return false;
+	}
+
+	@Override
+	public boolean isFinal() {
+		return false;
+	}
+
+	@Override
 	public IBinding getOwner() {
 		return getClassOwner();
 	}
 
 	@Override
 	public IType[] getExceptionSpecification() {
-		return ClassTypeHelper.getInheritedExceptionSpecification(this);
+		return ClassTypeHelper.getInheritedExceptionSpecification(this, null);
 	}
 }

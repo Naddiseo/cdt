@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2012 IBM Corporation and others.
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
  *     Doug Schaefer (IBM) - Initial API and implementation
  *     Markus Schorn (Wind River Systems)
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.ast;
 
@@ -32,26 +33,37 @@ import org.eclipse.core.runtime.IAdaptable;
  */
 public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomination, IAdaptable {
 	/**
-	 * <code>OWNED_DECLARATION</code> represents the relationship between an <code>IASTTranslationUnit</code> and
-	 * it's nested <code>IASTDeclaration</code>'s.
+	 * {@code OWNED_DECLARATION} represents the relationship between an {@code IASTTranslationUnit}
+	 * and its nested {@code IASTDeclaration}'s.
 	 */
 	public static final ASTNodeProperty OWNED_DECLARATION = new ASTNodeProperty(
 			"IASTTranslationUnit.OWNED_DECLARATION - IASTDeclaration for IASTTranslationUnit"); //$NON-NLS-1$
 
 	/**
-	 * <code>SCANNER_PROBLEM</code> represents the relationship between an <code>IASTTranslationUnit</code> and
-	 * it's nested <code>IASTProblem</code>.
+	 * {@code SCANNER_PROBLEM} represents the relationship between an {@code IASTTranslationUnit}
+	 * and its nested {@code IASTProblem}.
 	 */
 	public static final ASTNodeProperty SCANNER_PROBLEM = new ASTNodeProperty(
 			"IASTTranslationUnit.SCANNER_PROBLEM - IASTProblem (scanner caused) for IASTTranslationUnit"); //$NON-NLS-1$
 
 	/**
-	 * <code>PREPROCESSOR_STATEMENT</code> represents the relationship between an <code>IASTTranslationUnit</code> and
-	 * it's nested <code>IASTPreprocessorStatement</code>.
+	 * {@code PREPROCESSOR_STATEMENT} represents the relationship between
+	 * an {@code IASTTranslationUnit} and its nested {@code IASTPreprocessorStatement}.
 	 */
 	public static final ASTNodeProperty PREPROCESSOR_STATEMENT = new ASTNodeProperty(
 			"IASTTranslationUnit.PREPROCESSOR_STATEMENT - IASTPreprocessorStatement for IASTTranslationUnit"); //$NON-NLS-1$
     
+    public static final ASTNodeProperty MACRO_EXPANSION = new ASTNodeProperty(
+    		"IASTTranslationUnit.MACRO_EXPANSION - IASTPreprocessorMacroExpansion node for macro expansions."); //$NON-NLS-1$
+
+    /**
+     * @deprecated names for macro expansions are nested inside of
+     * {@link IASTPreprocessorMacroExpansion}.
+     */
+    @Deprecated
+	public static final ASTNodeProperty EXPANSION_NAME = new ASTNodeProperty(
+    		"IASTTranslationUnit.EXPANSION_NAME - IASTName generated for macro expansions."); //$NON-NLS-1$
+
 	/**
 	 * A translation unit contains an ordered sequence of declarations.
 	 * 
@@ -62,7 +74,7 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
 	/**
 	 * Adds declaration to translation unit. 
 	 * 
-	 * @param declaration <code>IASTDeclaration</code>
+	 * @param declaration {@code IASTDeclaration}
 	 */
 	@Override
 	public void addDeclaration(IASTDeclaration declaration);
@@ -130,7 +142,7 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
 	 * The object is suitable for working in one of the files that is part of
 	 * the translation unit.
 	 * @param filePath file of interest, as returned by {@link IASTFileLocation#getFileName()},
-	 * or <code>null</code> to specify the root source of the translation-unit.
+	 * or {@code null} to specify the root source of the translation-unit.
 	 * @return an IASTNodeSelector.
 	 * @since 5.0
 	 */
@@ -143,8 +155,8 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
 	public IASTNode selectNodeForLocation(String path, int offset, int length);
 
 	/**
-	 * Returns the macro definitions encountered in parsing this translation unit. The result will not contain
-	 * definitions for built-in macros.
+	 * Returns the macro definitions encountered in parsing this translation unit. The result will
+	 * not contain definitions for built-in macros.
 	 * <p>
 	 * In case the information for a header-file is pulled in from the index,
 	 * macro definitions contained therein are not returned.
@@ -158,8 +170,8 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
 	public IASTPreprocessorMacroDefinition[] getBuiltinMacroDefinitions();
 
 	/**
-	 * Returns the include directives encountered in parsing this translation unit. This will also contain directives
-	 * used for handling the gcc-options -imacros and -include.
+	 * Returns the include directives encountered in parsing this translation unit. This will also
+	 * contain directives used for handling the gcc-options -imacros and -include.
 	 * <p>
 	 * In case the information for a header-file is pulled in from the index,
 	 * include directives contained therein are not returned.
@@ -180,7 +192,7 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
 	
 	/**
 	 * Returns all preprocessor and scanner problems.
-	 * @return <code>IASTProblem[]</code>
+	 * @return {@code IASTProblem[]}
 	 */
 	public IASTProblem[] getPreprocessorProblems();
 
@@ -199,21 +211,11 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
     /**
      * Flattens the node locations provided into a single file location.  
      * 
-     * @param nodeLocations <code>IASTNodeLocation</code>s to flatten
+     * @param nodeLocations {@code IASTNodeLocation}s to flatten
      * @return null if not possible, otherwise, a file location representing where the macros are. 
      */
     public IASTFileLocation flattenLocationsToFile(IASTNodeLocation[] nodeLocations);
     
-    /**
-     * @deprecated names for macro expansions are nested inside of {@link IASTPreprocessorMacroExpansion}.
-     */
-    @Deprecated
-	public static final ASTNodeProperty EXPANSION_NAME = new ASTNodeProperty(
-    		"IASTTranslationUnit.EXPANSION_NAME - IASTName generated for macro expansions."); //$NON-NLS-1$
-
-    public static final ASTNodeProperty MACRO_EXPANSION = new ASTNodeProperty(
-    		"IASTTranslationUnit.MACRO_EXPANSION - IASTPreprocessorMacroExpansion node for macro expansions."); //$NON-NLS-1$
-
     public static interface IDependencyTree {
         public String getTranslationUnitPath();
         
@@ -252,28 +254,26 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
     public IIndex getIndex();
     
     /**
-     * Return the set of files that have been skipped because they have been part of the index
-     * prior to creating this AST, or <code>null</code> if not available.
-     * Applies only, if AST was created with an index and the option to skip headers found in the
-     * index.
+     * Returns the set of files that have been skipped because they have been part of the index
+     * prior to creating this AST, or {@code null} if not available.
+     * Applies only, if AST was created with an index and the option to skip headers found in
+     * the index.
      * @since 5.1
      */
     IIndexFileSet getIndexFileSet();
 
     /**
-     * Return the set of files in the index that are superseded by this AST, 
-     * or <code>null</code> if not available.
-     * Applies only, if AST was created with an index.
+     * Returns the set of files in the index that are superseded by this AST, or {@code null}
+     * if not available. Applies only, if AST was created with an index.
      * @since 5.3
      */
     IIndexFileSet getASTFileSet();
 
 	/**
-	 * In case the AST was created in a way that supports comment parsing,
-	 * all comments of the translation unit are returned. Otherwise an
-	 * empty array will be supplied.
+	 * In case the AST was created in a way that supports comment parsing, all comments of
+	 * the translation unit are returned. Otherwise an empty array will be supplied.
 	 * 
-	 * @return <code>IASTComment[]</code>
+	 * @return {@code IASTComment[]}
 	 * @since 4.0
 	 */
 	public IASTComment[] getComments();
@@ -341,7 +341,7 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
 	public IASTTranslationUnit copy(CopyStyle style);
 
 	/**
-	 * Returns the ITranslationUnit this AST originated from, or <code>null</code> if the AST
+	 * Returns the ITranslationUnit this AST originated from, or {@code null} if the AST
 	 * does not correspond to an ITranslationUnit.
 	 * 
 	 * @since 5.3
@@ -363,7 +363,20 @@ public interface IASTTranslationUnit extends IASTDeclarationListOwner, IFileNomi
 
 	/**
 	 * @since 5.4
+	 * 
 	 * @noreference This method is not intended to be referenced by clients.
 	 */
 	public void setPragmaOnceSemantics(boolean value);
+
+	/**
+	 * Returns {@code true} if the parser has skipped any nodes while creating the AST.
+	 * @since 5.6
+	 */
+	public boolean hasNodesOmitted();
+
+	/**
+	 * Sets whether the parser has skipped any nodes while creating the AST for the translation unit.
+	 * @since 5.6
+	 */
+	public void setHasNodesOmitted(boolean nodesOmitted);
 }

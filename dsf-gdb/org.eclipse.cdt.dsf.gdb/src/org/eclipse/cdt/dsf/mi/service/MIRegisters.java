@@ -8,14 +8,20 @@
  * Contributors:
  *     Wind River Systems - initial API and implementation
  *     Ericsson			  - Modified for additional features in DSF Reference Implementation
+ *     Roland Grunberg (RedHat) - Refresh all registers once one is changed (Bug 400840)
+ *     Alvaro Sanchez-Leon (Ericsson) - Make Registers View specific to a frame (Bug 323552)
+ *     Alvaro Sanchez-Leon (Ericsson) - Register view does not refresh register names per process (Bug 418176)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.mi.service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
+import org.eclipse.cdt.dsf.concurrent.ImmediateDataRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.ImmediateRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.RequestMonitor;
 import org.eclipse.cdt.dsf.datamodel.AbstractDMContext;
@@ -28,6 +34,8 @@ import org.eclipse.cdt.dsf.debug.service.IRegisters;
 import org.eclipse.cdt.dsf.debug.service.IRunControl;
 import org.eclipse.cdt.dsf.debug.service.IRunControl.IContainerDMContext;
 import org.eclipse.cdt.dsf.debug.service.IRunControl.StateChangeReason;
+import org.eclipse.cdt.dsf.debug.service.IStack;
+import org.eclipse.cdt.dsf.debug.service.IStack.IFrameDMContext;
 import org.eclipse.cdt.dsf.debug.service.command.BufferedCommandControl;
 import org.eclipse.cdt.dsf.debug.service.command.CommandCache;
 import org.eclipse.cdt.dsf.debug.service.command.ICommandControlService;
@@ -96,6 +104,11 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
         private int fRegNo;
         private String fRegName;
 
+        /**
+         * An MIRegiserDMC created with no frame context will not be able to resolve the associated register value.
+         * However these instances are useful to provide the register name i.e. needed from the selection of a process,
+         * or a running thread where it is not possible to associate registers to frames and therefore values.
+         */
         public MIRegisterDMC(MIRegisters service, MIRegisterGroupDMC group, int regNo, String regName) {
             super(service.getSession().getId(), 
                     new IDMContext[] { group });
@@ -103,9 +116,26 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
               fRegName = regName;
         }
 
+        @Deprecated
         public MIRegisterDMC(MIRegisters service, MIRegisterGroupDMC group, IMIExecutionDMContext execDmc, int regNo, String regName) {
             super(service.getSession().getId(), 
-                  new IDMContext[] { execDmc, group });
+                    new IDMContext[] { execDmc, group });
+              fRegNo = regNo;
+              fRegName = regName;
+        }
+
+		/**
+		 * This Register context is associated to two parent contexts. A stack frame context (IFrameDMContext), and a register group
+		 * context (MIRegisterGroupDMC). When the scenario requires to build a register contexts from the selection of a thread, then the top
+		 * frame shall be resolved and be provided in this constructor.
+		 * 
+		 * The frame context is necessary to resolve the register's data e.g. value
+		 * 
+		 * @since 4.3
+		 */
+        public MIRegisterDMC(MIRegisters service, MIRegisterGroupDMC group, IFrameDMContext frameDmc, int regNo, String regName) {
+            super(service.getSession().getId(), 
+                  new IDMContext[] { frameDmc, group });
             fRegNo = regNo;
             fRegName = regName;
         }
@@ -148,7 +178,8 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
     
 	private CommandFactory fCommandFactory;
 
-    private MIRegisterGroupDMC fGeneralRegistersGroupDMC; 
+	//One Group per container process
+    private final Map<IContainerDMContext, MIRegisterGroupDMC> fContainerToGroupMap = new HashMap<IContainerDMContext, MIRegisterGroupDMC>();
     private CommandCache fRegisterNameCache;	 // Cache for holding the Register Names in the single Group
     private CommandCache fRegisterValueCache;  // Cache for holding the Register Values
 
@@ -264,17 +295,17 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
     public void getRegisterData(IRegisterDMContext regDmc , final DataRequestMonitor<IRegisterDMData> rm) {
         if (regDmc instanceof MIRegisterDMC) {
             final MIRegisterDMC miRegDmc = (MIRegisterDMC)regDmc;
-            IMIExecutionDMContext execDmc = DMContexts.getAncestorOfType(regDmc, IMIExecutionDMContext.class);
-            // Create register DMC with name if execution DMC is not present.
-            if(execDmc == null){
-                rm.setData(new RegisterData(miRegDmc.getName(), BLANK_STRING, false));
+            final IFrameDMContext frameDmc = DMContexts.getAncestorOfType(regDmc, IFrameDMContext.class);
+            // Create register data with name only e.g. not editable.
+            if(frameDmc == null){
+                rm.setData(new RegisterData(null, miRegDmc.getName(), BLANK_STRING, false));
                 rm.done();
                 return;
             }
             
             int[] regnos = {miRegDmc.getRegNo()};
             fRegisterValueCache.execute(
-            	fCommandFactory.createMIDataListRegisterValues(execDmc, MIFormat.HEXADECIMAL, regnos),
+            	fCommandFactory.createMIDataListRegisterValues(frameDmc, MIFormat.HEXADECIMAL, regnos),
                 new DataRequestMonitor<MIDataListRegisterValuesInfo>(getExecutor(), rm) {
                     @Override
                     protected void handleSuccess() {
@@ -300,9 +331,9 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
                         if ( reg.getValue().contains("float")) { //$NON-NLS-1$
                             isFloat = true;
                         }
-    
+
                         // Return the new register attributes.
-                        rm.setData(new RegisterData(miRegDmc.getName(), BLANK_STRING, isFloat));
+                        rm.setData(new RegisterData(frameDmc, miRegDmc.getName(), BLANK_STRING, isFloat));
                         rm.done();
                     }
                 });
@@ -313,9 +344,9 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
     }
     
     private void getRegisterDataValue( final MIRegisterDMC regDmc, final String formatId, final DataRequestMonitor<FormattedValueDMData> rm) {
-        IMIExecutionDMContext miExecDmc = DMContexts.getAncestorOfType(regDmc, IMIExecutionDMContext.class);
-        if(miExecDmc == null){
-            // Set value to blank if execution dmc is not present
+    	IFrameDMContext frameDmc = DMContexts.getAncestorOfType(regDmc, IFrameDMContext.class);
+        if(frameDmc == null){
+            // Set value to blank if frame dmc is not present
             rm.setData( new FormattedValueDMData( BLANK_STRING ) );
             rm.done();
             return;
@@ -332,7 +363,7 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
         
         int[] regnos = {regDmc.getRegNo()};
         fRegisterValueCache.execute(
-        	fCommandFactory.createMIDataListRegisterValues(miExecDmc, NumberFormat, regnos),
+        	fCommandFactory.createMIDataListRegisterValues(frameDmc, NumberFormat, regnos),
             new DataRequestMonitor<MIDataListRegisterValuesInfo>(getExecutor(), rm) {
                 @Override
                 protected void handleSuccess() {
@@ -361,12 +392,14 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
         final private String fRegName;
         final private String fRegDesc;
         final private boolean fIsFloat;
+        final private IFrameDMContext fContext;
     	
-    	public RegisterData(String regName, String regDesc, boolean isFloat ) {
+    	public RegisterData(IFrameDMContext context, String regName, String regDesc, boolean isFloat ) {
     		
             fRegName = regName;
             fRegDesc = regDesc;
             fIsFloat = isFloat;
+            fContext = context;
     	}
     	
     	@Override
@@ -374,7 +407,12 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
     	@Override
         public boolean isReadOnce() { return false; }
     	@Override
-        public boolean isWriteable() { return true; }
+		public boolean isWriteable() {
+    		//The absence of the frame context is likely the result of a selection not specific to a stack frame
+    		//e.g. the selection of a running thread, or the selection of a process.
+    		//So, an instance with no stack frame is not writable
+			return (fContext != null);
+		}
     	@Override
         public boolean isWriteOnce() { return false; }
     	@Override
@@ -396,13 +434,13 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
     }
     
     // Wraps a list of registers in DMContexts.
-    private MIRegisterDMC[] makeRegisterDMCs(MIRegisterGroupDMC groupDmc, IMIExecutionDMContext execDmc, String[] regNames) {
+    private MIRegisterDMC[] makeRegisterDMCs(MIRegisterGroupDMC groupDmc, IFrameDMContext frameDmc, String[] regNames) {
         List<MIRegisterDMC> regDmcList = new ArrayList<MIRegisters.MIRegisterDMC>( regNames.length );
         int regNo = 0;
         for (String regName : regNames) {
             if(regName != null && regName.length() > 0) {
-            	if(execDmc != null)
-            		regDmcList.add(new MIRegisterDMC(this, groupDmc, execDmc, regNo, regName));
+            	if(frameDmc != null)
+            		regDmcList.add(new MIRegisterDMC(this, groupDmc, frameDmc, regNo, regName));
             	else
             		regDmcList.add(new MIRegisterDMC(this, groupDmc, regNo, regName));
             }
@@ -449,8 +487,25 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
     	fRegisterValueCache.reset();
     }
     
-    private void generateRegisterChangedEvent(IRegisterDMContext dmc ) {
+    private void generateRegisterChangedEvent(final IRegisterDMContext dmc ) {
         getSession().dispatchEvent(new RegisterChangedDMEvent(dmc), getProperties());
+
+        // Temporary fix for Bug 400840
+        // When one register is modified, it could affect other registers.
+        // To properly reflect that, we send a change for all registers.
+        // We cheat since we know there is currently only one group.  Once we handle
+        // more groups, this may not work properly.
+        final IRegisterGroupDMContext groupDmc = DMContexts.getAncestorOfType(dmc, IRegisterGroupDMContext.class);
+        if (groupDmc != null) {
+        	IRegistersChangedDMEvent event = new IRegistersChangedDMEvent() {
+        		@Override
+        		public IRegisterGroupDMContext getDMContext() {
+        			return groupDmc;
+        		}
+        	};
+        	getSession().dispatchEvent(event, getProperties());
+        }
+        
     }
     
     /*
@@ -468,65 +523,110 @@ public class MIRegisters extends AbstractDsfService implements IRegisters, ICach
             return;
         }
         
-        if (fGeneralRegistersGroupDMC == null) {
-            fGeneralRegistersGroupDMC = new MIRegisterGroupDMC( this , contDmc, 0 , "General Registers" ) ;  //$NON-NLS-1$
+        //Bug 418176
+        //Only one group per Process (container) is supported for the time being
+        MIRegisterGroupDMC registerGroup = fContainerToGroupMap.get(contDmc);
+        
+        if (registerGroup == null) {
+        	registerGroup = new MIRegisterGroupDMC( this , contDmc, 0 , "General Registers" ) ;  //$NON-NLS-1$
+        	fContainerToGroupMap.put(contDmc, registerGroup);
         }
-        MIRegisterGroupDMC[] groupDMCs = new MIRegisterGroupDMC[] { fGeneralRegistersGroupDMC };
+        
+        MIRegisterGroupDMC[] groupDMCs = new MIRegisterGroupDMC[] { registerGroup };
         rm.setData(groupDMCs) ;
         rm.done() ;
     }
-    
     
     /*
      * (non-Javadoc)
      * @see org.eclipse.cdt.dsf.debug.service.IRegisters#getRegisters(org.eclipse.cdt.dsf.debug.service.IRegisters.IRegisterGroupDMContext, org.eclipse.cdt.dsf.concurrent.DataRequestMonitor)
      */
 	@Override
-    public void getRegisters(final IDMContext dmc, final DataRequestMonitor<IRegisterDMContext[]> rm) {
-    	final MIRegisterGroupDMC groupDmc = DMContexts.getAncestorOfType(dmc, MIRegisterGroupDMC.class);
-        if ( groupDmc == null ) { 
-            rm.setStatus( new Status( IStatus.ERROR , GdbPlugin.PLUGIN_ID , INVALID_HANDLE , "RegisterGroup context not found", null ) ) ;   //$NON-NLS-1$
-            rm.done();
-            return;
-        }
+	public void getRegisters(final IDMContext dmc, final DataRequestMonitor<IRegisterDMContext[]> rm) {
+		final MIRegisterGroupDMC groupDmc = DMContexts.getAncestorOfType(dmc, MIRegisterGroupDMC.class);
+		if (groupDmc == null) {
+			rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, INVALID_HANDLE,
+					"RegisterGroup context not found", null)); //$NON-NLS-1$
+			rm.done();
+			return;
+		}
 
-        final IContainerDMContext containerDmc = DMContexts.getAncestorOfType(dmc, IContainerDMContext.class);
-        if ( containerDmc == null ) { 
-            rm.setStatus( new Status( IStatus.ERROR , GdbPlugin.PLUGIN_ID , INVALID_HANDLE , "Container context not found" , null ) ) ;   //$NON-NLS-1$
-            rm.done();
-            return;
-        }
+		final IContainerDMContext containerDmc = DMContexts.getAncestorOfType(dmc, IContainerDMContext.class);
+		if (containerDmc == null) {
+			rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, INVALID_HANDLE,
+					"Container context not found", null)); //$NON-NLS-1$
+			rm.done();
+			return;
+		}
 
-        // There is only one group and its number must be 0.
-        if ( groupDmc.getGroupNo() == 0 ) {
-        	final IMIExecutionDMContext executionDmc = DMContexts.getAncestorOfType(dmc, IMIExecutionDMContext.class);
-        	fRegisterNameCache.execute(
-        		fCommandFactory.createMIDataListRegisterNames(containerDmc),
-                new DataRequestMonitor<MIDataListRegisterNamesInfo>(getExecutor(), rm) { 
-                    @Override
-                    protected void handleSuccess() {
-                        // Retrieve the register names.
-                        String[] regNames = getData().getRegisterNames() ;
-                       
-                        // If the list is empty just return empty handed.
-                        if ( regNames.length == 0 ) {
-                            rm.done();
-                            return;
-                        }
-                        // Create DMContexts for each of the register names.
-                        if(executionDmc == null)
-                        	rm.setData(makeRegisterDMCs(groupDmc, regNames));
-                        else
-                        	rm.setData(makeRegisterDMCs(groupDmc, executionDmc, regNames));
-                        rm.done();
-                    }
-                });
-        } else {
-            rm.setStatus(new Status(IStatus.ERROR , GdbPlugin.PLUGIN_ID , INTERNAL_ERROR , "Invalid group = " + groupDmc , null)); //$NON-NLS-1$
-            rm.done();
-        }
-    }
+		// There is only one group and its number must be 0.
+		if (groupDmc.getGroupNo() == 0) {
+			final IFrameDMContext frameDmc = DMContexts.getAncestorOfType(dmc, IFrameDMContext.class);
+			if (frameDmc == null) {
+				// The selection does not provide a specific frame, then resolve the top frame on the current thread
+				IMIExecutionDMContext execDmc = DMContexts.getAncestorOfType(dmc, IMIExecutionDMContext.class);
+				if (execDmc != null) {
+					IStack stackService = getServicesTracker().getService(IStack.class);
+					if (stackService != null) {
+						stackService.getTopFrame(execDmc, new ImmediateDataRequestMonitor<IStack.IFrameDMContext>(rm) {
+							@Override
+							protected void handleSuccess() {
+								getRegisters(getData(), groupDmc, containerDmc, rm);
+							}
+							
+							@Override
+							protected void handleFailure() {
+								//Unable to resolve top frame on current thread.
+								//The thread could e.g. be in running state, 
+								//we return register instances with no associated execution context
+								//i.e. unable to resolve its associated value.
+								getRegisters(null, groupDmc, containerDmc, rm);
+							}
+						});
+
+						return;
+					}
+				}
+			}
+
+			getRegisters(frameDmc, groupDmc, containerDmc, rm);
+
+		} else {
+			rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, INTERNAL_ERROR,
+					"Invalid group = " + groupDmc, null)); //$NON-NLS-1$
+			rm.done();
+		}
+	}
     
+	private void getRegisters(final IFrameDMContext frameDmc, final MIRegisterGroupDMC groupDmc,
+			IContainerDMContext containerDmc, final DataRequestMonitor<IRegisterDMContext[]> rm) {
+
+		fRegisterNameCache.execute(fCommandFactory.createMIDataListRegisterNames(containerDmc),
+				new ImmediateDataRequestMonitor<MIDataListRegisterNamesInfo>(rm) {
+					@Override
+					protected void handleSuccess() {
+						// Retrieve the register names.
+						String[] regNames = getData().getRegisterNames();
+
+						// If the list is empty just return empty handed.
+						if (regNames.length == 0) {
+							rm.done();
+							return;
+						}
+
+						if (frameDmc == null)
+							// The selection does not provide a frame or thread context,
+							// This can happen e.g. if a container /process is selected
+							// Lets provide the list of register names applicable to the selected process
+							// i.e. instances with only name information which can not resolve a value
+							rm.setData(makeRegisterDMCs(groupDmc, regNames));
+						else
+							rm.setData(makeRegisterDMCs(groupDmc, frameDmc, regNames));
+						rm.done();
+					}
+				});
+	}
+	
     /*
      * (non-Javadoc)
      * @see org.eclipse.cdt.dsf.debug.service.IRegisters#getBitFields(org.eclipse.cdt.dsf.debug.service.IRegisters.IRegisterDMContext, org.eclipse.cdt.dsf.concurrent.DataRequestMonitor)

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2011 Wind River Systems, Inc. and others.
+ * Copyright (c) 2007, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -35,6 +35,8 @@ public abstract class AbstractPDOMIndexer implements IPDOMIndexer {
 		fProperties.put(IndexerPreferences.KEY_SKIP_IMPLICIT_REFERENCES, String.valueOf(false)); 
 		fProperties.put(IndexerPreferences.KEY_SKIP_TYPE_REFERENCES, String.valueOf(false)); 
 		fProperties.put(IndexerPreferences.KEY_SKIP_MACRO_REFERENCES, String.valueOf(false)); 
+		fProperties.put(IndexerPreferences.KEY_INDEX_ALL_HEADER_VERSIONS, String.valueOf(false));
+		fProperties.put(IndexerPreferences.KEY_INDEX_ALL_VERSIONS_SPECIFIC_HEADERS, ""); //$NON-NLS-1$
 	}
 
 	@Override
@@ -54,13 +56,13 @@ public abstract class AbstractPDOMIndexer implements IPDOMIndexer {
 
 	@Override
 	public boolean needsToRebuildForProperties(Properties props) {
-		for (Map.Entry<Object,Object> entry : fProperties.entrySet()) {
+		for (Map.Entry<Object, Object> entry : fProperties.entrySet()) {
 			String key = (String) entry.getKey();
-			String myval = (String) entry.getValue();
+			String val = (String) entry.getValue();
 
-			if (myval != null) { // relevant property
+			if (val != null) { // relevant property
 				String v2= (String) props.get(key);
-				if (v2 != null && !myval.equals(v2)) {
+				if (v2 != null && !val.equals(v2)) {
 					return true;
 				}
 			}
@@ -74,8 +76,8 @@ public abstract class AbstractPDOMIndexer implements IPDOMIndexer {
 
 	@Override
 	public void setProperties(Properties props) {
-		// only set relevant properties as initialized in the constructor
-		for (Map.Entry<Object,Object> entry : props.entrySet()) {
+		// Only set relevant properties as initialized in the constructor.
+		for (Map.Entry<Object, Object> entry : props.entrySet()) {
 			String key = (String) entry.getKey();
 			String val = (String) entry.getValue();
 

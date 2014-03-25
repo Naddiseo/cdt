@@ -1,27 +1,31 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2009 IBM Corporation and others.
+ * Copyright (c) 2005, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    IBM Rational Software - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     IBM Rational Software - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.core.parser;
 
 import java.util.Map;
 
 /**
- * Implementation for the {@link IExtendedScannerInfo} interface. Allows to configure the preprocessor.
+ * Implementation for the {@link IExtendedScannerInfo} interface. Allows to configure
+ * the preprocessor.
+ * @since 5.5
  */
 public class ExtendedScannerInfo extends ScannerInfo implements IExtendedScannerInfo {
-
-	private static final String[] EMPTY_STRING_ARRAY = new String[0];
+	private static final String[] EMPTY_STRING_ARRAY = {};
 	private String[] macroFiles;
 	private String[] includeFiles;
 	private String[] localIncludePaths;
+	private IncludeExportPatterns includeExportPatterns;
+	private IParserSettings parserSettings;
 
 	public ExtendedScannerInfo() {
 	}
@@ -32,7 +36,6 @@ public class ExtendedScannerInfo extends ScannerInfo implements IExtendedScanner
 
 	public ExtendedScannerInfo(Map<String, String> definedSymbols, String[] includePaths,
 			String[] macroFiles, String[] includeFiles) {
-
 		super(definedSymbols, includePaths);
 		this.macroFiles = macroFiles;
 		this.includeFiles = includeFiles;
@@ -43,7 +46,6 @@ public class ExtendedScannerInfo extends ScannerInfo implements IExtendedScanner
 	 */
 	public ExtendedScannerInfo(Map<String, String> definedSymbols, String[] includePaths,
 			String[] macroFiles, String[] includeFiles, String[] localIncludePaths) {
-		
 		super(definedSymbols, includePaths);
 		this.macroFiles = macroFiles;
 		this.includeFiles = includeFiles;
@@ -58,11 +60,13 @@ public class ExtendedScannerInfo extends ScannerInfo implements IExtendedScanner
 			includeFiles = einfo.getIncludeFiles();
 			localIncludePaths = einfo.getLocalIncludePath();
 		}
+		if (info instanceof ExtendedScannerInfo) {
+			ExtendedScannerInfo extendedScannerInfo = (ExtendedScannerInfo) info;
+			includeExportPatterns = extendedScannerInfo.includeExportPatterns;
+			parserSettings = extendedScannerInfo.parserSettings;
+		}
 	}
 	
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.parser.IExtendedScannerInfo#getMacroFiles()
-	 */
 	@Override
 	public String[] getMacroFiles() {
 		if (macroFiles == null)
@@ -70,9 +74,6 @@ public class ExtendedScannerInfo extends ScannerInfo implements IExtendedScanner
 		return macroFiles;
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.parser.IExtendedScannerInfo#getIncludeFiles()
-	 */
 	@Override
 	public String[] getIncludeFiles() {
 		if (includeFiles == null)
@@ -80,13 +81,48 @@ public class ExtendedScannerInfo extends ScannerInfo implements IExtendedScanner
 		return includeFiles;
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.core.parser.IExtendedScannerInfo#getLocalIncludePath()
-	 */
 	@Override
 	public String[] getLocalIncludePath() {
 		if (localIncludePaths == null)
 			return EMPTY_STRING_ARRAY;
 		return localIncludePaths;
+	}
+
+	/**
+	 * Returns the regular expression patterns matching export directives for included files.
+	 * @see IncludeExportPatterns
+	 *
+	 * @noreference This method is not intended to be referenced by clients.
+	 * @since 5.5
+	 */
+	public IncludeExportPatterns getIncludeExportPatterns() {
+		return includeExportPatterns;
+	}
+
+	/**
+	 * Sets the regular expression patterns matching export directives for included files.
+	 * @see IncludeExportPatterns
+	 *
+	 * @noreference This method is not intended to be referenced by clients.
+	 * @since 5.5
+	 */
+	public void setIncludeExportPatterns(IncludeExportPatterns patterns) {
+    	includeExportPatterns= patterns;
+    }
+
+	/**
+	 * Returns additional settings for the parser.
+	 * @since 5.6
+	 */
+	public IParserSettings getParserSettings() {
+		return parserSettings;
+	}
+
+	/**
+	 * Sets additional settings for configuring the parser.
+	 * @since 5.6
+	 */
+	public void setParserSettings(IParserSettings parserSettings) {
+		this.parserSettings = parserSettings;
 	}
 }

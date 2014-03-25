@@ -1,11 +1,11 @@
 /*******************************************************************************
- *  Copyright (c) 2004, 2011 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
+ * Contributors:
  *     John Camelon (IBM) - Initial API and implementation
  *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
@@ -52,11 +52,7 @@ public class CPPASTSimpleTypeConstructorExpression extends ASTNode implements
 		CPPASTSimpleTypeConstructorExpression copy = new CPPASTSimpleTypeConstructorExpression();
 		copy.setDeclSpecifier(fDeclSpec == null ? null : fDeclSpec.copy(style));
 		copy.setInitializer(fInitializer == null ? null : fInitializer.copy(style));
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -100,9 +96,10 @@ public class CPPASTSimpleTypeConstructorExpression extends ASTNode implements
 				for (int i = 0; i < a.length; i++) {
 					args[i]= ((ICPPASTInitializerClause) a[i]).getEvaluation();
 				}
-				fEvaluation= new EvalTypeId(type, args);
+				fEvaluation= new EvalTypeId(type, this, args);
 			} else if (fInitializer instanceof ICPPASTInitializerList) {
-				fEvaluation= new EvalTypeId(type, ((ICPPASTInitializerList) fInitializer).getEvaluation());
+				fEvaluation= new EvalTypeId(type, this,
+						((ICPPASTInitializerList) fInitializer).getEvaluation());
 			} else {
 				fEvaluation= EvalFixed.INCOMPLETE;
 			}

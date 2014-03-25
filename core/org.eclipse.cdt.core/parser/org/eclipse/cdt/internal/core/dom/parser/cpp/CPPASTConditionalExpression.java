@@ -1,13 +1,13 @@
 /*******************************************************************************
- *  Copyright (c) 2004, 2012 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
- *      John Camelon (IBM) - Initial API and implementation
- *      Markus Schorn (Wind River Systems)
+ * Contributors:
+ *     John Camelon (IBM) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -52,11 +52,7 @@ public class CPPASTConditionalExpression extends ASTNode implements IASTConditio
 		copy.setLogicalConditionExpression(fCondition == null ? null : fCondition.copy(style));
 		copy.setPositiveResultExpression(fPositive == null ? null : fPositive.copy(style));
 		copy.setNegativeResultExpression(fNegative == null ? null : fNegative.copy(style));
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -170,7 +166,7 @@ public class CPPASTConditionalExpression extends ASTNode implements IASTConditio
 				final ICPPEvaluation condEval = fCondition.getEvaluation();
 				final ICPPEvaluation posEval = fPositive == null ? null : fPositive.getEvaluation();
 				fEval= new EvalConditional(condEval, posEval, fNegative.getEvaluation(),
-						isThrowExpression(fPositive), isThrowExpression(fNegative));
+						isThrowExpression(fPositive), isThrowExpression(fNegative), this);
 			}
 		}
 		return fEval;

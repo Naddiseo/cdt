@@ -119,7 +119,7 @@
       <propertyTester
       		namespace="org.eclipse.cdt.launch"
             properties="isExecutable,isCProject"
-            type="org.eclipse.core.runtime.IAdaptable"
+            type="java.lang.Object"
             class="org.eclipse.cdt.debug.internal.ui.launch.CPropertyTester"
             id="org.eclipse.cdt.launch.CPropertyTester">
       </propertyTester>
@@ -128,17 +128,17 @@
 	<!-- Adapters for contextual launch -->
 	<extension point="org.eclipse.core.runtime.adapters">
          <factory 
-            class="" 
+            class="org.eclipse.cdt.debug.internal.ui.launch.InvalidLaunchableAdapterFactory" 
             adaptableType="org.eclipse.cdt.core.model.IBinary">
             <adapter type="org.eclipse.debug.ui.actions.ILaunchable"/>
          </factory>
          <factory 
-            class="" 
+            class="org.eclipse.cdt.debug.internal.ui.launch.InvalidLaunchableAdapterFactory"
             adaptableType="org.eclipse.core.resources.IResource">
             <adapter type="org.eclipse.debug.ui.actions.ILaunchable"/>
          </factory>         
          <factory 
-            class="" 
+            class="org.eclipse.cdt.debug.internal.ui.launch.InvalidLaunchableAdapterFactory"
             adaptableType="org.eclipse.cdt.core.model.ICProject">
             <adapter type="org.eclipse.debug.ui.actions.ILaunchable"/>
          </factory>         
@@ -645,7 +645,7 @@
          </action>
       </objectContribution>
       <objectContribution
-            objectClass="org.eclipse.cdt.debug.internal.core.ICWatchpointTarget"
+            objectClass="org.eclipse.cdt.debug.core.ICWatchpointTarget"
             id="org.eclipse.cdt.debug.ui.WatchpointActions">
          <action
                class="org.eclipse.cdt.debug.ui.breakpoints.AddWatchpointOnVariableActionDelegate"
@@ -1710,6 +1710,14 @@
             class="org.eclipse.cdt.debug.ui.breakpointactions.ExternalToolAction"
             id="org.eclipse.cdt.debug.ui.breakpointactions.ExternalToolAction"/>
    </extension>
+  <extension
+        point="org.eclipse.cdt.debug.core.BreakpointActionType">
+     <actionType
+           class="org.eclipse.cdt.debug.ui.breakpointactions.ReverseDebugAction"
+           id="org.eclipse.cdt.debug.ui.breakpointactions.ReverseDebugAction"
+           name="%ReverseDebugAction.name">
+     </actionType>
+  </extension>
  <extension
          point="org.eclipse.cdt.debug.ui.BreakpointActionPage">
       <actionPage
@@ -1740,6 +1748,14 @@
             id="org.eclipse.cdt.debug.ui.breakpointactions.ExternalToolActionPage"
             actionType="org.eclipse.cdt.debug.ui.breakpointactions.ExternalToolAction"/>
    </extension>
+  <extension
+        point="org.eclipse.cdt.debug.ui.BreakpointActionPage">
+     <actionPage
+           actionType="org.eclipse.cdt.debug.ui.breakpointactions.ReverseDebugAction"
+           class="org.eclipse.cdt.debug.ui.breakpointactions.ReverseDebugActionPage"
+           id="org.eclipse.cdt.debug.ui.breakpointactions.ReverseDebugActionPage">
+     </actionPage>
+  </extension>
 
 	<extension point="org.eclipse.debug.ui.detailPaneFactories">
       	<detailFactories
@@ -1807,11 +1823,10 @@
          </adapter>
       </factory>
    </extension>
-     <extension point="org.eclipse.cdt.debug.ui.breakpointContribution">
-     <breakpointLabels markerType="org.eclipse.cdt.debug.core.cBreakpointMarker"
-     debugModelId="org.eclipse.cdt.debug.core"> 
+ <extension point="org.eclipse.cdt.debug.ui.breakpointContribution">
+     <breakpointLabels markerType="org.eclipse.cdt.debug.core.commonCLineBreakpointMarker"> 
      <attribute name="org.eclipse.cdt.debug.core.breakpointType" label="%breapointType.label" type="integer"
-     fieldEditor="org.eclipse.cdt.debug.ui.preferences.ReadOnlyFieldEditor"
+     fieldEditor="org.eclipse.cdt.debug.internal.ui.breakpoints.BreakpointComboFieldEditor"
      >
         <value value="0" label="%breapointType.regular.label"></value>
         <value value="2" label="%breapointType.hardware.label"></value>
@@ -1990,6 +2005,18 @@
           id="org.eclipse.cdt.debug.ui.command.ungroupDebugContexts"
           name="%UngroupDebugContexts.name">
     </command>
+    <command
+          categoryId="org.eclipse.cdt.debug.ui.category.debugViewLayout"
+          description="%Connect.description"
+          id="org.eclipse.cdt.debug.ui.command.connect"
+          name="%Connect.name">
+    </command>
+    <command
+          categoryId="org.eclipse.cdt.debug.ui.category.debugViewLayout"
+          description="%DebugNewExecutable.description"
+          id="org.eclipse.cdt.debug.ui.command.debugNewExecutable"
+          name="%DebugNewExecutable.name">
+    </command>
  </extension>
  <extension
          point="org.eclipse.ui.handlers">
@@ -2052,6 +2079,28 @@
             class="org.eclipse.cdt.debug.internal.ui.commands.UngroupDebugContextsCommandHandler"
             commandId="org.eclipse.cdt.debug.ui.command.ungroupDebugContexts">
       </handler>
+      <handler
+            class="org.eclipse.cdt.debug.internal.ui.commands.ConnectCommandHandler"
+            commandId="org.eclipse.cdt.debug.ui.command.connect">
+      </handler>
+      <handler
+            class="org.eclipse.cdt.debug.internal.ui.commands.DebugNewExecutableHandler"
+            commandId="org.eclipse.cdt.debug.ui.command.debugNewExecutable">
+      </handler>
+      <handler
+           class="org.eclipse.cdt.debug.internal.ui.commands.StepIntoSelectionCommandHandler"
+           commandId="org.eclipse.cdt.debug.ui.command.StepIntoSelection">
+           <enabledWhen>
+             <and>
+               <with
+                   variable="activeEditor">
+                  <instanceof
+                      value="org.eclipse.ui.texteditor.ITextEditor">
+                  </instanceof>
+               </with>
+             </and>
+           </enabledWhen>
+      </handler>   
  </extension>
  <extension
          point="org.eclipse.core.expressions.definitions">
@@ -2144,6 +2193,10 @@
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="SHIFT+F7">
       </key>
+      <key sequence="M1+F5"
+            contextId="org.eclipse.cdt.debug.ui.debugging"
+            commandId="org.eclipse.cdt.debug.ui.command.StepIntoSelection"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"/>
  </extension>
  <extension
        point="org.eclipse.ui.commands">
@@ -2154,6 +2207,13 @@
           helpContextId="breakpoint_properties_action_context"
           id="org.eclipse.cdt.debug.command.breakpointProperties"
           name="%BreakpointPropertiesCommand.name">
+    </command>
+    <command
+          categoryId="org.eclipse.debug.ui.category.run"
+          description="%popup.stepIntoSelection.description"
+          helpContextId="step_into_selection_action_context"
+          id="org.eclipse.cdt.debug.ui.command.StepIntoSelection"
+          name="%popup.stepIntoSelection.name">
     </command>
  </extension>
  <extension
@@ -2493,7 +2553,96 @@
           	</visibleWhen>
          </command>
       </menuContribution>
+<!--
+      <menuContribution
+            locationURI="toolbar:org.eclipse.debug.ui.DebugView?before=stepGroup">
+         <command
+               commandId="org.eclipse.cdt.debug.ui.command.debugNewExecutable"
+               icon="icons/obj16/new_exec.gif"
+               label="%DebugNewExecutable.label"
+               style="push"
+               tooltip="%DebugNewExecutable.tooltip">
+         </command>
+      </menuContribution>
+-->
+      <menuContribution
+            locationURI="popup:org.eclipse.debug.ui.DebugView?before=emptyLaunchGroup">
+         <command
+               commandId="org.eclipse.cdt.debug.ui.command.debugNewExecutable"
+               icon="icons/obj16/new_exec.gif"
+               label="%DebugNewExecutable.label"
+               style="push"
+               tooltip="%DebugNewExecutable.tooltip">
+         </command>
+      </menuContribution>
       
+      <!-- Connect contributions to debug view menu, toolbar menu -->
+      <menuContribution
+            locationURI="toolbar:org.eclipse.debug.ui.DebugView?before=stepGroup">
+         <command
+               commandId="org.eclipse.cdt.debug.ui.command.connect"
+               icon="icons/obj16/connect.gif"
+               label="%Connect.label"
+               style="push"
+               tooltip="%Connect.tooltip">
+         </command>
+      </menuContribution>
+      <menuContribution
+          locationURI="popup:org.eclipse.debug.ui.DebugView?before=emptyLaunchGroup">
+         <command
+               commandId="org.eclipse.cdt.debug.ui.command.connect"
+               icon="icons/obj16/connect.gif"
+               label="%Connect.label"
+               style="push"
+               tooltip="%Connect.tooltip">
+         </command>
+         
+       <!-- Step Into Selection debugging contributions -->  
+       </menuContribution>
+              <menuContribution
+             locationURI="menu:org.eclipse.ui.run?endof=emptyStepGroup">
+          <command
+                commandId="org.eclipse.cdt.debug.ui.command.StepIntoSelection"
+                style="push">
+                <visibleWhen
+                   checkEnabled="false">
+                <and>
+                   <systemTest
+                         property="org.eclipse.cdt.debug.ui.debuggerActive"
+                         value="true">
+                   </systemTest>
+                   <with
+                   		variable="activeEditor">
+                		<instanceof
+                      		value="org.eclipse.ui.texteditor.ITextEditor">
+                		</instanceof>
+             		</with>
+                </and>
+             </visibleWhen>
+          </command>
+       </menuContribution>
+              <menuContribution
+             locationURI="popup:#CEditorContext?before=additions">
+          <command
+                commandId="org.eclipse.cdt.debug.ui.command.StepIntoSelection"
+                style="push">
+             <visibleWhen
+                   checkEnabled="false">
+                <and>
+                   <systemTest
+                         property="org.eclipse.cdt.debug.ui.debuggerActive"
+                         value="true">
+                   </systemTest>
+                   <with
+                   		variable="activeEditor">
+                		<instanceof
+                      		value="org.eclipse.ui.texteditor.ITextEditor">
+                		</instanceof>
+             		</with>
+                </and>
+             </visibleWhen>
+          </command>
+       </menuContribution>
  </extension>
  
  <!-- Cast to Type / Display as Array -->

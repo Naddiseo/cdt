@@ -29,7 +29,7 @@ public class CaseBreakQuickFixTest extends QuickFixTestCase {
 	//		break;
 	//	}
 	//}
-	public void testMiddleCase() throws Exception {
+	public void testSimpleCase() throws Exception {
 		loadcode(getAboveComment());
 		String result = runQuickFixOneFile();
 		assertContainedIn("break;\tcase 2:", result);
@@ -38,27 +38,33 @@ public class CaseBreakQuickFixTest extends QuickFixTestCase {
 	//void func() {
 	//	int a;
 	//	switch(a) {
-	//	case 1:
-	//		hello();
-	//	}
-	//}
-	public void testLastCase() throws Exception {
-		loadcode(getAboveComment());
-		String result = runQuickFixOneFile();
-		assertContainedIn("break;\t}", result);
-	}
-
-	//void func() {
-	//	int a;
-	//	switch(a) {
 	//	case 1: {
 	//		hello();
 	//	}
+	//	default:
 	//	}
 	//}
-	public void testLastCaseComp() throws Exception {
+	public void testCompositeStatementCase() throws Exception {
 		loadcode(getAboveComment());
 		String result = runQuickFixOneFile();
 		assertContainedIn("hello();\t\tbreak;", result);
+	}
+
+	//	int main() {
+	//		int a;
+	//		switch(a)
+	//		{
+	//			case 0:
+	//			{
+	//			}
+	//			default:
+	//				break;
+	//		}
+	//		return 0;
+	//	}
+	public void testNPE_bug363884() throws Exception {
+		loadcode(getAboveComment());
+		String result = runQuickFixOneFile();
+		assertContainedIn("break;\t}\t\t\tdefault:", result);
 	}
 }

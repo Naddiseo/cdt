@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2011 IBM Corporation and others.
+ * Copyright (c) 2000, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -364,6 +364,102 @@ public final class PreferencesMessages extends NLS {
 	public static String CodeTemplateBlock_export_error_hidden;
 	public static String CodeTemplateBlock_export_error_canNotWrite;
 
+	public static String HeaderSubstitutionPreferencePage_title;
+
+	public static String HeaderSubstitutionBlock_header_substitution_maps;
+	public static String HeaderSubstitutionBlock_c_and_cpp; 
+	public static String HeaderSubstitutionBlock_cpp_only;
+	public static String HeaderSubstitutionBlock_add_button;
+	public static String HeaderSubstitutionBlock_edit_button;
+	public static String HeaderSubstitutionBlock_remove_button;
+	public static String HeaderSubstitutionBlock_up_button;
+	public static String HeaderSubstitutionBlock_down_button;
+	public static String HeaderSubstitutionBlock_name_column_title;
+	public static String HeaderSubstitutionBlock_languages_column_title;
+
+	public static String HeaderSubstitutionEditDialog_new_title;
+	public static String HeaderSubstitutionEditDialog_edit_title;
+	public static String HeaderSubstitutionEditDialog_source;
+	public static String HeaderSubstitutionEditDialog_target;
+	public static String HeaderSubstitutionEditDialog_required_substitution;
+	public static String HeaderSubstitutionEditDialog_enter_source;
+	public static String HeaderSubstitutionEditDialog_enter_target;
+	public static String HeaderSubstitutionEditDialog_error_replacement_by_itself;
+	public static String HeaderSubstitutionEditDialog_invalid_source;
+	public static String HeaderSubstitutionEditDialog_invalid_target;
+				
+	public static String HeaderSubstitutionMapEditDialog_new_title;
+	public static String HeaderSubstitutionMapEditDialog_edit_title;
+	public static String HeaderSubstitutionMapEditDialog_name;
+	public static String HeaderSubstitutionMapEditDialog_applies_to;
+	public static String HeaderSubstitutionMapEditDialog_required_substitution;
+	public static String HeaderSubstitutionMapEditDialog_optional_substitution;
+	public static String HeaderSubstitutionMapEditDialog_header;
+	public static String HeaderSubstitutionMapEditDialog_replacement;
+	public static String HeaderSubstitutionMapEditDialog_import_button;
+	public static String HeaderSubstitutionMapEditDialog_export_button;
+	public static String HeaderSubstitutionMapEditDialog_add_button;
+	public static String HeaderSubstitutionMapEditDialog_edit_button;
+	public static String HeaderSubstitutionMapEditDialog_remove_button;
+	public static String HeaderSubstitutionMapEditDialog_add_button2;
+	public static String HeaderSubstitutionMapEditDialog_edit_button2;
+	public static String HeaderSubstitutionMapEditDialog_remove_button2;
+	public static String HeaderSubstitutionMapEditDialog_up_button;
+	public static String HeaderSubstitutionMapEditDialog_down_button;
+	public static String HeaderSubstitutionMapEditDialog_c_and_cpp; 
+	public static String HeaderSubstitutionMapEditDialog_cpp_only;
+	public static String HeaderSubstitutionMapEditDialog_import_title;
+	public static String HeaderSubstitutionMapEditDialog_export_title;
+	public static String HeaderSubstitutionMapEditDialog_error_read_message;
+	public static String HeaderSubstitutionMapEditDialog_error_parse_message;
+	public static String HeaderSubstitutionMapEditDialog_error_write_message;
+	public static String HeaderSubstitutionMapEditDialog_default_map_name;
+	public static String HeaderSubstitutionMapEditDialog_enter_name;
+	public static String HeaderSubstitutionMapEditDialog_duplicate_name;
+	public static String HeaderSubstitutionMapEditDialog_map_is_empty;
+
+	public static String IncludeStylePreferencePage_title;
+	public static String IncludeStyleBlock_categories_tab;
+	public static String IncludeStyleBlock_order_tab;
+	public static String IncludeCategoriesBlock_external_headers_node;
+	public static String IncludeCategoriesBlock_external_headers_node_description;
+	public static String IncludeCategoriesBlock_unrelated_headers_node;
+	public static String IncludeCategoriesBlock_unrelated_headers_node_description;
+	public static String IncludeCategoriesBlock_other_project_headers_node;
+	public static String IncludeCategoriesBlock_other_project_headers_node_description;
+	public static String IncludeCategoriesBlock_partner_header_node;
+	public static String IncludeCategoriesBlock_partner_header_node_description;
+	public static String IncludeCategoriesBlock_same_project_headers_node;
+	public static String IncludeCategoriesBlock_same_project_headers_node_description;
+	public static String IncludeCategoriesBlock_related_headers_node;
+	public static String IncludeCategoriesBlock_related_headers_node_description;
+	public static String IncludeCategoriesBlock_same_folder_header_node;
+	public static String IncludeCategoriesBlock_same_folder_header_node_description;
+	public static String IncludeCategoriesBlock_subfolder_header_node;
+	public static String IncludeCategoriesBlock_subfolder_header_node_description;
+	public static String IncludeCategoriesBlock_system_headers_node;
+	public static String IncludeCategoriesBlock_system_headers_node_description;
+	public static String IncludeCategoriesBlock_system_headers_with_extension_node;
+	public static String IncludeCategoriesBlock_system_headers_with_extension_node_description;
+	public static String IncludeCategoriesBlock_system_headers_without_extension_node;
+	public static String IncludeCategoriesBlock_system_headers_without_extension_node_description;
+	public static String IncludeCategoriesBlock_user_defined_categories_node;
+	public static String IncludeCategoriesBlock_user_defined_categories_node_description;
+	public static String IncludeGroupStyleBlock_keep_includes_together;
+	public static String IncludeCategoriesBlock_header_categories;
+	public static String IncludeGroupStyleBlock_blank_line_before;
+	public static String IncludeGroupStyleBlock_use_relative_path;
+	public static String IncludeGroupStyleBlock_use_angle_brackets;
+	public static String IncludeOrderBlock_up;
+	public static String IncludeOrderBlock_down;
+	public static String IncludeOrderBlock_order_of_includes;
+	public static String IncludePragmasPreferencePage_title;
+	public static String IncludePragmasBlock_description; 
+	public static String IncludePragmasBlock_link_tooltip;
+	public static String IncludePragmasBlock_export_pattern;
+	public static String IncludePragmasBlock_begin_exports_pattern;
+	public static String IncludePragmasBlock_end_exports_pattern;
+
 	public static String NameStylePreferencePage_title;
 	public static String NameStyleBlock_code_node;
 	public static String NameStyleBlock_files_node;
@@ -401,6 +497,21 @@ public final class PreferencesMessages extends NLS {
 	public static String NameStyleBlock_invalid_prefix;
 	public static String NameStyleBlock_invalid_word_delimiter;
 	public static String NameStyleBlock_invalid_suffix;
+
+	public static String OrganizeIncludesPreferencePage_title;
+	public static String OrganizeIncludesBlock_allow_reordering;
+	public static String OrganizeIncludesBlock_forward_declare_composite_types;
+	public static String OrganizeIncludesBlock_forward_declare_enums;
+	public static String OrganizeIncludesBlock_forward_declare_external_variables;
+	public static String OrganizeIncludesBlock_forward_declare_functions;
+	public static String OrganizeIncludesBlock_forward_declare_namespace_elements;
+	public static String OrganizeIncludesBlock_forward_declare_templates;
+	public static String OrganizeIncludesBlock_heuristic_header_substitution;
+	public static String OrganizeIncludesBlock_partner_indirect_inclusion;
+	public static String OrganizeIncludesBlock_unused_statements;
+	public static String OrganizeIncludesBlock_comment_out;
+	public static String OrganizeIncludesBlock_keep;
+	public static String OrganizeIncludesBlock_remove;
 
 	public static String EditTemplateDialog_error_noname;
 	public static String EditTemplateDialog_error_invalidName;
@@ -441,7 +552,18 @@ public final class PreferencesMessages extends NLS {
 	public static String ScalabilityPreferencePage_note;
 	public static String ScalabilityPreferencePage_preferenceOnlyForNewEditors;
 	public static String ScalabilityPreferencePage_contentAssist_autoActivation;
-	
+	public static String ScalabilityPreferencePage_parserSettings_group_label;
+	public static String ScalabilityPreferencePage_skipTrivialExpressions_label;
+	public static String ScalabilityPreferencePage_maximumTrivialExpressions_label;
+	public static String ScalabilityPreferencePage_maximumTokensPerTU_label;
+
+	public static String IndexerStrategyBlock_activeBuildConfig;
+	public static String IndexerStrategyBlock_autoUpdate;
+	public static String IndexerStrategyBlock_buildConfigGroup;
+	public static String IndexerStrategyBlock_immediateUpdate;
+	public static String IndexerStrategyBlock_specificBuildConfig;
+	public static String IndexerStrategyBlock_strategyGroup;
+
 	private PreferencesMessages() {
 		// Do not instantiate
 	}

@@ -1,16 +1,16 @@
 /*******************************************************************************
- *  Copyright (c) 2004, 2009 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2004, 2009 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
- *    IBM - Initial API and implementation
- *    Ed Swartz (Nokia)
- *    Anton Leherbauer (Wind River Systems)
- *    Markus Schorn (Wind River Systems)
- *    Sergey Prigogin (Google)
+ * Contributors:
+ *     IBM - Initial API and implementation
+ *     Ed Swartz (Nokia)
+ *     Anton Leherbauer (Wind River Systems)
+ *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.parser.cpp;
 
@@ -27,16 +27,14 @@ import org.eclipse.cdt.core.parser.Keywords;
  * Configures the preprocessor for c++-sources as accepted by g++.
  */
 public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfiguration {
-
-	private static final int VERSION_4_3 = version(4,3);
+	private static final int VERSION_4_3 = version(4, 3);
+	private static final int VERSION_4_6 = version(4, 6);
+	private static final int VERSION_4_7 = version(4, 7);
 	private static GPPScannerExtensionConfiguration CONFIG= new GPPScannerExtensionConfiguration();
 	private static GPPScannerExtensionConfiguration CONFIG_4_3= new GPPScannerExtensionConfiguration(VERSION_4_3);
-
-	private static int version(int major, int minor) {
-		return (major << 16) + minor;
-	}
-
-
+	private static GPPScannerExtensionConfiguration CONFIG_4_6= new GPPScannerExtensionConfiguration(VERSION_4_6);
+	private static GPPScannerExtensionConfiguration CONFIG_4_7= new GPPScannerExtensionConfiguration(VERSION_4_7);
+	
 	public static GPPScannerExtensionConfiguration getInstance() {
 		return CONFIG;
 	}
@@ -51,6 +49,12 @@ public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfigu
 				int major= Integer.valueOf(definedSymbols.get("__GNUC__")); //$NON-NLS-1$
 				int minor= Integer.valueOf(definedSymbols.get("__GNUC_MINOR__")); //$NON-NLS-1$
 				int version= version(major, minor);
+				if (version >= VERSION_4_7) {
+					return CONFIG_4_7;
+				}
+				if (version >= VERSION_4_6) {
+					return CONFIG_4_6;
+				}
 				if (version >= VERSION_4_3) {
 					return CONFIG_4_3;
 				}
@@ -94,13 +98,29 @@ public class GPPScannerExtensionConfiguration extends GNUScannerExtensionConfigu
 			addKeyword(GCCKeywords.cp__is_polymorphic, IGCCToken.tTT_is_polymorphic);
 			addKeyword(GCCKeywords.cp__is_union, IGCCToken.tTT_is_union);
 		}
+		if (version >= VERSION_4_6) {
+			addKeyword(GCCKeywords.cp__is_literal_type, IGCCToken.tTT_is_literal_type);
+			addKeyword(GCCKeywords.cp__is_standard_layout, IGCCToken.tTT_is_standard_layout);
+			addKeyword(GCCKeywords.cp__is_trivial, IGCCToken.tTT_is_trivial);
+		}
+		if (version >= VERSION_4_7) {
+			addKeyword(GCCKeywords.cp__float128, IGCCToken.t__float128);
+			addKeyword(GCCKeywords.cp__int128, IGCCToken.t__int128);
+			addKeyword(GCCKeywords.cp__is_final, IGCCToken.tTT_is_final);
+			addKeyword(GCCKeywords.cp__underlying_type, IGCCToken.tTT_underlying_type);
+		}
 	}
 	
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.internal.core.parser.scanner2.IScannerConfiguration#supportMinAndMaxOperators()
-     */
     @Override
 	public boolean supportMinAndMaxOperators() {
         return true;
+    }
+    
+    /**
+	 * @since 5.5
+	 */
+    @Override
+    public boolean supportRawStringLiterals() {
+    	return true;
     }
 }

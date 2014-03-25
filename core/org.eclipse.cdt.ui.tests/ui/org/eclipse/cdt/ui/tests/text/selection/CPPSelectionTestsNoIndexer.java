@@ -1,13 +1,14 @@
 /*******************************************************************************
- *  Copyright (c) 2004, 2010 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
- *    IBM - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ * Contributors:
+ *     IBM - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.ui.tests.text.selection;
 
@@ -75,7 +76,6 @@ import org.eclipse.cdt.internal.ui.search.actions.OpenDeclarationsAction;
  * @author dsteffle
  */
 public class CPPSelectionTestsNoIndexer extends BaseUITestCase {
-    
     private static final String INDEX_FILE_ID = "2946365241"; //$NON-NLS-1$
 	static NullProgressMonitor      monitor;
     static IWorkspace               workspace;
@@ -1205,4 +1205,34 @@ public class CPPSelectionTestsNoIndexer extends BaseUITestCase {
 	    assertEquals(offsetV, ((ASTNode) decl).getOffset());
 	}
 
+	//	template <typename>
+	//	struct A {
+	//	    struct S {
+	//	        void foo();
+	//	    };
+	//	    void test() {
+	//	        S s;
+	//	        s.foo();
+	//	    }
+	//	};
+	public void testBug399142() throws Exception {
+	    String code = getAboveComment();
+	    IFile file = importFile("testBug399142.cpp", code); //$NON-NLS-1$
+	    
+	    int offset = code.indexOf("s.foo()") + 2; 
+	    IASTNode decl = testF3(file, offset);
+	    assertTrue(decl instanceof IASTName);
+	}
+
+	//	int waldo;
+	//	void foo() {
+	//		extern int waldo;
+	//	}
+	public void testLocallyDeclaredExternVariable_372004() throws Exception {
+		String code = getAboveComment();
+		IFile file = importFile("testWaldo.cpp", code);
+		
+		int offset = code.indexOf("extern int waldo") + 12;
+		assertTrue(testF3(file, offset) instanceof IASTName);
+	}
 }

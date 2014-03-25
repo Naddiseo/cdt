@@ -6,8 +6,8 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    IBM - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     IBM - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.ast2;
 
@@ -73,7 +73,7 @@ import org.eclipse.cdt.internal.core.parser.ParserException;
 /**
  * @author jcamelon
  */
-public class DOMLocationTests extends AST2BaseTest {
+public class DOMLocationTests extends AST2TestBase {
 
     public DOMLocationTests() {
 	}
@@ -178,11 +178,6 @@ public class DOMLocationTests extends AST2BaseTest {
 
     }
 
-    /**
-     * @param declarator
-     * @param offset
-     * @param length
-     */
     private void assertSoleLocation(IASTNode n, int offset, int length) {
     	assertEquals(length, ((ASTNode)n).getLength());
         IASTNodeLocation[] locations = n.getNodeLocations();
@@ -667,13 +662,13 @@ public class DOMLocationTests extends AST2BaseTest {
     
 	public void testTemplateIdNameLocation_Bug211444() throws Exception {
 		IASTTranslationUnit tu = parse( "Foo::template test<T> bar;", ParserLanguage.CPP );
-		CPPNameCollector col = new CPPNameCollector();
+		NameCollector col = new NameCollector();
 		tu.accept( col );
 		
 		ICPPASTQualifiedName qn = (ICPPASTQualifiedName) col.getName(0);
-		IASTName[] ns = qn.getNames();
-		assertTrue(ns[1] instanceof ICPPASTTemplateId);
-		ICPPASTTemplateId templateId= (ICPPASTTemplateId) ns[1];
+		IASTName lastName = qn.getLastName();
+		assertTrue(lastName instanceof ICPPASTTemplateId);
+		ICPPASTTemplateId templateId= (ICPPASTTemplateId) lastName;
 		IASTName templateIdName= templateId.getTemplateName();
 		
 		assertEquals("test", templateIdName.getRawSignature()); //$NON-NLS-1$

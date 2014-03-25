@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2010 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     Andrew Niefer (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -45,7 +46,7 @@ public class CPPArrayType implements IArrayType, ITypeContainer, ISerializableTy
     }
     
     @Override
-	public void setType(IType t) {
+	public final void setType(IType t) {
     	assert t != null;
         this.type = t;
     }
@@ -110,11 +111,11 @@ public class CPPArrayType implements IArrayType, ITypeContainer, ISerializableTy
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer) throws CoreException {
-		final byte firstByte = ITypeMarshalBuffer.ARRAY_TYPE;
+		final short firstBytes = ITypeMarshalBuffer.ARRAY_TYPE;
 
 		IValue val= getSize();
 		if (val == null) {
-			buffer.putByte(firstByte);
+			buffer.putShort(firstBytes);
 			buffer.marshalType(getType());
 			return;
 		} 
@@ -122,23 +123,23 @@ public class CPPArrayType implements IArrayType, ITypeContainer, ISerializableTy
 		Long num= val.numericalValue();
 		if (num != null) {
 			long lnum= num;
-			if (lnum >= 0 && lnum <= Short.MAX_VALUE) {
-				buffer.putByte((byte) (firstByte | ITypeMarshalBuffer.FLAG1));
-				buffer.putShort((short) lnum);
+			if (lnum >= 0) {
+				buffer.putShort((short) (firstBytes | ITypeMarshalBuffer.FLAG1));
+				buffer.putLong(lnum);
 				buffer.marshalType(getType());
 				return;
 			} 
 		}
-		buffer.putByte((byte) (firstByte | ITypeMarshalBuffer.FLAG2));
+		buffer.putShort((short) (firstBytes | ITypeMarshalBuffer.FLAG2));
 		buffer.marshalValue(val);
 		buffer.marshalType(getType());
 	}
 
-	public static IType unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
+	public static IType unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
 		IValue value= null;
-		if ((firstByte & ITypeMarshalBuffer.FLAG1) != 0) {
-			value = Value.create(buffer.getShort());
-		} else if ((firstByte & ITypeMarshalBuffer.FLAG2) != 0) {
+		if ((firstBytes & ITypeMarshalBuffer.FLAG1) != 0) {
+			value = Value.create(buffer.getLong());
+		} else if ((firstBytes & ITypeMarshalBuffer.FLAG2) != 0) {
 			value = buffer.unmarshalValue();
 		}
 		IType nested= buffer.unmarshalType();

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     Andrew Niefer (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -135,40 +136,30 @@ public class CPPFunctionType implements ICPPFunctionType, ISerializableType {
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer) throws CoreException {
-		int firstByte= ITypeMarshalBuffer.FUNCTION_TYPE;
-		if (isConst()) firstByte |= ITypeMarshalBuffer.FLAG1;
-		if (isVolatile()) firstByte |= ITypeMarshalBuffer.FLAG2;
-		if (takesVarArgs()) firstByte |= ITypeMarshalBuffer.FLAG3;
+		short firstBytes= ITypeMarshalBuffer.FUNCTION_TYPE;
+		if (isConst()) firstBytes |= ITypeMarshalBuffer.FLAG1;
+		if (takesVarArgs()) firstBytes |= ITypeMarshalBuffer.FLAG2;
+		if (isVolatile()) firstBytes |= ITypeMarshalBuffer.FLAG3;
 		
-		int len= (parameters.length & 0xffff);
-		if (len > 0xff) {
-			firstByte |= ITypeMarshalBuffer.FLAG4;
-			buffer.putByte((byte) firstByte);
-			buffer.putShort((short) len);
-		} else {
-			buffer.putByte((byte) firstByte);
-			buffer.putByte((byte) len);
-		}
+		buffer.putShort(firstBytes);
+		buffer.putInt(parameters.length);
 		
 		buffer.marshalType(returnType);
-		for (int i = 0; i < len; i++) {
+		for (int i = 0; i < parameters.length; i++) {
 			buffer.marshalType(parameters[i]);
 		}
 	}
 	
-	public static IType unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
-		int len;
-		if (((firstByte & ITypeMarshalBuffer.FLAG4) != 0)) {
-			len= buffer.getShort();
-		} else {
-			len= buffer.getByte();
-		}
+	public static IType unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
+		int len= buffer.getInt();
 		IType rt= buffer.unmarshalType();
 		IType[] pars= new IType[len];
 		for (int i = 0; i < pars.length; i++) {
 			pars[i]= buffer.unmarshalType();
 		}
-		return new CPPFunctionType(rt, pars, (firstByte & ITypeMarshalBuffer.FLAG1) != 0,
-				(firstByte & ITypeMarshalBuffer.FLAG2) != 0, (firstByte & ITypeMarshalBuffer.FLAG3) != 0);
+		return new CPPFunctionType(rt, pars, 
+				(firstBytes & ITypeMarshalBuffer.FLAG1) != 0,   // const
+				(firstBytes & ITypeMarshalBuffer.FLAG3) != 0,   // volatile
+				(firstBytes & ITypeMarshalBuffer.FLAG2) != 0);  // takes varargs
 	}
 }

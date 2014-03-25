@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2010 Intel Corporation and others.
+ * Copyright (c) 2007, 2013 Intel Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -20,6 +20,8 @@ import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.cdtvariables.ICdtVariablesContributor;
 import org.eclipse.cdt.core.language.settings.providers.ILanguageSettingsProvider;
 import org.eclipse.cdt.core.language.settings.providers.ILanguageSettingsProvidersKeeper;
+import org.eclipse.cdt.core.language.settings.providers.LanguageSettingsManager;
+import org.eclipse.cdt.core.language.settings.providers.ScannerDiscoveryLegacySupport;
 import org.eclipse.cdt.core.settings.model.CConfigurationStatus;
 import org.eclipse.cdt.core.settings.model.CProjectDescriptionEvent;
 import org.eclipse.cdt.core.settings.model.ICBuildSetting;
@@ -39,6 +41,7 @@ import org.eclipse.cdt.core.settings.model.ICTargetPlatformSetting;
 import org.eclipse.cdt.core.settings.model.WriteAccessException;
 import org.eclipse.cdt.core.settings.model.extension.CBuildData;
 import org.eclipse.cdt.core.settings.model.extension.CConfigurationData;
+import org.eclipse.cdt.core.settings.model.extension.CConfigurationDataProvider;
 import org.eclipse.cdt.core.settings.model.extension.CDataObject;
 import org.eclipse.cdt.core.settings.model.extension.CFileData;
 import org.eclipse.cdt.core.settings.model.extension.CFolderData;
@@ -51,6 +54,7 @@ import org.eclipse.cdt.internal.core.settings.model.xml.InternalXmlStorageElemen
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.QualifiedName;
 
 /**
@@ -120,8 +124,8 @@ public class CConfigurationDescription extends CDataProxyContainer
 		setData(CProjectDescriptionManager.getInstance().createData(this, base, baseData, false, null));
 	}
 
-	/*
-	 * conveter cnfig constructor
+	/**
+	 * Converter config constructor.
 	 */
 	CConfigurationDescription(String id, String name, ICStorageElement el, CProjectDescription projectDes) throws CoreException {
 		super(null, projectDes, null);
@@ -139,8 +143,8 @@ public class CConfigurationDescription extends CDataProxyContainer
 		fCfgSpecSettings.reconcileExtensionSettings(false);
 	}
 
-	/*
-	 * preference config constructor
+	/**
+	 * Preference config constructor.
 	 */
 	CConfigurationDescription(String id, String name, String bsId, ICStorageElement el, ICDataProxyContainer cr) throws CoreException {
 		super(null, cr, null);
@@ -152,11 +156,22 @@ public class CConfigurationDescription extends CDataProxyContainer
 		fCfgSpecSettings.setId(id);
 		fCfgSpecSettings.setName(name);
 		fCfgSpecSettings.setBuildSystemId(bsId);
-		setData(CProjectDescriptionManager.getInstance().loadData(this, null));
+
+		CConfigurationDataProvider dataProvider = CProjectDescriptionManager.getInstance().getProvider(this);
+		CConfigurationData data = dataProvider.loadConfiguration(this, new NullProgressMonitor());
+		setData(data);
+
+		if (!fCfgSpecSettings.isLanguageSettingProvidersLoaded()) {
+			// default ids would come from the preference configuration, ensure sensible defaults
+			String[] defaultIds = ScannerDiscoveryLegacySupport.getDefaultProviderIdsLegacy(this);
+			List<ILanguageSettingsProvider> providers = LanguageSettingsManager.createLanguageSettingsProviders(defaultIds);
+			setDefaultLanguageSettingsProvidersIds(defaultIds);
+			setLanguageSettingProviders(providers);
+		}
 	}
 
-	void doWritable() throws CoreException{
-		if(!containsWritableData()){
+	void doWritable() throws CoreException {
+		if (!containsWritableData()) {
 			CConfigurationData data = getConfigurationData(false);
 			CConfigurationDescriptionCache cache = (CConfigurationDescriptionCache)data;
 			data = cache.getConfigurationData();
@@ -830,7 +845,7 @@ public class CConfigurationDescription extends CDataProxyContainer
 	}
 
 	@Override
-	public void setLanguageSettingProviders(List<ILanguageSettingsProvider> providers) {
+	public void setLanguageSettingProviders(List<? extends ILanguageSettingsProvider> providers) {
 		try {
 			getSpecSettings().setLanguageSettingProviders(providers);
 		} catch (CoreException e) {

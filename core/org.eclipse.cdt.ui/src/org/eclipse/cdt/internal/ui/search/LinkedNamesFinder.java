@@ -99,7 +99,7 @@ public class LinkedNamesFinder {
 				}
 			} else if (target instanceof ICPPMethod) {
 	        	ICPPMethod method= (ICPPMethod) target;
-        		for (ICPPMethod m : ClassTypeHelper.findOverridden(method)) {
+        		for (ICPPMethod m : ClassTypeHelper.findOverridden(method, root)) {
 					findBinding(m);
 				}
         		try {
@@ -314,7 +314,7 @@ public class LinkedNamesFinder {
 			if (binding instanceof ICPPClassType) {
 				if (seenClasses.add(binding)) {
 					ICPPClassType candidate = (ICPPClassType) binding;
-					if (ClassTypeHelper.isSubclass(candidate, baseClass)) {
+					if (ClassTypeHelper.isSubclass(candidate, baseClass, name)) {
 						subclasses.add(candidate);
 					}
 				}

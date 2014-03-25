@@ -6,8 +6,8 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    IBM - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     IBM - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.ast2;
 
@@ -44,7 +44,7 @@ import org.eclipse.core.runtime.content.IContentType;
 /**
  * @author jcamelon
  */
-public class DOMLocationInclusionTests extends AST2FileBasePluginTest {
+public class DOMLocationInclusionTests extends AST2FileBasePluginTestCase {
 
     public DOMLocationInclusionTests() {
 	}
@@ -112,13 +112,12 @@ public class DOMLocationInclusionTests extends AST2FileBasePluginTest {
         }
     }
 
-    public class ParserConfiguration implements IParserConfiguration {
-
+    private class TestParserConfiguration implements IParserConfiguration {
         private final IScannerInfo info;
 
         private final String dialect;
 
-        public ParserConfiguration(IScannerInfo s, IFile code) {
+        public TestParserConfiguration(IScannerInfo s, IFile code) {
             this.info = s;
             String filename = code.getLocation().toOSString();
             IProject prj = code.getProject();
@@ -151,15 +150,10 @@ public class DOMLocationInclusionTests extends AST2FileBasePluginTest {
 		public String getParserDialect() {
             return dialect;
         }
-
     }
 
     private static final String[] EMPTY_STRING_ARRAY = new String[0];
 
-    /**
-     * @param name
-     * @param className
-     */
     public DOMLocationInclusionTests(String name) {
         super(name, DOMLocationInclusionTests.class);
     }
@@ -175,16 +169,9 @@ public class DOMLocationInclusionTests extends AST2FileBasePluginTest {
         return CDOM.getInstance().getTranslationUnit(
                 code,
                 CDOM.getInstance().getCodeReaderFactory(CDOM.PARSE_SAVED_RESOURCES),
-                new ParserConfiguration(s, code));
+                new TestParserConfiguration(s, code));
     }
 
-    /**
-     * @param pathEndsWith
-     *            TODO
-     * @param offset
-     * @param length
-     * @param declarator
-     */
     protected void assertSoleFileLocation(IASTNode n, String pathEndsWith, int offset, int length) {
         IASTNodeLocation[] locations = n.getNodeLocations();
         assertEquals(locations.length, 1);

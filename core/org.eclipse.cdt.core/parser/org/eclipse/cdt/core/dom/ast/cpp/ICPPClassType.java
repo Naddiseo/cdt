@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2010 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,7 +7,8 @@
  *
  * Contributors:
  *     Doug Schaefer (IBM) - Initial API and implementation
- *******************************************************************************/
+ *     Thomas Corbat (IFS)
+ ******************************************************************************/
 package org.eclipse.cdt.core.dom.ast.cpp;
 
 import org.eclipse.cdt.core.dom.ast.IBinding;
@@ -23,12 +24,22 @@ import org.eclipse.cdt.core.dom.ast.IField;
 public interface ICPPClassType extends ICompositeType, ICPPBinding {
 	public static final ICPPClassType[] EMPTY_CLASS_ARRAY = {};
 	public static final int k_class = ICPPASTCompositeTypeSpecifier.k_class;
+	/**
+	 * @since 5.5
+	 */
+	public static final int v_public = ICPPASTVisibilityLabel.v_public;
+	/**
+	 * @since 5.5
+	 */
+	public static final int v_protected = ICPPASTVisibilityLabel.v_protected;
+	/**
+	 * @since 5.5
+	 */
+	public static final int v_private = ICPPASTVisibilityLabel.v_private;
 
 	/**
-	 * Returns a list of base class relationships. The list is empty if there
+	 * Returns an array of base class relationships. The returned array is empty if there
 	 * are none.
-	 * 
-	 * @return List of ICPPBase
 	 */
 	public ICPPBase[] getBases();
 
@@ -50,35 +61,32 @@ public interface ICPPClassType extends ICompositeType, ICPPBinding {
 	public IField findField(String name);
 
 	/**
-	 * Returns a list of ICPPField objects representing fields declared in this
-	 * class. It does not include fields inherited from base classes.
+	 * Returns a list of ICPPField objects representing fields declared in this class. It does not
+	 * include fields inherited from base classes.
 	 * 
 	 * @return List of ICPPField
 	 */
 	public ICPPField[] getDeclaredFields();
 
 	/**
-	 * Returns a list of ICPPMethod objects representing all methods defined for
-	 * this class including those declared, inherited, or generated (e.g.
-	 * default constructors and the like).
+	 * Returns a list of ICPPMethod objects representing all methods defined for this class
+	 * including those declared, inherited, or generated (e.g. default constructors and the like).
 	 * 
 	 * @return List of ICPPMethod
 	 */
 	public ICPPMethod[] getMethods();
 
 	/**
-	 * Returns a list of ICPPMethod objects representing all method explicitly
-	 * declared by this class and inherited from base classes. It does not
-	 * include automatically generated methods.
+	 * Returns a list of ICPPMethod objects representing all method explicitly declared by this
+	 * class and inherited from base classes. It does not include automatically generated methods.
 	 * 
 	 * @return List of ICPPMethod
 	 */
 	public ICPPMethod[] getAllDeclaredMethods();
 
 	/**
-	 * Returns a list of ICPPMethod objects representing all methods explicitly
-	 * declared by this class. It does not include inherited methods or
-	 * automatically generated methods.
+	 * Returns a list of ICPPMethod objects representing all methods explicitly declared by this
+	 * class. It does not include inherited methods or automatically generated methods.
 	 * 
 	 * @return List of ICPPMethod
 	 */
@@ -86,20 +94,37 @@ public interface ICPPClassType extends ICompositeType, ICPPBinding {
 
 	/**
 	 * Returns an array of ICPPConstructor objects representing the constructors
-	 * for this class. This list includes both declared and implicit
-	 * constructors.
-	 * 
+	 * for this class. This list includes both declared and implicit constructors.
 	 */
 	public ICPPConstructor[] getConstructors();
 
 	/**
-	 * return an array of bindings for those classes/functions declared as
-	 * friends of this class.
+	 * Returns an array of bindings for those classes/functions declared as friends of this class.
 	 */
 	public IBinding[] getFriends();
 	
 	/**
-	 * return an array of nested classes/structures
+	 * Returns an array of nested classes/structures
 	 */
 	public ICPPClassType[] getNestedClasses();
+
+	/**
+	 * Returns whether this type is declared final.
+	 * 
+	 * @since 5.5
+	 */
+	public boolean isFinal();
+
+	/**
+	 * Gets the access specifier of the {@code member}.
+	 *
+	 * @param member The binding of the member to get the visibility for.
+	 * {@code member} must be a member of this class.
+	 *
+	 * @return the visibility of the specified member.
+	 * @throws IllegalArgumentException if {@code member} is not a member of this class.
+	 *
+	 * @since 5.5
+	 */
+	public int getVisibility(IBinding member);
 }

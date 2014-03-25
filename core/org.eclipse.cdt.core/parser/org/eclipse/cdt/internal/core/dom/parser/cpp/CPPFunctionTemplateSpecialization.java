@@ -6,15 +6,14 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Andrew Niefer (IBM) - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     Andrew Niefer (IBM) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
 import org.eclipse.cdt.core.dom.ast.ASTTypeUtil;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunctionTemplate;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunctionType;
@@ -29,10 +28,10 @@ import org.eclipse.cdt.core.parser.util.ObjectMap;
  */
 public class CPPFunctionTemplateSpecialization extends CPPFunctionSpecialization
 		implements ICPPFunctionTemplate, ICPPInternalTemplate {
-
-	private ObjectMap instances = null;
+	private ObjectMap instances;
 	
-	public CPPFunctionTemplateSpecialization(ICPPFunction original, ICPPClassType owner, ICPPTemplateParameterMap argumentMap, ICPPFunctionType type, IType[] exceptionSpecs) {
+	public CPPFunctionTemplateSpecialization(ICPPFunction original, IBinding owner,
+			ICPPTemplateParameterMap argumentMap, ICPPFunctionType type, IType[] exceptionSpecs) {
 		super(original, owner, argumentMap, type, exceptionSpecs);
 	}
 
@@ -63,7 +62,7 @@ public class CPPFunctionTemplateSpecialization extends CPPFunctionSpecialization
 	public synchronized ICPPTemplateInstance[] getAllInstances() {
 		if (instances != null) {
 			ICPPTemplateInstance[] result= new ICPPTemplateInstance[instances.size()];
-			for (int i=0; i < instances.size(); i++) {
+			for (int i= 0; i < instances.size(); i++) {
 				result[i]= (ICPPTemplateInstance) instances.getAt(i);
 			}
 			return result;

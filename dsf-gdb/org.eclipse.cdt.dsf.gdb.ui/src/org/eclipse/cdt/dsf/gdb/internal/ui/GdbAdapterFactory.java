@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2010 Wind River Systems and others.
+ * Copyright (c) 2006, 2013 Wind River Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
  *     Wind River Systems - initial API and implementation
  *     Navid Mehregani (TI) - Bug 289526 - Migrate the Restart feature to the new one, as supported by the platform
  *     Patrick Chuong (Texas Instruments) - Add support for icon overlay in the debug view (Bug 334566)
+ *     Alvaro Sanchez-Leon (Ericsson AB) - Support for Step into selection (bug 244865)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.internal.ui;
 
@@ -18,6 +19,8 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 import org.eclipse.cdt.debug.core.model.ICBreakpoint;
+import org.eclipse.cdt.debug.core.model.IConnectHandler;
+import org.eclipse.cdt.debug.core.model.IDebugNewExecutableHandler;
 import org.eclipse.cdt.debug.core.model.IResumeWithoutSignalHandler;
 import org.eclipse.cdt.debug.core.model.IReverseResumeHandler;
 import org.eclipse.cdt.debug.core.model.IReverseStepIntoHandler;
@@ -25,6 +28,7 @@ import org.eclipse.cdt.debug.core.model.IReverseStepOverHandler;
 import org.eclipse.cdt.debug.core.model.IReverseToggleHandler;
 import org.eclipse.cdt.debug.core.model.ISaveTraceDataHandler;
 import org.eclipse.cdt.debug.core.model.IStartTracingHandler;
+import org.eclipse.cdt.debug.core.model.IStepIntoSelectionHandler;
 import org.eclipse.cdt.debug.core.model.ISteppingModeTarget;
 import org.eclipse.cdt.debug.core.model.IStopTracingHandler;
 import org.eclipse.cdt.debug.core.model.IUncallHandler;
@@ -33,22 +37,24 @@ import org.eclipse.cdt.dsf.concurrent.Immutable;
 import org.eclipse.cdt.dsf.concurrent.ThreadSafe;
 import org.eclipse.cdt.dsf.debug.ui.actions.DsfResumeCommand;
 import org.eclipse.cdt.dsf.debug.ui.actions.DsfStepIntoCommand;
+import org.eclipse.cdt.dsf.debug.ui.actions.DsfStepIntoSelectionCommand;
 import org.eclipse.cdt.dsf.debug.ui.actions.DsfStepOverCommand;
 import org.eclipse.cdt.dsf.debug.ui.actions.DsfStepReturnCommand;
 import org.eclipse.cdt.dsf.debug.ui.actions.DsfSuspendCommand;
+import org.eclipse.cdt.dsf.debug.ui.actions.IDsfStepIntoSelection;
 import org.eclipse.cdt.dsf.debug.ui.sourcelookup.DsfSourceDisplayAdapter;
 import org.eclipse.cdt.dsf.debug.ui.viewmodel.SteppingController;
 import org.eclipse.cdt.dsf.debug.ui.viewmodel.actions.DefaultRefreshAllTarget;
 import org.eclipse.cdt.dsf.debug.ui.viewmodel.actions.IRefreshAllTarget;
 import org.eclipse.cdt.dsf.debug.ui.viewmodel.launch.DefaultDsfModelSelectionPolicyFactory;
-import org.eclipse.cdt.dsf.gdb.actions.IConnect;
 import org.eclipse.cdt.dsf.gdb.internal.commands.ISelectNextTraceRecordHandler;
 import org.eclipse.cdt.dsf.gdb.internal.commands.ISelectPrevTraceRecordHandler;
 import org.eclipse.cdt.dsf.gdb.internal.ui.actions.DsfTerminateCommand;
-import org.eclipse.cdt.dsf.gdb.internal.ui.actions.GdbConnectCommand;
 import org.eclipse.cdt.dsf.gdb.internal.ui.actions.GdbDisconnectCommand;
 import org.eclipse.cdt.dsf.gdb.internal.ui.actions.GdbRestartCommand;
 import org.eclipse.cdt.dsf.gdb.internal.ui.actions.GdbSteppingModeTarget;
+import org.eclipse.cdt.dsf.gdb.internal.ui.commands.GdbConnectCommand;
+import org.eclipse.cdt.dsf.gdb.internal.ui.commands.GdbDebugNewExecutableCommand;
 import org.eclipse.cdt.dsf.gdb.internal.ui.commands.GdbResumeWithoutSignalCommand;
 import org.eclipse.cdt.dsf.gdb.internal.ui.commands.GdbReverseResumeCommand;
 import org.eclipse.cdt.dsf.gdb.internal.ui.commands.GdbReverseStepIntoCommand;
@@ -103,6 +109,7 @@ public class GdbAdapterFactory
         final GdbViewModelAdapter fViewModelAdapter;
         final DsfSourceDisplayAdapter fSourceDisplayAdapter;
         final DsfStepIntoCommand fStepIntoCommand;
+        final DsfStepIntoSelectionCommand fStepIntoSelectionCommand;
         final GdbReverseStepIntoCommand fReverseStepIntoCommand;
         final DsfStepOverCommand fStepOverCommand;
         final GdbReverseStepOverCommand fReverseStepOverCommand;
@@ -114,6 +121,7 @@ public class GdbAdapterFactory
         final GdbResumeWithoutSignalCommand fResumeWithoutSignalCommand;
         final GdbRestartCommand fRestartCommand;
         final DsfTerminateCommand fTerminateCommand;
+        final GdbDebugNewExecutableCommand fDebugNewExecutableCommand;
         final GdbConnectCommand fConnectCommand;
         final GdbDisconnectCommand fDisconnectCommand;
         final IDebugModelProvider fDebugModelProvider;
@@ -151,6 +159,7 @@ public class GdbAdapterFactory
             
             fSteppingModeTarget = new GdbSteppingModeTarget(session);
             fStepIntoCommand = new DsfStepIntoCommand(session, fSteppingModeTarget);
+            fStepIntoSelectionCommand = new DsfStepIntoSelectionCommand(session);
             fReverseStepIntoCommand = new GdbReverseStepIntoCommand(session, fSteppingModeTarget);
             fStepOverCommand = new DsfStepOverCommand(session, fSteppingModeTarget);
             fReverseStepOverCommand = new GdbReverseStepOverCommand(session, fSteppingModeTarget);
@@ -162,7 +171,8 @@ public class GdbAdapterFactory
             fResumeWithoutSignalCommand = new GdbResumeWithoutSignalCommand(session);
             fRestartCommand = new GdbRestartCommand(session, fLaunch);
             fTerminateCommand = new DsfTerminateCommand(session);
-            fConnectCommand = new GdbConnectCommand(session);
+            fDebugNewExecutableCommand = new GdbDebugNewExecutableCommand(session, fLaunch);
+            fConnectCommand = new GdbConnectCommand(session, fLaunch);
             fDisconnectCommand = new GdbDisconnectCommand(session);
             fSuspendTrigger = new GdbSuspendTrigger(session, fLaunch);
             fModelSelectionPolicyFactory = new DefaultDsfModelSelectionPolicyFactory();
@@ -177,6 +187,7 @@ public class GdbAdapterFactory
 
             session.registerModelAdapter(ISteppingModeTarget.class, fSteppingModeTarget);
             session.registerModelAdapter(IStepIntoHandler.class, fStepIntoCommand);
+            session.registerModelAdapter(IStepIntoSelectionHandler.class, fStepIntoSelectionCommand);
             session.registerModelAdapter(IReverseStepIntoHandler.class, fReverseStepIntoCommand);
             session.registerModelAdapter(IStepOverHandler.class, fStepOverCommand);
             session.registerModelAdapter(IReverseStepOverHandler.class, fReverseStepOverCommand);
@@ -188,7 +199,8 @@ public class GdbAdapterFactory
             session.registerModelAdapter(IResumeWithoutSignalHandler.class, fResumeWithoutSignalCommand);
             session.registerModelAdapter(IRestartHandler.class, fRestartCommand);
             session.registerModelAdapter(ITerminateHandler.class, fTerminateCommand);
-            session.registerModelAdapter(IConnect.class, fConnectCommand);
+            session.registerModelAdapter(IConnectHandler.class, fConnectCommand);
+            session.registerModelAdapter(IDebugNewExecutableHandler.class, fDebugNewExecutableCommand);
             session.registerModelAdapter(IDisconnectHandler.class, fDisconnectCommand);
             session.registerModelAdapter(IModelSelectionPolicyFactory.class, fModelSelectionPolicyFactory);
             session.registerModelAdapter(IRefreshAllTarget.class, fRefreshAllTarget);
@@ -199,12 +211,13 @@ public class GdbAdapterFactory
             session.registerModelAdapter(ISelectNextTraceRecordHandler.class, fSelectNextRecordTarget);
             session.registerModelAdapter(ISelectPrevTraceRecordHandler.class, fSelectPrevRecordTarget);
             session.registerModelAdapter(IPinProvider.class, fPinProvider);
+            session.registerModelAdapter(IDsfStepIntoSelection.class, fStepIntoSelectionCommand);
 
             fDebugModelProvider = new IDebugModelProvider() {
                 // @see org.eclipse.debug.core.model.IDebugModelProvider#getModelIdentifiers()
                 @Override
                 public String[] getModelIdentifiers() {
-                    return new String[] { GdbLaunchDelegate.GDB_DEBUG_MODEL_ID, ICBreakpoint.C_BREAKPOINTS_DEBUG_MODEL_ID };
+                    return new String[] { GdbLaunchDelegate.GDB_DEBUG_MODEL_ID, ICBreakpoint.C_BREAKPOINTS_DEBUG_MODEL_ID, "org.eclipse.cdt.gdb" }; //$NON-NLS-1$
                 }
             };
             session.registerModelAdapter(IDebugModelProvider.class, fDebugModelProvider);
@@ -237,6 +250,7 @@ public class GdbAdapterFactory
 
             session.unregisterModelAdapter(ISteppingModeTarget.class);
             session.unregisterModelAdapter(IStepIntoHandler.class);
+            session.unregisterModelAdapter(IStepIntoSelectionHandler.class);
             session.unregisterModelAdapter(IReverseStepIntoHandler.class);
             session.unregisterModelAdapter(IStepOverHandler.class);
             session.unregisterModelAdapter(IReverseStepOverHandler.class);
@@ -248,7 +262,8 @@ public class GdbAdapterFactory
             session.unregisterModelAdapter(IResumeWithoutSignalHandler.class);
             session.unregisterModelAdapter(IRestartHandler.class);
             session.unregisterModelAdapter(ITerminateHandler.class);
-            session.unregisterModelAdapter(IConnect.class);
+            session.unregisterModelAdapter(IConnectHandler.class);
+            session.unregisterModelAdapter(IDebugNewExecutableHandler.class);
             session.unregisterModelAdapter(IDisconnectHandler.class);
             session.unregisterModelAdapter(IModelSelectionPolicyFactory.class);
             session.unregisterModelAdapter(IRefreshAllTarget.class);
@@ -267,6 +282,7 @@ public class GdbAdapterFactory
 
             fSteppingModeTarget.dispose();
             fStepIntoCommand.dispose();
+            fStepIntoSelectionCommand.dispose();
             fReverseStepIntoCommand.dispose();
             fStepOverCommand.dispose();
             fReverseStepOverCommand.dispose();
@@ -279,6 +295,7 @@ public class GdbAdapterFactory
             fRestartCommand.dispose();
             fTerminateCommand.dispose();
             fConnectCommand.dispose();
+            fDebugNewExecutableCommand.dispose();
             fDisconnectCommand.dispose();
             fSuspendTrigger.dispose();
             fReverseToggleTarget.dispose();

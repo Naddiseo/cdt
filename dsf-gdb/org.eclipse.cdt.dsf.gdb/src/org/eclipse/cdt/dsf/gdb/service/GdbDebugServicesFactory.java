@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2012 Ericsson and others.
+ * Copyright (c) 2008, 2013 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,9 @@
  *     Onur Akdemir (TUBITAK BILGEM-ITI) - Multi-process debugging (Bug 237306)
  *     Marc Khouzam (Ericsson) - Support for GDB 7.4 (Bug 367788)
  *     Marc Khouzam (Ericsson) - Include IGDBHardware service for the multicore visualizer (Bug 335027)
+ *     Vladimir Prus (Mentor Graphics) - Support for OS resources.
+ *     Marc Khouzam (Ericsson) - Support for GDB 7.6 memory service
+ *     Marc Khouzam (Ericsson) - Support for GDB 7.4 trace control service
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.service;
 
@@ -34,11 +37,12 @@ import org.eclipse.cdt.dsf.gdb.service.command.GDBControl_7_2;
 import org.eclipse.cdt.dsf.gdb.service.command.GDBControl_7_4;
 import org.eclipse.cdt.dsf.mi.service.CSourceLookup;
 import org.eclipse.cdt.dsf.mi.service.IMIBackend;
+import org.eclipse.cdt.dsf.mi.service.IMIExpressions;
 import org.eclipse.cdt.dsf.mi.service.MIBreakpoints;
 import org.eclipse.cdt.dsf.mi.service.MIBreakpointsManager;
+import org.eclipse.cdt.dsf.mi.service.MIBreakpointsSynchronizer;
 import org.eclipse.cdt.dsf.mi.service.MIDisassembly;
 import org.eclipse.cdt.dsf.mi.service.MIExpressions;
-import org.eclipse.cdt.dsf.mi.service.MIMemory;
 import org.eclipse.cdt.dsf.mi.service.MIModules;
 import org.eclipse.cdt.dsf.mi.service.MIRegisters;
 import org.eclipse.cdt.dsf.mi.service.MIStack;
@@ -62,6 +66,10 @@ public class GdbDebugServicesFactory extends AbstractDsfDebugServicesFactory {
 	public static final String GDB_7_3_VERSION = "7.3"; //$NON-NLS-1$
 	/** @since 4.1 */
 	public static final String GDB_7_4_VERSION = "7.4"; //$NON-NLS-1$
+	/** @since 4.2*/
+	public static final String GDB_7_5_VERSION = "7.5"; //$NON-NLS-1$
+	/** @since 4.2*/
+	public static final String GDB_7_6_VERSION = "7.5.50"; //$NON-NLS-1$
 
 	private final String fVersion;
 	
@@ -103,6 +111,9 @@ public class GdbDebugServicesFactory extends AbstractDsfDebugServicesFactory {
 				}
 			}
 		}
+		else if (MIBreakpointsSynchronizer.class.isAssignableFrom(clazz)) {
+			return (V)createBreakpointsSynchronizerService(session);
+		} 
 
         return super.createService(clazz, session);
 	}
@@ -113,6 +124,12 @@ public class GdbDebugServicesFactory extends AbstractDsfDebugServicesFactory {
 
 	@Override
 	protected IBreakpoints createBreakpointService(DsfSession session) {
+		if (GDB_7_6_VERSION.compareTo(fVersion) <= 0) {
+			return new GDBBreakpoints_7_6(session);
+		}
+		if (GDB_7_4_VERSION.compareTo(fVersion) <= 0) {
+			return new GDBBreakpoints_7_4(session);
+		}
 		// This service is available for GDB 7.2 but there is a pre-release of GDB that
 		// supports the same features and has version of 6.8.50.20090414
 		if (GDB_7_2_VERSION.compareTo(fVersion) <= 0 || "6.8.50.20090414".equals(fVersion)) { //$NON-NLS-1$
@@ -155,17 +172,21 @@ public class GdbDebugServicesFactory extends AbstractDsfDebugServicesFactory {
 		// Pass in the original service which will be used as a delegate.
 		// This way of doing things allows to keep the pattern matching aspect isolated
 		// and easy to remove.
-		IExpressions originialExpressionService = new MIExpressions(session);
+		IMIExpressions originialExpressionService = new MIExpressions(session);
 		return new GDBPatternMatchingExpressions(session, originialExpressionService);
 	}
 
 	@Override
 	protected IMemory createMemoryService(DsfSession session) {
+		if (GDB_7_6_VERSION.compareTo(fVersion) <= 0) {
+			return new GDBMemory_7_6(session);
+		}
+
 		if (GDB_7_0_VERSION.compareTo(fVersion) <= 0) {
 			return new GDBMemory_7_0(session);
 		}
 
-		return new MIMemory(session);
+		return new GDBMemory(session);
 	}
 
 	@Override
@@ -197,6 +218,9 @@ public class GdbDebugServicesFactory extends AbstractDsfDebugServicesFactory {
 
 	@Override
 	protected IRunControl createRunControlService(DsfSession session) {
+		if (GDB_7_6_VERSION.compareTo(fVersion) <= 0) {
+			return new GDBRunControl_7_6(session);
+		}
 		if (GDB_7_0_VERSION.compareTo(fVersion) <= 0) {
 			return new GDBRunControl_7_0(session);
 		}
@@ -215,6 +239,9 @@ public class GdbDebugServicesFactory extends AbstractDsfDebugServicesFactory {
 	
 	/** @since 3.0 */
 	protected IGDBTraceControl createTraceControlService(DsfSession session, ILaunchConfiguration config) {
+		if (GDB_7_4_VERSION.compareTo(fVersion) <= 0) {
+			return new GDBTraceControl_7_4(session, config);
+		}
 		// This service is available for GDB 7.2 but there is a pre-release of GDB that
 		// supports the same features and has version of 6.8.50.20090414
 		if (GDB_7_2_VERSION.compareTo(fVersion) <= 0 || "6.8.50.20090414".equals(fVersion)) { //$NON-NLS-1$
@@ -229,6 +256,16 @@ public class GdbDebugServicesFactory extends AbstractDsfDebugServicesFactory {
 	
 	/** @since 4.1 */
 	protected IGDBHardwareAndOS createHardwareAndOSService(DsfSession session, ILaunchConfiguration config) {
+		if (GDB_7_5_VERSION.compareTo(fVersion) <= 0) {
+			return new GDBHardwareAndOS_7_5(session);
+		}
 		return new GDBHardwareAndOS(session);
+	}
+	
+	/**
+	 * @since 4.2
+	 */
+	protected MIBreakpointsSynchronizer createBreakpointsSynchronizerService(DsfSession session) {
+		return new MIBreakpointsSynchronizer(session);
 	}
 }

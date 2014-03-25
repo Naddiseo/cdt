@@ -1,11 +1,11 @@
 /*******************************************************************************
- *  Copyright (c) 2004, 2010 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2004, 2010 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
+ * Contributors:
  *     Andrew Niefer (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
@@ -92,16 +92,16 @@ public class CPPQualifierType implements IQualifierType, ITypeContainer, ISerial
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer) throws CoreException {
-		int firstByte= ITypeMarshalBuffer.CVQUALIFIER_TYPE;
-		if (isConst()) firstByte |= ITypeMarshalBuffer.FLAG1;
-		if (isVolatile()) firstByte |= ITypeMarshalBuffer.FLAG2;
-		buffer.putByte((byte) firstByte);
+		short firstBytes= ITypeMarshalBuffer.CVQUALIFIER_TYPE;
+		if (isConst()) firstBytes |= ITypeMarshalBuffer.FLAG1;
+		if (isVolatile()) firstBytes |= ITypeMarshalBuffer.FLAG2;
+		buffer.putShort(firstBytes);
 		buffer.marshalType(getType());
 	}
 	
-	public static IType unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
+	public static IType unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
 		IType nested= buffer.unmarshalType();
-		return new CPPQualifierType(nested, (firstByte & ITypeMarshalBuffer.FLAG1) != 0,
-				(firstByte & ITypeMarshalBuffer.FLAG2) != 0);
+		return new CPPQualifierType(nested, (firstBytes & ITypeMarshalBuffer.FLAG1) != 0,
+				(firstBytes & ITypeMarshalBuffer.FLAG2) != 0);
 	}
 }

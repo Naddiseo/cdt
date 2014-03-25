@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2010 Symbian Software Systems and others.
+ * Copyright (c) 2006, 2013 Symbian Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,6 +10,7 @@
  *     IBM Corporation
  *     Markus Schorn (Wind River Systems)
  *     Sergey Prigogin (Google)
+ *     Nathan Ridge
  *******************************************************************************/
 package org.eclipse.cdt.internal.index.tests;
 
@@ -20,6 +21,7 @@ import java.util.List;
 import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.IPDOMManager;
 import org.eclipse.cdt.core.dom.ast.ASTTypeUtil;
+import org.eclipse.cdt.core.dom.ast.ASTVisitor;
 import org.eclipse.cdt.core.dom.ast.DOMException;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNodeSelector;
@@ -49,7 +51,6 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IResource;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.Path;
 import org.osgi.framework.Bundle;
@@ -59,48 +60,61 @@ import org.osgi.framework.Bundle;
  * is backed by the PDOM), it must be possible to resolve which binding a name
  * in the AST is referring to. If the binding is not defined in the AST fragment
  * then it is assumed to have come from a file which is already indexed.
- * 
+ *
  * This class is for testing the process by which bindings are looked up in
  * the PDOM purely from AST information (i.e. without a real binding from the DOM)
  */
 public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 	private static final boolean DEBUG= false;
 	protected ITestStrategy strategy;
-	
+
 	public void setStrategy(ITestStrategy strategy) {
 		this.strategy = strategy;
 	}
-	
+
 	@Override
 	protected void setUp() throws Exception {
 		super.setUp();
 		strategy.setUp();
 	}
-	
+
 	@Override
 	protected void tearDown() throws Exception {
 		strategy.tearDown();
 		super.tearDown();
 	}
-	
-	protected IASTName findName(String section, int len) {
-		if (len == 0)
-			len= section.length();
+
+	protected IASTName findName(String section, int len, boolean preferImplicitName) {
+		if (len <= 0)
+			len += section.length();
+
 		for (int i = 0; i < strategy.getAstCount(); i++) {
 			IASTTranslationUnit ast = strategy.getAst(i);
 			final IASTNodeSelector nodeSelector = ast.getNodeSelector(null);
 			final int offset = strategy.getAstSource(i).indexOf(section);
 			if (offset >= 0) {
-				IASTName name= nodeSelector.findName(offset, len);
-				if (name == null)
-					name= nodeSelector.findImplicitName(offset, len);
-				return name;
+				if (preferImplicitName) {
+					return nodeSelector.findImplicitName(offset, len);
+				} else {
+					IASTName name= nodeSelector.findName(offset, len);
+					if (name == null)
+						name= nodeSelector.findImplicitName(offset, len);
+					return name;
+				}
 			}
 		}
-		
+
 		return null;
 	}
 	
+	protected IASTName findName(String section, int len) {
+		return findName(section, len, false);
+	}
+	
+	protected IASTName findImplicitName(String section, int len) {
+		return findName(section, len, true);
+	}
+
 	/**
 	 * Attempts to get an IBinding from the initial specified number of characters
 	 * from the specified code fragment. Fails the test if
@@ -115,14 +129,14 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 	 * @param clazz an expected class type or interface that the binding should extend/implement
 	 * @return the associated name's binding
 	 */
-	protected <T> T getBindingFromASTName(String section, int len, Class<T> clazz, Class ... cs) {
-		if (len < 1) {
-			len= section.length()+len;
-		}
+	protected <T> T getBindingFromASTName(String section, int len, Class<T> clazz, Class... cs) {
+		if (len <= 0)
+			len += section.length();
+
 		IASTName name= findName(section, len);
 		assertNotNull("Name not found for \"" + section + "\"", name);
 		assertEquals(section.substring(0, len), name.getRawSignature());
-		
+
 		IBinding binding = name.resolveBinding();
 		assertNotNull("No binding for " + name.getRawSignature(), binding);
 		assertFalse("Binding is a ProblemBinding for name \"" + name.getRawSignature() + "\"", IProblemBinding.class.isAssignableFrom(name.resolveBinding().getClass()));
@@ -130,20 +144,74 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		return clazz.cast(binding);
 	}
 	
+	/**
+	 * Attempts to get an IBinding attached to an implicit name from the initial specified 
+	 * number of characters from the specified code fragment. Fails the test if
+	 * <ul>
+	 *  <li> There is not a unique implicit name with the specified criteria
+	 *  <li> The binding associated with the implicit name is null or a problem binding
+     *  <li> The binding is not an instance of the specified class
+	 * </ul>
+	 * @param section the code fragment to search for in the AST. The first occurrence of an identical section is used.
+	 * @param len the length of the specified section to use as a name
+	 * @param clazz an expected class type or interface that the binding should extend/implement
+	 * @return the associated implicit name's binding
+	 */
+	protected <T> T getBindingFromImplicitASTName(String section, int len, Class<T> clazz, Class... cs) {
+		if (len <= 0)
+			len += section.length();
+
+		IASTName name= findImplicitName(section, len);
+		assertNotNull("Name not found for \"" + section + "\"", name);
+		assertEquals(section.substring(0, len), name.getRawSignature());
+
+		IBinding binding = name.resolveBinding();
+		assertNotNull("No binding for " + name.getRawSignature(), binding);
+		assertFalse("Binding is a ProblemBinding for name \"" + name.getRawSignature() + "\"", IProblemBinding.class.isAssignableFrom(name.resolveBinding().getClass()));
+		assertInstance(binding, clazz, cs);
+		return clazz.cast(binding);
+	}
+
 	/*
-	 * @see IndexBindingResolutionTestBase#getBindingFromASTName(Class, String, int)
+	 * @see IndexBindingResolutionTestBase#getBindingFromASTName(String, int, Class<T>, Class...)
 	 */
 	protected <T extends IBinding> T getBindingFromASTName(String section, int len) {
 		if (len <= 0)
 			len += section.length();
-		
+
 		IASTName name= findName(section, len);
 		assertNotNull("Name not found for \"" + section + "\"", name);
 		assertEquals(section.substring(0, len), name.getRawSignature());
-		
+
 		IBinding binding = name.resolveBinding();
 		assertNotNull("No binding for " + name.getRawSignature(), binding);
 		assertFalse("Binding is a ProblemBinding for name \"" + name.getRawSignature() + "\"", IProblemBinding.class.isAssignableFrom(name.resolveBinding().getClass()));
+		return (T) binding;
+	}
+
+	protected <T extends IBinding> T getBindingFromFirstIdentifier(String section) {
+		return getBindingFromASTName(section, getIdentifierLength(section));
+	}
+
+	protected <T extends IBinding> T getBindingFromFirstIdentifier(String section, Class<T> clazz, Class... cs) {
+		return getBindingFromASTName(section, getIdentifierLength(section), clazz, cs);
+	}
+
+	/*
+	 * @see IndexBindingResolutionTestBase#getBindingFromImplicitASTName(String, int, Class<T>, Class ...)
+	 */
+	protected <T extends IBinding> T getBindingFromImplicitASTName(String section, int len) {
+		if (len <= 0)
+			len += section.length();
+
+		IASTName name= findImplicitName(section, len);
+		assertNotNull("Name not found for \"" + section + "\"", name);
+		assertEquals(section.substring(0, len), name.getRawSignature());
+
+		IBinding binding = name.resolveBinding();
+		assertNotNull("No binding for " + name.getRawSignature(), binding);
+		assertFalse("Binding is a ProblemBinding for name \"" + name.getRawSignature() + "\"",
+				IProblemBinding.class.isAssignableFrom(name.resolveBinding().getClass()));
 		return (T) binding;
 	}
 
@@ -157,17 +225,22 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		IASTName name= findName(section, len);
 		assertNotNull("Name not found for \"" + section + "\"", name);
 		assertEquals(section.substring(0, len), name.getRawSignature());
-		
+
 		IBinding binding = name.resolveBinding();
 		assertNotNull("No binding for " + name.getRawSignature(), binding);
-		assertTrue("Binding is not a ProblemBinding for name \"" + name.getRawSignature() + "\"", IProblemBinding.class.isAssignableFrom(name.resolveBinding().getClass()));
+		assertTrue("Binding is not a ProblemBinding for name \"" + name.getRawSignature() + "\"",
+				IProblemBinding.class.isAssignableFrom(name.resolveBinding().getClass()));
 		return name.resolveBinding();
 	}
-	
+
+	protected IBinding getProblemFromFirstIdentifier(String section) {
+		return getProblemFromASTName(section, getIdentifierLength(section));
+	}
+
 	protected static void assertQNEquals(String expectedQN, IBinding b) {
 		assertInstance(b, IBinding.class);
 		if (b instanceof ICPPBinding) {
-			assertEquals(expectedQN, ASTTypeUtil.getQualifiedName((ICPPBinding)b));
+			assertEquals(expectedQN, ASTTypeUtil.getQualifiedName((ICPPBinding) b));
 		} else {
 			assertEquals(expectedQN, b.getName());
 		}
@@ -175,7 +248,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 
 	protected IType getVariableType(IBinding binding) throws DOMException {
 		assertTrue(binding instanceof IVariable);
-		return ((IVariable)binding).getType();
+		return ((IVariable) binding).getType();
 	}
 
 	protected IType getPtrType(IBinding binding) throws DOMException {
@@ -195,8 +268,8 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		// assert function is IFunctionType
 		IFunctionType ft = (IFunctionType) function;
 		assertTrue(ICPPClassType.class.isInstance((ft.getParameterTypes()[index])));
-		assertEquals(compositeTypeKey, ((ICPPClassType)ft.getParameterTypes()[index]).getKey());
-		assertEquals(qn, ASTTypeUtil.getQualifiedName((ICPPClassType)ft.getParameterTypes()[index]));
+		assertEquals(compositeTypeKey, ((ICPPClassType) ft.getParameterTypes()[index]).getKey());
+		assertEquals(qn, ASTTypeUtil.getQualifiedName((ICPPClassType) ft.getParameterTypes()[index]));
 	}
 
 	protected static <T> T assertInstance(Object o, Class<T> clazz, Class ... cs) {
@@ -207,7 +280,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		}
 		return clazz.cast(o);
 	}
-	
+
 	protected String readTaggedComment(final String tag) throws IOException {
 		return TestSourceReader.readTaggedComment(CTestPlugin.getDefault().getBundle(), "parser", getClass(), tag);
 	}
@@ -216,18 +289,6 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		return strategy.getIndex();
 	}
 
-	interface ITestStrategy {
-		IIndex getIndex();
-		void setUp() throws Exception;
-		void tearDown() throws Exception;
-		public int getAstCount();
-		public IASTTranslationUnit getAst(int index);
-		public StringBuilder getAstSource(int index);
-		public StringBuilder[] getTestData();
-		public ICProject getCProject();
-		public boolean isCompositeIndex();
-	}
-	
 	protected static void assertVariable(IBinding b, String qn, Class expType, String expTypeQN) {
 		assertInstance(b, IVariable.class);
 		IVariable variable = (IVariable) b;
@@ -239,18 +300,71 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 			assertQNEquals(expTypeQN, (IBinding) type);
 		}
 	}
-	
+
 	protected static void assertTypeContainer(IType conType, String expQN, Class containerType, Class expContainedType, String expContainedTypeQN) {
 		assertInstance(conType, ITypeContainer.class);
 		assertInstance(conType, containerType);
-		IType containedType= ((ITypeContainer)conType).getType();
+		IType containedType= ((ITypeContainer) conType).getType();
 		assertInstance(containedType, expContainedType);
 		if (expContainedTypeQN != null) {
 			assertInstance(containedType, IBinding.class);
 			assertQNEquals(expContainedTypeQN, (IBinding) containedType);
 		}
 	}
-	
+
+	final protected void checkBindings() throws Exception {
+		for (int i = 0; i < strategy.getAstCount(); i++) {
+			IASTTranslationUnit ast = strategy.getAst(i);
+			NameCollector col = new NameCollector();
+			ast.accept(col);
+			for (IASTName n : col.nameList) {
+				assertFalse("ProblemBinding for " + n.getRawSignature(), n.resolveBinding() instanceof IProblemBinding);
+			}
+		}
+	}
+
+	protected int getIdentifierLength(String str) {
+		int i;
+		for (i = 0; i < str.length() && Character.isJavaIdentifierPart(str.charAt(i)); ++i) {
+		}
+		return i;
+	}
+
+	static protected class NameCollector extends ASTVisitor {
+        {
+            shouldVisitNames = true;
+        }
+        public List<IASTName> nameList = new ArrayList<IASTName>();
+
+        @Override
+		public int visit(IASTName name) {
+            nameList.add(name);
+            return PROCESS_CONTINUE;
+        }
+
+        public IASTName getName(int idx) {
+            if (idx < 0 || idx >= nameList.size())
+                return null;
+            return nameList.get(idx);
+        }
+
+        public int size() {
+        	return nameList.size();
+        }
+    }
+
+	protected interface ITestStrategy {
+		IIndex getIndex();
+		void setUp() throws Exception;
+		void tearDown() throws Exception;
+		public int getAstCount();
+		public IASTTranslationUnit getAst(int index);
+		public StringBuilder getAstSource(int index);
+		public StringBuilder[] getTestData();
+		public ICProject getCProject();
+		public boolean isCompositeIndex();
+	}
+
 	class SinglePDOMTestFirstASTStrategy implements ITestStrategy {
 		private IIndex index;
 		private ICProject cproject;
@@ -266,7 +380,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		public ICProject getCProject() {
 			return cproject;
 		}
-		
+
 		@Override
 		public StringBuilder[] getTestData() {
 			return testData;
@@ -293,8 +407,9 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 
 		@Override
 		public void setUp() throws Exception {
-			cproject = cpp ? CProjectHelper.createCCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) 
-					: CProjectHelper.createCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
+			cproject = cpp ?
+					CProjectHelper.createCCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) :
+					CProjectHelper.createCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
 			Bundle b = CTestPlugin.getDefault().getBundle();
 			testData = TestSourceReader.getContentsForTest(b, "parser", IndexBindingResolutionTestBase.this.getClass(), getName(), 2);
 
@@ -302,11 +417,11 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 				return;
 			IFile file = TestSourceReader.createFile(cproject.getProject(), new Path("header.h"), testData[0].toString());
 			CCorePlugin.getIndexManager().setIndexerId(cproject, IPDOMManager.ID_FAST_INDEXER);
-			assertTrue(CCorePlugin.getIndexManager().joinIndexer(360000, new NullProgressMonitor()));
+	        waitForIndexer(cproject);
 
 			if (DEBUG) {
 				System.out.println("Project PDOM: " + getName());
-				((PDOM)CCoreInternals.getPDOMManager().getPDOM(cproject)).accept(new PDOMPrettyPrinter());
+				((PDOM) CCoreInternals.getPDOMManager().getPDOM(cproject)).accept(new PDOMPrettyPrinter());
 			}
 
 			index= CCorePlugin.getIndexManager().getIndex(cproject);
@@ -330,7 +445,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		public IIndex getIndex() {
 			return index;
 		}
-		
+
 		@Override
 		public boolean isCompositeIndex() {
 			return false;
@@ -379,21 +494,22 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 
 		@Override
 		public void setUp() throws Exception {
-			cproject = cpp ? CProjectHelper.createCCProject(getName()+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) 
-					: CProjectHelper.createCProject(getName()+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
+			cproject = cpp ?
+					CProjectHelper.createCCProject(getName()+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) :
+					CProjectHelper.createCProject(getName()+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
 			Bundle b = CTestPlugin.getDefault().getBundle();
 			testData = TestSourceReader.getContentsForTest(b, "parser", IndexBindingResolutionTestBase.this.getClass(), getName(), 2);
 
 			IFile file = TestSourceReader.createFile(cproject.getProject(), new Path("header.h"), testData[0].toString());
 			CCorePlugin.getIndexManager().setIndexerId(cproject, IPDOMManager.ID_FAST_INDEXER);
-			assertTrue(CCorePlugin.getIndexManager().joinIndexer(360000, new NullProgressMonitor()));
+	        waitForIndexer(cproject);
 
 			IFile cppfile= TestSourceReader.createFile(cproject.getProject(), new Path("references.c" + (cpp ? "pp" : "")), testData[1].toString());
-			assertTrue(CCorePlugin.getIndexManager().joinIndexer(360000, new NullProgressMonitor()));
-			
+	        waitForIndexer(cproject);
+
 			if (DEBUG) {
 				System.out.println("Project PDOM: " + getName());
-				((PDOM)CCoreInternals.getPDOMManager().getPDOM(cproject)).accept(new PDOMPrettyPrinter());
+				((PDOM) CCoreInternals.getPDOMManager().getPDOM(cproject)).accept(new PDOMPrettyPrinter());
 			}
 
 			index= CCorePlugin.getIndexManager().getIndex(cproject);
@@ -416,7 +532,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		public IIndex getIndex() {
 			return index;
 		}
-		
+
 		@Override
 		public boolean isCompositeIndex() {
 			return false;
@@ -431,7 +547,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 	 * to put the contents of the section to. To request the AST of a file, put an asterisk after
 	 * the file name.
 	 */
-	class SinglePDOMTestNamedFilesStrategy implements ITestStrategy {
+	protected class SinglePDOMTestNamedFilesStrategy implements ITestStrategy {
 		private IIndex index;
 		private ICProject cproject;
 		private StringBuilder[] testData;
@@ -472,8 +588,9 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 
 		@Override
 		public void setUp() throws Exception {
-			cproject = cpp ? CProjectHelper.createCCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) 
-					: CProjectHelper.createCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
+			cproject = cpp ?
+					CProjectHelper.createCCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) :
+					CProjectHelper.createCProject(getName() + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
 			Bundle b = CTestPlugin.getDefault().getBundle();
 			testData = TestSourceReader.getContentsForTest(b, "parser", IndexBindingResolutionTestBase.this.getClass(), getName(), 0);
 
@@ -498,8 +615,8 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 				}
 			}
 			CCorePlugin.getIndexManager().setIndexerId(cproject, IPDOMManager.ID_FAST_INDEXER);
-			assertTrue(CCorePlugin.getIndexManager().joinIndexer(360000, new NullProgressMonitor()));
-			
+	        waitForIndexer(cproject);
+
 			if (DEBUG) {
 				System.out.println("Project PDOM: " + getName());
 				((PDOM) CCoreInternals.getPDOMManager().getPDOM(cproject)).accept(new PDOMPrettyPrinter());
@@ -527,7 +644,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		public IIndex getIndex() {
 			return index;
 		}
-		
+
 		@Override
 		public boolean isCompositeIndex() {
 			return false;
@@ -549,7 +666,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		public ICProject getCProject() {
 			return cproject;
 		}
-		
+
 		@Override
 		public void tearDown() throws Exception {
 			if (index != null) {
@@ -565,8 +682,9 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 
 		@Override
 		public void setUp() throws Exception {
-			cproject= cpp ? CProjectHelper.createCCProject("OnlineContent"+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER)
-					: CProjectHelper.createCProject("OnlineContent"+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
+			cproject= cpp ?
+					CProjectHelper.createCCProject("OnlineContent"+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) :
+					CProjectHelper.createCProject("OnlineContent"+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
 			Bundle b= CTestPlugin.getDefault().getBundle();
 			testData= TestSourceReader.getContentsForTest(b, "parser", IndexBindingResolutionTestBase.this.getClass(), getName(), 2);
 			referenced = createReferencedContent();
@@ -581,11 +699,11 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 
 			IndexerPreferences.set(cproject.getProject(), IndexerPreferences.KEY_INDEXER_ID, IPDOMManager.ID_FAST_INDEXER);
 			CCorePlugin.getIndexManager().reindex(cproject);
-			assertTrue(CCorePlugin.getIndexManager().joinIndexer(360000, new NullProgressMonitor()));
-			
+			waitForIndexer(cproject);
+
 			if (DEBUG) {
 				System.out.println("Online: "+getName());
-			 	((PDOM)CCoreInternals.getPDOMManager().getPDOM(cproject)).accept(new PDOMPrettyPrinter());
+			 	((PDOM) CCoreInternals.getPDOMManager().getPDOM(cproject)).accept(new PDOMPrettyPrinter());
 			}
 
 			index= CCorePlugin.getIndexManager().getIndex(cproject, IIndexManager.ADD_DEPENDENCIES);
@@ -593,22 +711,23 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 			ast= TestSourceReader.createIndexBasedAST(index, cproject, references);
 		}
 
-		protected ICProject createReferencedContent() throws CoreException {
-			ICProject referenced = cpp ? CProjectHelper.createCCProject("ReferencedContent"+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER)
-					: CProjectHelper.createCProject("ReferencedContent"+System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
+		private ICProject createReferencedContent() throws Exception {
+			ICProject referenced = cpp ?
+					CProjectHelper.createCCProject("ReferencedContent" + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER) :
+					CProjectHelper.createCProject("ReferencedContent" + System.currentTimeMillis(), "bin", IPDOMManager.ID_NO_INDEXER);
 			String content = testData[0].toString();
 			IFile file = TestSourceReader.createFile(referenced.getProject(), new Path("header.h"), content);
-			
+
 			IndexerPreferences.set(referenced.getProject(), IndexerPreferences.KEY_INDEXER_ID, IPDOMManager.ID_FAST_INDEXER);
 			CCorePlugin.getIndexManager().reindex(referenced);
-			
-			assertTrue(CCorePlugin.getIndexManager().joinIndexer(360000, new NullProgressMonitor()));
-			
+
+			waitForIndexer(referenced);
+
 			if (DEBUG) {
 				System.out.println("Referenced: "+getName());
-				((PDOM)CCoreInternals.getPDOMManager().getPDOM(referenced)).accept(new PDOMPrettyPrinter());
+				((PDOM) CCoreInternals.getPDOMManager().getPDOM(referenced)).accept(new PDOMPrettyPrinter());
 			}
-			
+
 			return referenced;
 		}
 
@@ -640,7 +759,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 		public StringBuilder[] getTestData() {
 			return testData;
 		}
-		
+
 		@Override
 		public boolean isCompositeIndex() {
 			return true;
@@ -650,7 +769,7 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 	/**
 	 * When a test is failing only for the strategy where the test data is split over
 	 * multiple index fragments, we artificially fail the single fragment strategy also.
-	 * This is not ideal, but as both strategies behavior are typically the same, is 
+	 * This is not ideal, but as both strategies behavior are typically the same, is
 	 * quite rare.
 	 */
 	protected void fakeFailForSingle() {
@@ -662,12 +781,18 @@ public abstract class IndexBindingResolutionTestBase extends BaseTestCase {
 	/**
 	 * When a test is failing only for the strategy where the test data is not split over
 	 * multiple index fragments, we artificially fail the single fragment strategy also.
-	 * This is not ideal, but as both strategies behavior are typically the same, is 
+	 * This is not ideal, but as both strategies behavior are typically the same, is
 	 * quite rare.
 	 */
 	protected void fakeFailForMultiProject() {
 		if (getName().startsWith("_") && strategy instanceof ReferencedProject) {
 			fail("Artificially failing - see IndexBindingResolutionTestBase.fakeFailForReferenced()");
 		}
+	}
+	
+	protected static void assertSameType(IType first, IType second){
+		assertNotNull(first);
+		assertNotNull(second);
+		assertTrue("Expected types to be the same, but first was: '" + first.toString() + "' and second was: '" + second + "'", first.isSameType(second));
 	}
 }

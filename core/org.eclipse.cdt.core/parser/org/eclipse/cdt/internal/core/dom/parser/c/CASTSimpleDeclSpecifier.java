@@ -6,9 +6,9 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    John Camelon (IBM Rational Software) - Initial API and implementation
- *    Yuan Zhang / Beth Tibbitts (IBM Research)
- *    Markus Schorn (Wind River Systems)
+ *     John Camelon (IBM Rational Software) - Initial API and implementation
+ *     Yuan Zhang / Beth Tibbitts (IBM Research)
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.c;
 
@@ -19,17 +19,16 @@ import org.eclipse.cdt.core.dom.ast.IBasicType.Kind;
 import org.eclipse.cdt.core.dom.ast.c.ICASTSimpleDeclSpecifier;
 import org.eclipse.cdt.internal.core.dom.parser.IASTAmbiguityParent;
 
-public class CASTSimpleDeclSpecifier extends CASTBaseDeclSpecifier implements ICASTSimpleDeclSpecifier,
-		IASTAmbiguityParent {
-    
+public class CASTSimpleDeclSpecifier extends CASTBaseDeclSpecifier
+		implements ICASTSimpleDeclSpecifier, IASTAmbiguityParent {
     private int simpleType;
     private boolean isSigned;
     private boolean isUnsigned;
     private boolean isShort;
     private boolean isLong;
     private boolean longlong;
-    private boolean complex=false;
-    private boolean imaginary=false;
+    private boolean complex;
+    private boolean imaginary;
 	private IASTExpression fDeclTypeExpression;
 
     @Override
@@ -40,25 +39,22 @@ public class CASTSimpleDeclSpecifier extends CASTBaseDeclSpecifier implements IC
 	@Override
 	public CASTSimpleDeclSpecifier copy(CopyStyle style) {
 		CASTSimpleDeclSpecifier copy = new CASTSimpleDeclSpecifier();
-		copySimpleDeclSpec(copy, style);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
-	protected void copySimpleDeclSpec(CASTSimpleDeclSpecifier copy, CopyStyle style) {
-    	copyBaseDeclSpec(copy);
-    	copy.simpleType = simpleType;
-    	copy.isSigned = isSigned;
-    	copy.isUnsigned = isUnsigned;
-    	copy.isShort = isShort;
-    	copy.isLong = isLong;
-    	copy.longlong = longlong;
-    	copy.complex = complex;
-    	copy.imaginary = imaginary;
+	protected <T extends CASTSimpleDeclSpecifier> T copy(T copy, CopyStyle style) {
+		CASTSimpleDeclSpecifier target = copy;
+    	target.simpleType = simpleType;
+    	target.isSigned = isSigned;
+    	target.isUnsigned = isUnsigned;
+    	target.isShort = isShort;
+    	target.isLong = isLong;
+    	target.longlong = longlong;
+    	target.complex = complex;
+    	target.imaginary = imaginary;
     	if (fDeclTypeExpression != null)
 			copy.setDeclTypeExpression(fDeclTypeExpression.copy(style));
+    	return super.copy(copy, style);
     }
     
     @Override
@@ -98,7 +94,7 @@ public class CASTSimpleDeclSpecifier extends CASTBaseDeclSpecifier implements IC
     }
     
     private int getType(Kind kind) {
-    	switch(kind) {
+    	switch (kind) {
     	case eBoolean:
     		return t_bool;
 		case eChar:
@@ -110,8 +106,12 @@ public class CASTSimpleDeclSpecifier extends CASTBaseDeclSpecifier implements IC
 			return t_double;
 		case eFloat:
 			return t_float;
+		case eFloat128:
+			return t_float;
 		case eInt:
 			return t_int;
+		case eInt128:
+			return t_int128;
 		case eUnspecified:
 			return t_unspecified;
 		case eVoid:

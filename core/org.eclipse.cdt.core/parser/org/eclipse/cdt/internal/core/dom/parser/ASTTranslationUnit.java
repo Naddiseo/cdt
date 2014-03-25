@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2011 Wind River Systems, Inc. and others.
+ * Copyright (c) 2008, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,9 +8,11 @@
  * Contributors:
  *     Markus Schorn - initial API and implementation
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.dom.parser;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 
@@ -81,6 +83,7 @@ public abstract class ASTTranslationUnit extends ASTNode implements IASTTranslat
 	/** The semaphore controlling exclusive access to the AST. */
 	private final Semaphore fSemaphore= new Semaphore(1);
 	private boolean fBasedOnIncompleteIndex;
+	private boolean fNodesOmitted;
 
 	@Override
 	public final IASTTranslationUnit getTranslationUnit() {
@@ -149,7 +152,18 @@ public abstract class ASTTranslationUnit extends ASTNode implements IASTTranslat
 	protected final IASTName[] getMacroDefinitionsInAST(IMacroBinding binding) {
 		if (fLocationResolver == null)
 			return IASTName.EMPTY_NAME_ARRAY;
-		return fLocationResolver.getDeclarations(binding);
+		
+		IASTName[] declarations = fLocationResolver.getDeclarations(binding);
+		int j = 0;
+		for (int i = 0; i < declarations.length; i++) {
+			IASTName name = declarations[i];
+			if (name.isPartOfTranslationUnitFile()) {
+				declarations[j++] = name;
+			}
+		}
+		if (j < declarations.length)
+			return j > 0 ? Arrays.copyOf(declarations, j) : IASTName.EMPTY_NAME_ARRAY;
+		return declarations;
 	}
 
 	protected final IASTName[] getMacroReferencesInAST(IMacroBinding binding) {
@@ -409,18 +423,21 @@ public abstract class ASTTranslationUnit extends ASTNode implements IASTTranslat
 	 */
 	abstract protected IType createType(IASTTypeId typeid);
 
-	protected void copyAbstractTU(ASTTranslationUnit copy, CopyStyle style) {
+	protected <T extends ASTTranslationUnit> T copy(T copy, CopyStyle style) {
 		copy.setIndex(fIndex);
-		copy.fIsHeader = fIsHeader;
-		copy.fNodeFactory = fNodeFactory;
-		copy.setLocationResolver(fLocationResolver);
-		copy.fForContentAssist = fForContentAssist;
-		copy.fOriginatingTranslationUnit = fOriginatingTranslationUnit;
+		ASTTranslationUnit target = copy;
+		target.fIsHeader = fIsHeader;
+		target.fNodeFactory = fNodeFactory;
+		target.setLocationResolver(fLocationResolver);
+		target.fForContentAssist = fForContentAssist;
+		target.fOriginatingTranslationUnit = fOriginatingTranslationUnit;
+		target.fNodesOmitted = fNodesOmitted;
 		
-		for (IASTDeclaration declaration : getDeclarations())
+		for (IASTDeclaration declaration : getDeclarations()) {
 			copy.addDeclaration(declaration == null ? null : declaration.copy(style));
+		}
 
-		copy.setOffsetAndLength(this);
+		return super.copy(copy, style);
 	}
 	
 	@Override
@@ -483,5 +500,64 @@ public abstract class ASTTranslationUnit extends ASTNode implements IASTTranslat
 			fSizeofCalculator = new SizeofCalculator(this);
 		}
 		return fSizeofCalculator;
+	}
+
+	/**
+	 * Returns the offset of the given node, or -1 if the node is not part of the translation
+	 * unit file or doesn't have a file-location.
+	 * @see IASTNode#getFileLocation()
+	 */
+	public static int getNodeOffset(IASTNode node) {
+		if (!node.isPartOfTranslationUnitFile())
+			return -1;
+		IASTFileLocation nodeLocation = node.getFileLocation();
+		return nodeLocation != null ? nodeLocation.getNodeOffset() : -1;
+	}
+
+	/**
+	 * Returns the end offset of the given node, or -1 if the node is not part of the translation
+	 * unit file or doesn't have a file-location.
+	 * @see IASTNode#getFileLocation()
+	 */
+	public static int getNodeEndOffset(IASTNode node) {
+		if (!node.isPartOfTranslationUnitFile())
+			return -1;
+		IASTFileLocation nodeLocation = node.getFileLocation();
+		return nodeLocation != null ? nodeLocation.getNodeOffset() + nodeLocation.getNodeLength() : -1;
+	}
+
+    /**
+     * Returns the 1-based starting line number of the given node, or 0 if the node is not part of
+     * the translation unit file or doesn't have a file-location.
+	 * @see IASTNode#getFileLocation()
+	 */
+	public static int getStartingLineNumber(IASTNode node) {
+		if (!node.isPartOfTranslationUnitFile())
+			return 0;
+		IASTFileLocation nodeLocation = node.getFileLocation();
+		return nodeLocation != null ? nodeLocation.getStartingLineNumber() : 0;
+	}
+
+    /**
+     * Returns the 1-based ending line number of the given node, or 0 if the node is not part of
+     * the translation unit file or doesn't have a file-location.
+	 * @see IASTNode#getFileLocation()
+	 */
+	public static int getEndingLineNumber(IASTNode node) {
+		if (!node.isPartOfTranslationUnitFile())
+			return 0;
+		IASTFileLocation nodeLocation = node.getFileLocation();
+		return nodeLocation != null ? nodeLocation.getEndingLineNumber() : 0;
+	}
+
+	@Override
+	public boolean hasNodesOmitted() {
+		return fNodesOmitted;
+	}
+
+	@Override
+	public void setHasNodesOmitted(boolean hasNodesOmitted) {
+		assertNotFrozen();
+		fNodesOmitted = hasNodesOmitted;
 	}
 }

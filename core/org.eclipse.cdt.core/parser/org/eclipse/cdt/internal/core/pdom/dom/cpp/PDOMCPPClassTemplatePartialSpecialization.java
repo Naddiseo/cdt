@@ -6,23 +6,18 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Bryan Wilkinson (QNX) - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ *     Bryan Wilkinson (QNX) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.pdom.dom.cpp;
 
 import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.ast.DOMException;
-import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.ITypedef;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassTemplate;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassTemplatePartialSpecialization;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPSpecialization;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateArgument;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameter;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameterMap;
-import org.eclipse.cdt.core.parser.util.ObjectMap;
 import org.eclipse.cdt.internal.core.Util;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPClassTemplatePartialSpecialization;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPTemplates;
@@ -39,8 +34,7 @@ import org.eclipse.core.runtime.CoreException;
  * Partial specialization of a class template for the index.
  */
 class PDOMCPPClassTemplatePartialSpecialization extends	PDOMCPPClassTemplate 
-		implements IPDOMPartialSpecialization, ICPPSpecialization, IPDOMOverloader {
-	
+		implements IPDOMPartialSpecialization, IPDOMOverloader {
 	private static final int ARGUMENTS = PDOMCPPClassTemplate.RECORD_SIZE + 0;
 	private static final int SIGNATURE_HASH = PDOMCPPClassTemplate.RECORD_SIZE + 4;
 	private static final int PRIMARY = PDOMCPPClassTemplate.RECORD_SIZE + 8;
@@ -109,16 +103,11 @@ class PDOMCPPClassTemplatePartialSpecialization extends	PDOMCPPClassTemplate
 	}
 	
 	@Override
-	public IBinding getSpecializedBinding() {
-		return getPrimaryClassTemplate();
-	}
-	
-	@Override
 	public void setArguments(ICPPTemplateArgument[] templateArguments) throws CoreException {
 		final Database db = getPDOM().getDB();
-		long oldRec = db.getRecPtr(record+ARGUMENTS);
+		long oldRec = db.getRecPtr(record + ARGUMENTS);
 		long rec= PDOMCPPArgumentList.putArguments(this, templateArguments);
-		db.putRecPtr(record+ARGUMENTS, rec);
+		db.putRecPtr(record + ARGUMENTS, rec);
 		if (oldRec != 0) {
 			PDOMCPPArgumentList.clearArguments(this, oldRec);
 		}
@@ -127,7 +116,7 @@ class PDOMCPPClassTemplatePartialSpecialization extends	PDOMCPPClassTemplate
 	@Override
 	public ICPPTemplateArgument[] getTemplateArguments() {
 		try {
-			final long rec= getPDOM().getDB().getRecPtr(record+ARGUMENTS);
+			final long rec= getPDOM().getDB().getRecPtr(record + ARGUMENTS);
 			return PDOMCPPArgumentList.getArguments(this, rec);
 		} catch (CoreException e) {
 			CCorePlugin.log(e);
@@ -144,7 +133,7 @@ class PDOMCPPClassTemplatePartialSpecialization extends	PDOMCPPClassTemplate
 	@Override
 	public int pdomCompareTo(PDOMBinding other) {
 		int cmp = super.pdomCompareTo(other);
-		if(cmp==0) {
+		if(cmp == 0) {
 			if(other instanceof PDOMCPPClassTemplatePartialSpecialization) {
 				try {
 					PDOMCPPClassTemplatePartialSpecialization otherSpec = (PDOMCPPClassTemplatePartialSpecialization) other;
@@ -159,11 +148,6 @@ class PDOMCPPClassTemplatePartialSpecialization extends	PDOMCPPClassTemplate
 			}
 		}
 		return cmp;
-	}
-	
-	@Override
-	public ICPPTemplateParameterMap getTemplateParameterMap() {
-		return CPPTemplates.createParameterMap(getPrimaryClassTemplate(), getTemplateArguments());
 	}
 	
 	@Override
@@ -185,18 +169,5 @@ class PDOMCPPClassTemplatePartialSpecialization extends	PDOMCPPClassTemplate
 
 		final ICPPClassTemplatePartialSpecialization rhs = (ICPPClassTemplatePartialSpecialization)type;
 		return CPPClassTemplatePartialSpecialization.isSamePartialClassSpecialization(this, rhs);
-	}
-	
-	@Override
-	@Deprecated
-	public ObjectMap getArgumentMap() {
-		ICPPTemplateParameter[] params = getPrimaryClassTemplate().getTemplateParameters();
-		ICPPTemplateArgument[] args= getTemplateArguments();
-		int len= Math.min(params.length, args.length);
-		ObjectMap result= new ObjectMap(len);
-		for (int i = 0; i < len; i++) {
-			result.put(params[i], args[i]);
-		}
-		return ObjectMap.EMPTY_MAP;
 	}
 }

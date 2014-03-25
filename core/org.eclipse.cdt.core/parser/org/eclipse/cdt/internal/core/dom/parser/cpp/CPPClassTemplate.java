@@ -1,15 +1,16 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2010 IBM Corporation and others.
+ * Copyright (c) 2005, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    IBM - Initial API and implementation
- *    Bryan Wilkinson (QNX)
- *    Markus Schorn (Wind River Systems)
- *    Andrew Ferguson (Symbian)
+ *     IBM - Initial API and implementation
+ *     Bryan Wilkinson (QNX)
+ *     Markus Schorn (Wind River Systems)
+ *     Andrew Ferguson (Symbian)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -45,8 +46,7 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPTemplates;
  */
 public class CPPClassTemplate extends CPPTemplateDefinition implements ICPPClassTemplate,
 		ICPPInternalClassTemplate, ICPPInternalClassTypeMixinHost {
-
-	private ICPPClassTemplatePartialSpecialization[] partialSpecializations = null;
+	private ICPPClassTemplatePartialSpecialization[] partialSpecializations;
 	private ICPPDeferredClassInstance fDeferredInstance;
 	private boolean addedPartialSpecializationsOfIndex;
 
@@ -159,7 +159,7 @@ public class CPPClassTemplate extends CPPTemplateDefinition implements ICPPClass
 
 	@Override
 	public IField[] getFields() {
-		return ClassTypeHelper.getFields(this);
+		return ClassTypeHelper.getFields(this, null);
 	}
 
 	@Override
@@ -169,12 +169,12 @@ public class CPPClassTemplate extends CPPTemplateDefinition implements ICPPClass
 
 	@Override
 	public ICPPMethod[] getMethods() {
-		return ClassTypeHelper.getMethods(this);
+		return ClassTypeHelper.getMethods(this, null);
 	}
 
 	@Override
 	public ICPPMethod[] getAllDeclaredMethods() {
-		return ClassTypeHelper.getAllDeclaredMethods(this);
+		return ClassTypeHelper.getAllDeclaredMethods(this, null);
 	}
 
 	@Override
@@ -211,9 +211,7 @@ public class CPPClassTemplate extends CPPTemplateDefinition implements ICPPClass
 		return null;
 	}
 
-	/* (non-Javadoc)
-	 * For debug purposes only
-	 */
+	/* For debug purposes only */
 	@Override
 	public String toString() {
 		return ASTTypeUtil.getType(this);
@@ -243,5 +241,19 @@ public class CPPClassTemplate extends CPPTemplateDefinition implements ICPPClass
 			}
 		}
 		return null;
+	}
+
+	@Override
+	public boolean isFinal() {
+		ICPPASTCompositeTypeSpecifier typeSpecifier = getCompositeTypeSpecifier();
+		if (typeSpecifier != null) {
+			return typeSpecifier.isFinal();
+		}
+		return false;
+	}
+
+	@Override
+	public int getVisibility(IBinding member) {
+		return ClassTypeHelper.getVisibility(this, member);
 	}
 }

@@ -1,38 +1,43 @@
 /*******************************************************************************
- *  Copyright (c) 2004, 2011 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
- *      Andrew Niefer (IBM Corporation) - initial API and implementation
- *      Markus Schorn (Wind River Systems)
+ * Contributors:
+ *     Andrew Niefer (IBM Corporation) - initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
 import org.eclipse.cdt.core.dom.ast.ASTTypeUtil;
 import org.eclipse.cdt.core.dom.ast.IASTExpression;
+import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
 import org.eclipse.cdt.core.dom.ast.IASTSimpleDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IBasicType;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.ITypedef;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTInitializerClause;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTSimpleDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPBasicType;
 import org.eclipse.cdt.internal.core.dom.parser.ISerializableType;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeMarshalBuffer;
+import org.eclipse.cdt.internal.core.dom.parser.Value;
 import org.eclipse.core.runtime.CoreException;
 
 /**
  * Built-in c++ type.
  */
 public class CPPBasicType implements ICPPBasicType, ISerializableType {
+	private static final int FROM_STRING_LITERAL = 1 << 31;
 	public static final CPPBasicType BOOLEAN = new CPPBasicType(Kind.eBoolean, 0, null);
 	public static final CPPBasicType NULL_PTR = new CPPBasicType(Kind.eNullPtr, 0, null);
 	
 	private final Kind fKind;
 	private final int fModifiers;
-	private IASTExpression fExpression;
+	private Long fAssociatedValue;
 
 	public CPPBasicType(Kind kind, int qualifiers, IASTExpression expression) {
 		if (kind == Kind.eUnspecified) {
@@ -46,8 +51,14 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 		} else {
 			fKind= kind;
 		}
+		if (expression instanceof IASTLiteralExpression &&
+				((IASTLiteralExpression) expression).getKind() == IASTLiteralExpression.lk_string_literal) {
+			qualifiers |= FROM_STRING_LITERAL;
+		}
 		fModifiers= qualifiers;
-		fExpression= expression;
+		if (expression instanceof ICPPASTInitializerClause) {
+			fAssociatedValue = Value.create(expression, Value.MAX_RECURSION_DEPTH).numericalValue();
+		}
 	}
 
 	public CPPBasicType(Kind kind, int qualifiers) {
@@ -74,6 +85,7 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 	}
 
 	static Kind getKind(final int simpleDeclSpecType) {
+		// Note: when adding a new kind, marshal() and unnmarshal() may need to be revised.
 		switch (simpleDeclSpecType) {
 		case IASTSimpleDeclSpecifier.t_bool:
 			return Kind.eBoolean;
@@ -89,8 +101,12 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 			return Kind.eDouble;
 		case IASTSimpleDeclSpecifier.t_float:
 			return Kind.eFloat;
+		case IASTSimpleDeclSpecifier.t_float128:
+			return Kind.eFloat128;
 		case IASTSimpleDeclSpecifier.t_int:
 			return Kind.eInt;
+		case IASTSimpleDeclSpecifier.t_int128:
+			return Kind.eInt128;
 		case IASTSimpleDeclSpecifier.t_void:
 			return Kind.eVoid;
 		default:
@@ -109,15 +125,17 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 		if (!(object instanceof ICPPBasicType))
 			return false;
 
-		ICPPBasicType t = (ICPPBasicType) object;
-		if (fKind != t.getKind())
+		ICPPBasicType other = (ICPPBasicType) object;
+		if (fKind != other.getKind())
 			return false;
 
+		int modifiers = getModifiers();
+		int otherModifiers = other.getModifiers();
 		if (fKind == Kind.eInt) {
-			//signed int and int are equivalent
-			return (fModifiers & ~IS_SIGNED) == (t.getModifiers() & ~IS_SIGNED);
+			// Signed int and int are equivalent.
+			return (modifiers & ~IS_SIGNED) == (otherModifiers & ~IS_SIGNED);
 		}
-		return fModifiers == t.getModifiers();
+		return modifiers == otherModifiers;
 	}
 
 	@Override
@@ -161,30 +179,42 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 	}
 
 	@Override
-	public Object clone() {
-        IType t = null;
+	public CPPBasicType clone() {
+		CPPBasicType t = null;
    		try {
-            t = (IType) super.clone();
+            t = (CPPBasicType) super.clone();
         } catch (CloneNotSupportedException e) {
-            //not going to happen
+            // Not going to happen.
         }
         return t;
     }
 
-	public void setFromExpression(IASTExpression val) {
-		fExpression = val;
+	/**
+	 * Sets the numerical value this type was created for.
+	 * 
+	 * @param value the numerical value of {@code null}
+	 */
+	public final void setAssociatedNumericalValue(Long value) {
+		fAssociatedValue = value;
 	}
 
 	/**
-	 * Returns the expression the type was created for, or <code>null</code>.
+	 * Returns the numerical value this type was created for, or {@code null}.
 	 */
-	public IASTExpression getCreatedFromExpression() {
-		return fExpression;
+	public final Long getAssociatedNumericalValue() {
+		return fAssociatedValue;
 	}
-	
+
+	/**
+	 * Returns {@code true} if the type was created for a string literal.
+	 */
+	public final boolean isFromStringLiteral() {
+		return (fModifiers & FROM_STRING_LITERAL) != 0;
+	}
+
 	@Override
-	public int getModifiers() {
-		return fModifiers;
+	public final int getModifiers() {
+		return fModifiers & ~FROM_STRING_LITERAL;
 	}
 	
 	@Override
@@ -195,28 +225,31 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer) throws CoreException {
 		final int kind= getKind().ordinal();
-		final int shiftedKind=  kind * ITypeMarshalBuffer.FLAG1;
+		final int shiftedKind= kind * ITypeMarshalBuffer.FIRST_FLAG;
 		final int modifiers= getModifiers();
-		if (shiftedKind < ITypeMarshalBuffer.FLAG4 && modifiers == 0) {
-			buffer.putByte((byte) (ITypeMarshalBuffer.BASIC_TYPE | shiftedKind));
-		} else {
-			buffer.putByte((byte) (ITypeMarshalBuffer.BASIC_TYPE | ITypeMarshalBuffer.FLAG4));
-			buffer.putByte((byte) kind);
+		short firstBytes = (short) (ITypeMarshalBuffer.BASIC_TYPE | shiftedKind);
+		if (modifiers != 0)
+			firstBytes |= ITypeMarshalBuffer.LAST_FLAG;
+		if (fAssociatedValue != null)
+			firstBytes |= ITypeMarshalBuffer.SECOND_LAST_FLAG;
+		buffer.putShort(firstBytes);
+		if (modifiers != 0)
 			buffer.putByte((byte) modifiers);
-		} 
+		if (fAssociatedValue != null)
+			buffer.putLong(getAssociatedNumericalValue());
 	}
 	
-	public static IType unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
-		final boolean dense= (firstByte & ITypeMarshalBuffer.FLAG4) == 0;
-		int modifiers= 0;
-		int kind;
-		if (dense) {
-			kind= (firstByte & (ITypeMarshalBuffer.FLAG4-1))/ITypeMarshalBuffer.FLAG1;
-		} else {
-			kind= buffer.getByte();
+	public static IType unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
+		final boolean haveModifiers= (firstBytes & ITypeMarshalBuffer.LAST_FLAG) != 0;
+		final boolean haveAssociatedNumericalValue= (firstBytes & ITypeMarshalBuffer.SECOND_LAST_FLAG) != 0;
+ 		int modifiers= 0;
+		int kind= (firstBytes & (ITypeMarshalBuffer.SECOND_LAST_FLAG - 1)) / ITypeMarshalBuffer.FIRST_FLAG;
+		if (haveModifiers)
 			modifiers= buffer.getByte();
-		} 
-		return new CPPBasicType(Kind.values()[kind], modifiers);
+		CPPBasicType result = new CPPBasicType(Kind.values()[kind], modifiers);
+		if (haveAssociatedNumericalValue)
+			result.setAssociatedNumericalValue(buffer.getLong());
+		return result;
 	}
 
 	@Override
@@ -248,6 +281,8 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 		case eUnspecified:
 			return t_unspecified;
 		case eNullPtr:
+		case eInt128:
+		case eFloat128:
 			// Null pointer type cannot be expressed wit ha simple decl specifier.
 			break;
 		}
@@ -255,11 +290,11 @@ public class CPPBasicType implements ICPPBasicType, ISerializableType {
 	}
 
     /**
-     * @deprecated types don't have values
+     * @deprecated Types don't have values
      */
 	@Override
 	@Deprecated
 	public IASTExpression getValue() {
-		return fExpression;
+		return null;
 	}
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2012 Andrew Gvozdev and others.
+ * Copyright (c) 2009, 2013 Andrew Gvozdev and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,22 +11,20 @@
 
 package org.eclipse.cdt.managedbuilder.language.settings.providers;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.cdt.core.envvar.IEnvironmentVariable;
+import org.eclipse.cdt.managedbuilder.core.BuildException;
 import org.eclipse.cdt.managedbuilder.core.IConfiguration;
 import org.eclipse.cdt.managedbuilder.core.IInputType;
+import org.eclipse.cdt.managedbuilder.core.IOption;
 import org.eclipse.cdt.managedbuilder.core.ITool;
 import org.eclipse.cdt.managedbuilder.core.IToolChain;
 import org.eclipse.cdt.managedbuilder.core.ManagedBuildManager;
 import org.eclipse.cdt.managedbuilder.core.ManagedBuilderCorePlugin;
-import org.eclipse.cdt.managedbuilder.envvar.IBuildEnvironmentVariable;
-import org.eclipse.cdt.managedbuilder.envvar.IConfigurationEnvironmentVariableSupplier;
-import org.eclipse.cdt.managedbuilder.envvar.IEnvironmentVariableProvider;
+import org.eclipse.cdt.managedbuilder.internal.envvar.EnvironmentVariableManagerToolChain;
 
 /**
  * Abstract parser capable to execute compiler command printing built-in compiler
@@ -43,6 +41,7 @@ import org.eclipse.cdt.managedbuilder.envvar.IEnvironmentVariableProvider;
  * @since 8.1
  */
 public abstract class ToolchainBuiltinSpecsDetector extends AbstractBuiltinSpecsDetector {
+	private static final String EMPTY_QUOTED_STRING = "\"\""; //$NON-NLS-1$
 	private Map<String, ITool> toolMap = new HashMap<String, ITool>();
 
 	/**
@@ -59,20 +58,44 @@ public abstract class ToolchainBuiltinSpecsDetector extends AbstractBuiltinSpecs
 	 * This returns the first tool found.
 	 */
 	private ITool getTool(String languageId) {
-		ITool langTool = toolMap.get(languageId);
-		if (langTool != null) {
-			return langTool;
+		if (languageId == null) {
+			return null;
 		}
 
-		String toolchainId = getToolchainId();
-		for (IToolChain toolchain = ManagedBuildManager.getExtensionToolChain(toolchainId);toolchain != null;toolchain = toolchain.getSuperClass()) {
-			ITool tool = getTool(languageId, toolchain);
+		if (currentCfgDescription == null) {
+			ITool tool = toolMap.get(languageId);
 			if (tool != null) {
 				return tool;
 			}
 		}
-		ManagedBuilderCorePlugin.error("Unable to find tool in toolchain=" + toolchainId + " for language=" + languageId); //$NON-NLS-1$ //$NON-NLS-2$
-		return null;
+
+		String toolchainId = null;
+		IToolChain toolchain = null;
+		ITool tool = null;
+		if (currentCfgDescription != null) {
+			IConfiguration cfg = ManagedBuildManager.getConfigurationForDescription(currentCfgDescription);
+			toolchain = cfg != null ? cfg.getToolChain() : null;
+			toolchainId = toolchain != null ? toolchain.getId() : null;
+		}
+		if (toolchain == null) {
+			toolchainId = getToolchainId();
+			toolchain = ManagedBuildManager.getExtensionToolChain(toolchainId);
+		}
+		for (;toolchain != null;toolchain = toolchain.getSuperClass()) {
+			tool = getTool(languageId, toolchain);
+			if (tool != null) {
+				break;
+			}
+		}
+		if (currentCfgDescription == null && tool != null) {
+			// cache only for global providers which use extension tool-chains that can not change
+			toolMap.put(languageId, tool);
+		}
+
+		if (tool == null) {
+			ManagedBuilderCorePlugin.error("Unable to find tool in toolchain=" + toolchainId + " for language=" + languageId); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return tool;
 	}
 
 	/**
@@ -86,7 +109,6 @@ public abstract class ToolchainBuiltinSpecsDetector extends AbstractBuiltinSpecs
 			for (IInputType inType : inputTypes) {
 				String lang = inType.getLanguageId(tool);
 				if (languageId.equals(lang)) {
-					toolMap.put(languageId, tool);
 					return tool;
 				}
 			}
@@ -97,7 +119,7 @@ public abstract class ToolchainBuiltinSpecsDetector extends AbstractBuiltinSpecs
 	@Override
 	protected String getCompilerCommand(String languageId) {
 		ITool tool = getTool(languageId);
-		String compilerCommand = tool.getToolCommand();
+		String compilerCommand = tool != null ? tool.getToolCommand() : ""; //$NON-NLS-1$
 		if (compilerCommand.isEmpty()) {
 			ManagedBuilderCorePlugin.error("Unable to find compiler command in toolchain=" + getToolchainId()); //$NON-NLS-1$
 		}
@@ -108,7 +130,7 @@ public abstract class ToolchainBuiltinSpecsDetector extends AbstractBuiltinSpecs
 	protected String getSpecFileExtension(String languageId) {
 		String ext = null;
 		ITool tool = getTool(languageId);
-		String[] srcFileExtensions = tool.getAllInputExtensions();
+		String[] srcFileExtensions = tool != null ? tool.getAllInputExtensions() : null;
 		if (srcFileExtensions != null && srcFileExtensions.length > 0) {
 			ext = srcFileExtensions[0];
 		}
@@ -119,20 +141,66 @@ public abstract class ToolchainBuiltinSpecsDetector extends AbstractBuiltinSpecs
 	}
 
 	@Override
-	protected List<IEnvironmentVariable> getEnvironmentVariables() {
-		List<IEnvironmentVariable> vars = new ArrayList<IEnvironmentVariable>(super.getEnvironmentVariables());
-
-		String toolchainId = getToolchainId();
-		for (IToolChain toolchain = ManagedBuildManager.getExtensionToolChain(toolchainId); toolchain != null; toolchain = toolchain.getSuperClass()) {
-			IConfigurationEnvironmentVariableSupplier envSupplier = toolchain.getEnvironmentVariableSupplier();
-			if (envSupplier != null) {
-				IConfiguration cfg = ManagedBuildManager.getConfigurationForDescription(currentCfgDescription);
-				IEnvironmentVariableProvider provider = ManagedBuildManager.getEnvironmentVariableProvider();
-				IBuildEnvironmentVariable[] added = envSupplier.getVariables(cfg, provider);
-				vars.addAll(Arrays.asList(added));
-				break;
+	protected String getToolOptions(String languageId) {
+		String flags = ""; //$NON-NLS-1$
+		ITool tool = getTool(languageId);
+		if (tool != null) {
+			IOption[] options = tool.getOptions();
+			for (IOption option : options) {
+				if (option.isForScannerDiscovery()) {
+					try {
+						String optionValue = null;
+						switch (option.getBasicValueType()) {
+						case IOption.BOOLEAN:
+							if (option.getBooleanValue()) {
+								optionValue = option.getCommand();
+							} else {
+								optionValue = option.getCommandFalse();
+							}
+							break;
+						case IOption.ENUMERATED:
+							optionValue = option.getEnumCommand(option.getSelectedEnum());
+							break;
+						case IOption.STRING:
+							optionValue = option.getCommand() + option.getStringValue();
+							break;
+						case IOption.STRING_LIST:
+							String[] values = option.getBasicStringListValue();
+							if(values != null) {
+								optionValue = ""; //$NON-NLS-1$
+								String cmd = option.getCommand();
+								for (String value : values) {
+									if(!value.isEmpty() && !value.equals(EMPTY_QUOTED_STRING)) {
+										optionValue = optionValue + cmd + value + ' ';
+									}
+								}
+							}
+							break;
+						case IOption.TREE:
+							optionValue = option.getCommand(option.getStringValue());
+							break;
+						default:
+						}
+						if (optionValue != null) {
+							flags = flags + ' ' + optionValue.trim();
+						}
+					} catch (BuildException e) {
+						ManagedBuilderCorePlugin.log(e);
+					}
+				}
 			}
 		}
+		return flags.trim();
+	}
+
+	@Override
+	protected List<IEnvironmentVariable> getEnvironmentVariables() {
+		if (envMngr == null && currentCfgDescription == null) {
+			// For global provider need to include toolchain in the equation
+			IToolChain toolchain = ManagedBuildManager.getExtensionToolChain(getToolchainId());
+			envMngr = new EnvironmentVariableManagerToolChain(toolchain);
+		}
+		List<IEnvironmentVariable> vars = super.getEnvironmentVariables();
 
 		return vars;
 	}

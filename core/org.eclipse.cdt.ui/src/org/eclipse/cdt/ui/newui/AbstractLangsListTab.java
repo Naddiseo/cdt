@@ -72,8 +72,8 @@ import org.eclipse.cdt.core.settings.model.MultiLanguageSetting;
 import org.eclipse.cdt.core.settings.model.util.CDataUtil;
 import org.eclipse.cdt.ui.CUIPlugin;
 
+import org.eclipse.cdt.internal.ui.language.settings.providers.LanguageSettingsImages;
 import org.eclipse.cdt.internal.ui.language.settings.providers.LanguageSettingsProvidersPage;
-import org.eclipse.cdt.internal.ui.newui.LanguageSettingsImages;
 import org.eclipse.cdt.internal.ui.newui.Messages;
 import org.eclipse.cdt.internal.ui.newui.StatusMessageLine;
 
@@ -274,6 +274,8 @@ public abstract class AbstractLangsListTab extends AbstractCPropertyTab {
 			boolean isEnabled = !LanguageSettingsProvidersPage.isLanguageSettingsProvidersEnabled(project) || ScannerDiscoveryLegacySupport.isMbsLanguageSettingsProviderOn(cfgDescription);
 			if (!isEnabled) {
 				status = new Status(IStatus.INFO, CUIPlugin.PLUGIN_ID, Messages.AbstractLangsListTab_MbsProviderNotEnabled);
+			} else if (LanguageSettingsProvidersPage.isLanguageSettingsProvidersEnabled(project)) {
+				status = new Status(IStatus.INFO, CUIPlugin.PLUGIN_ID, Messages.AbstractLangsListTab_LspPageMayDefineAdditionalEntries);
 			}
 		}
 

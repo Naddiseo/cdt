@@ -7,6 +7,7 @@
  *
  * Contributors:
  *     Markus Schorn - initial API and implementation
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp.semantics;
 
@@ -18,10 +19,13 @@ import org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.IValue;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassSpecialization;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameterMap;
 import org.eclipse.cdt.internal.core.dom.parser.ISerializableEvaluation;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeMarshalBuffer;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemType;
 import org.eclipse.cdt.internal.core.dom.parser.Value;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPBasicType;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPEvaluation;
 import org.eclipse.core.runtime.CoreException;
 
@@ -41,6 +45,14 @@ public class EvalFixed extends CPPEvaluation {
 	private boolean fCheckedIsValueDependent;
 
 	public EvalFixed(IType type, ValueCategory cat, IValue value) {
+		if (type instanceof CPPBasicType) {
+			Long num = value.numericalValue();
+			if (num != null) {
+				CPPBasicType t = (CPPBasicType) type.clone();
+				t.setAssociatedNumericalValue(num);
+				type = t;
+			}
+		}
 		fType= type;
 		fValueCategory= cat;
 		fValue= value;
@@ -85,6 +97,11 @@ public class EvalFixed extends CPPEvaluation {
 		}
 		return fIsValueDependent;
 	}
+	
+	@Override
+	public boolean isConstantExpression(IASTNode point) {
+		return isConstexprValue(fValue, point);
+	}
 
 	@Override
 	public IType getTypeOrFunctionSet(IASTNode point) {
@@ -104,37 +121,37 @@ public class EvalFixed extends CPPEvaluation {
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer, boolean includeValue) throws CoreException {
 		includeValue= includeValue && fValue != Value.UNKNOWN;
-		int firstByte = ITypeMarshalBuffer.EVAL_FIXED;
+		short firstBytes = ITypeMarshalBuffer.EVAL_FIXED;
 		if (includeValue)
-			firstByte |= ITypeMarshalBuffer.FLAG1;
+			firstBytes |= ITypeMarshalBuffer.FLAG1;
 		switch (fValueCategory) {
-		case LVALUE:
-			firstByte |= ITypeMarshalBuffer.FLAG2;
-			break;
 		case PRVALUE:
-			firstByte |= ITypeMarshalBuffer.FLAG3;
+			firstBytes |= ITypeMarshalBuffer.FLAG2;
+			break;
+		case LVALUE:
+			firstBytes |= ITypeMarshalBuffer.FLAG3;
 			break;
 		default:
 			break;
 		}
 
-		buffer.putByte((byte) firstByte);
+		buffer.putShort(firstBytes);
 		buffer.marshalType(fType);
 		if (includeValue) {
 			buffer.marshalValue(fValue);
 		}
 	}
 
-	public static ISerializableEvaluation unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
-		final boolean readValue= (firstByte & ITypeMarshalBuffer.FLAG1) != 0;
+	public static ISerializableEvaluation unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
+		final boolean readValue= (firstBytes & ITypeMarshalBuffer.FLAG1) != 0;
 		IValue value;
 		ValueCategory cat;
-		switch (firstByte & (ITypeMarshalBuffer.FLAG2 | ITypeMarshalBuffer.FLAG3)) {
+		switch (firstBytes & (ITypeMarshalBuffer.FLAG2 | ITypeMarshalBuffer.FLAG3)) {
 		case ITypeMarshalBuffer.FLAG2:
-			cat= LVALUE;
+			cat= PRVALUE;
 			break;
 		case ITypeMarshalBuffer.FLAG3:
-			cat= PRVALUE;
+			cat= LVALUE;
 			break;
 		default:
 			cat= XVALUE;
@@ -144,5 +161,37 @@ public class EvalFixed extends CPPEvaluation {
 		IType type= buffer.unmarshalType();
 		value= readValue ? buffer.unmarshalValue() : Value.UNKNOWN;
 		return new EvalFixed(type, cat, value);
+	}
+
+	@Override
+	public ICPPEvaluation instantiate(ICPPTemplateParameterMap tpMap, int packOffset,
+			ICPPClassSpecialization within, int maxdepth, IASTNode point) {
+		IType type = CPPTemplates.instantiateType(fType, tpMap, packOffset, within, point);
+		IValue value = CPPTemplates.instantiateValue(fValue, tpMap, packOffset, within, maxdepth, point);
+		if (type == fType && value == fValue)
+			return this;
+		return new EvalFixed(type, fValueCategory, value);
+	}
+
+	@Override
+	public ICPPEvaluation computeForFunctionCall(CPPFunctionParameterMap parameterMap,
+			int maxdepth, IASTNode point) {
+		ICPPEvaluation eval = fValue.getEvaluation();
+		if (eval == null)
+			return this;
+		eval = eval.computeForFunctionCall(parameterMap, maxdepth, point);
+		if (eval == fValue.getEvaluation())
+			return this;
+		return new EvalFixed(fType, fValueCategory, Value.create(eval));
+	}
+
+	@Override
+	public int determinePackSize(ICPPTemplateParameterMap tpMap) {
+		return CPPTemplates.determinePackSize(fValue, tpMap);
+	}
+
+	@Override
+	public boolean referencesTemplateParameter() {
+		return false;
 	}
 }

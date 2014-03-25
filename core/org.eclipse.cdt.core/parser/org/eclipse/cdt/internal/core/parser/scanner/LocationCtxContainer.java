@@ -22,7 +22,7 @@ import org.eclipse.cdt.core.parser.util.CharArrayUtils;
 
 /**
  * Base class for all location contexts that can contain children. 
- * <p>
+ *
  * @since 5.0
  */
 class LocationCtxContainer extends LocationCtx {
@@ -32,10 +32,11 @@ class LocationCtxContainer extends LocationCtx {
 	private int fChildSequenceLength;
 
 	private ArrayList<LocationCtx> fChildren;
-	private AbstractCharArray fSource;
+	private final AbstractCharArray fSource;
 	private int[] fLineOffsets;
 	
-	public LocationCtxContainer(LocationCtxContainer parent, AbstractCharArray source, int parentOffset, int parentEndOffset, int sequenceNumber) {
+	public LocationCtxContainer(LocationCtxContainer parent, AbstractCharArray source,
+			int parentOffset, int parentEndOffset, int sequenceNumber) {
 		super(parent, parentOffset, parentEndOffset, sequenceNumber);
 		fSource= source;
 	}
@@ -75,8 +76,8 @@ class LocationCtxContainer extends LocationCtx {
 		if (checkChildren && fChildren != null) {
 			for (int i= fChildren.size() - 1; i >= 0; i--) {
 				final LocationCtx child= fChildren.get(i);
-				if (child.fEndOffsetInParent > offset) {	// child was inserted behind the offset, adjust sequence number
-					result-= child.getSequenceLength();
+				if (child.fEndOffsetInParent > offset) {	// Child was inserted behind the offset, adjust sequence number
+					result -= child.getSequenceLength();
 				} else {
 					return result;
 				}
@@ -87,14 +88,14 @@ class LocationCtxContainer extends LocationCtx {
 	
 	@Override
 	public void addChildSequenceLength(int childLength) {
-		fChildSequenceLength+= childLength;
+		fChildSequenceLength += childLength;
 	}
 
 	@Override
 	public final LocationCtx findSurroundingContext(int sequenceNumber, int length) {
 		int testEnd= length > 1 ? sequenceNumber + length - 1 : sequenceNumber;
 		final LocationCtx child= findChildLessOrEqualThan(sequenceNumber, false);
-		if (child != null && child.fSequenceNumber+child.getSequenceLength() > testEnd) {
+		if (child != null && child.fSequenceNumber + child.getSequenceLength() > testEnd) {
 			return child.findSurroundingContext(sequenceNumber, length);
 		}
 		return this;
@@ -104,7 +105,7 @@ class LocationCtxContainer extends LocationCtx {
 	public final LocationCtxMacroExpansion findEnclosingMacroExpansion(int sequenceNumber, int length) {
 		int testEnd= length > 1 ? sequenceNumber + length - 1 : sequenceNumber;
 		final LocationCtx child= findChildLessOrEqualThan(sequenceNumber, true);
-		if (child != null && child.fSequenceNumber+child.getSequenceLength() > testEnd) {
+		if (child != null && child.fSequenceNumber + child.getSequenceLength() > testEnd) {
 			return child.findEnclosingMacroExpansion(sequenceNumber, length);
 		}
 		return null;
@@ -137,47 +138,55 @@ class LocationCtxContainer extends LocationCtx {
 	}
 
 	@Override
-	public boolean collectLocations(int sequenceNumber, final int length, ArrayList<IASTNodeLocation> locations) {
+	public void collectLocations(int sequenceNumber, final int length, ArrayList<IASTNodeLocation> locations) {
+		if (length < 1)
+			return;
+		
 		final int endSequenceNumber= sequenceNumber + length;
 		if (fChildren != null) {
 			int childIdx= Math.max(0, findChildIdxLessOrEqualThan(sequenceNumber, false));
 			for (; childIdx < fChildren.size(); childIdx++) {
 				final LocationCtx child= fChildren.get(childIdx);
 
-				// create the location between start and the child
+				// Create the location between start and the child
 				if (sequenceNumber < child.fSequenceNumber) {
-					// compute offset backwards from the child's offset
+					// Compute offset backwards from the child's offset in this location
 					final int offset= child.fEndOffsetInParent - (child.fSequenceNumber - sequenceNumber);
-					// it the child is not affected, we are done.
+					
+					// Requested range ends before the child.
 					if (endSequenceNumber <= child.fSequenceNumber) {
 						addFileLocation(offset, endSequenceNumber - sequenceNumber, locations);
-						return true;
+						return;
 					}
-					if (offset < child.fOffsetInParent)
+					
+					final int gapLen = child.fOffsetInParent - offset;
+					if (gapLen > 0)
 						addFileLocation(offset, child.fOffsetInParent - offset, locations);
+					
 					sequenceNumber= child.fSequenceNumber;
+					assert sequenceNumber < endSequenceNumber;
 				}
 
-				// let the child create locations
+				// Let the child create locations
 				final int childEndSequenceNumber= child.fSequenceNumber + child.getSequenceLength();
-				if (sequenceNumber < childEndSequenceNumber) {
-					if (child.collectLocations(sequenceNumber, endSequenceNumber - sequenceNumber, locations)) {
-						return true;
-					}
+				if (sequenceNumber < childEndSequenceNumber
+						|| (sequenceNumber == childEndSequenceNumber && !locations.isEmpty())) {
+					child.collectLocations(sequenceNumber, endSequenceNumber - sequenceNumber, locations);
 					sequenceNumber= childEndSequenceNumber;
+					if (sequenceNumber >= endSequenceNumber)
+						return;
 				}
 			}
 		}
 
-		// create the location after the last child.
+		// Create the location after the last child.
 		final int myEndNumber = fSequenceNumber + getSequenceLength();
 		final int offset= fSource.getLength() - (myEndNumber - sequenceNumber);
 		if (endSequenceNumber <= myEndNumber) {
 			addFileLocation(offset, endSequenceNumber - sequenceNumber, locations);
-			return true;
+		} else {
+			addFileLocation(offset, fSource.getLength() - offset, locations);
 		}
-		addFileLocation(offset, fSource.getLength() - offset, locations);
-		return false;
 	}
 	
 	private ArrayList<IASTNodeLocation> addFileLocation(int offset, int length, ArrayList<IASTNodeLocation> sofar) {
@@ -203,7 +212,7 @@ class LocationCtxContainer extends LocationCtx {
 			LocationCtx child= fChildren.get(middle);
 			int childSequenceNumber= child.fSequenceNumber;
 			if (beforeReplacedChars) {
-				childSequenceNumber-= child.fEndOffsetInParent - child.fOffsetInParent; 
+				childSequenceNumber -= child.fEndOffsetInParent - child.fOffsetInParent; 
 			}
 			if (childSequenceNumber <= sequenceNumber) {
 				lower= middle + 1;

@@ -43,11 +43,11 @@ public class ChangeConfigurationTests extends PDOMTestBase {
 		return suite(ChangeConfigurationTests.class);
 	}
 	
-	private void changeConfigRelations(IProject project, int option) throws CoreException {
-		ICProjectDescription pd= CCorePlugin.getDefault().getProjectDescription(project);
+	private void changeConfigRelations(ICProject project, int option) throws CoreException, InterruptedException {
+		ICProjectDescription pd= CCorePlugin.getDefault().getProjectDescription(project.getProject());
 		pd.setConfigurationRelations(option);
-		CCorePlugin.getDefault().setProjectDescription(project, pd);
-		CCorePlugin.getIndexManager().joinIndexer(8000, npm());
+		CCorePlugin.getDefault().setProjectDescription(project.getProject(), pd);
+		waitForIndexer(project);
 	}
 	
 	// Emulates ChangeConfigAction
@@ -79,7 +79,7 @@ public class ChangeConfigurationTests extends PDOMTestBase {
 		IFile file= TestSourceReader.createFile(cProject.getProject(), new Path("test.c"), contents[0].toString());
 		mj.join();
 		mj.dispose();
-		changeConfigRelations(cProject.getProject(), ICProjectDescriptionPreferences.CONFIGS_LINK_SETTINGS_AND_ACTIVE);
+		changeConfigRelations(cProject, ICProjectDescriptionPreferences.CONFIGS_LINK_SETTINGS_AND_ACTIVE);
 		
 		ICProjectDescription prjd = CCorePlugin.getDefault().getProjectDescriptionManager().getProjectDescription(project);
 		ICConfigurationDescription configuration1 = prjd.getConfigurations()[0];
@@ -104,14 +104,17 @@ public class ChangeConfigurationTests extends PDOMTestBase {
 		Pattern testFunc2 = Pattern.compile("testFunc2");
 		int i = 0, noTrials = 50;
 		do {
+			boolean isFirstConfig = i % 2 == 0;
 			IIndex index = CCorePlugin.getIndexManager().getIndex(cProject);
 			index.acquireReadLock();
-			boolean isFirstConfig = i % 2 == 0;
-			IBinding[] bindings = index.findBindings(isFirstConfig ? testFunc1 : testFunc2, true, IndexFilter.ALL, new NullProgressMonitor());
-			IBinding[] noBindings = index.findBindings(isFirstConfig ? testFunc2 : testFunc1, true, IndexFilter.ALL, new NullProgressMonitor());
-			assertEquals(1, bindings.length);
-			assertEquals(0, noBindings.length);
-			index.releaseReadLock();
+			try {
+				IBinding[] bindings = index.findBindings(isFirstConfig ? testFunc1 : testFunc2, true, IndexFilter.ALL, new NullProgressMonitor());
+				IBinding[] noBindings = index.findBindings(isFirstConfig ? testFunc2 : testFunc1, true, IndexFilter.ALL, new NullProgressMonitor());
+				assertEquals(1, bindings.length);
+				assertEquals(0, noBindings.length);
+			} finally {
+				index.releaseReadLock();
+			}
 			
 			String nextConfig = isFirstConfig ? secondConfigName : firstConfigName;
 			changeProjectConfiguration(project, nextConfig);

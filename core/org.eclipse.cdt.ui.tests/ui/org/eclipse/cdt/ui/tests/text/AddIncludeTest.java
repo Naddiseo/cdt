@@ -6,16 +6,16 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- * 	  Sergey Prigogin (Google) - initial API and implementation
- *    Markus Schorn (Wind River Systems)
+ * 	   Sergey Prigogin (Google) - initial API and implementation
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.ui.tests.text;
 
+import java.util.Collection;
 import java.util.ListResourceBundle;
 
 import junit.extensions.TestSetup;
 import junit.framework.Test;
-import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
 import org.eclipse.core.runtime.NullProgressMonitor;
@@ -27,17 +27,19 @@ import org.eclipse.cdt.core.dom.IPDOMManager;
 import org.eclipse.cdt.core.model.ICProject;
 import org.eclipse.cdt.core.model.IWorkingCopy;
 import org.eclipse.cdt.core.testplugin.CProjectHelper;
+import org.eclipse.cdt.core.testplugin.util.BaseTestCase;
 import org.eclipse.cdt.ui.CUIPlugin;
 import org.eclipse.cdt.ui.testplugin.EditorTestHelper;
 import org.eclipse.cdt.ui.testplugin.ResourceTestHelper;
 
-import org.eclipse.cdt.internal.ui.editor.AddIncludeOnSelectionAction;
+import org.eclipse.cdt.internal.ui.editor.AddIncludeAction;
 import org.eclipse.cdt.internal.ui.editor.CEditor;
+import org.eclipse.cdt.internal.ui.refactoring.includes.IElementSelector;
 
 /**
  * Tests the AddIncludeOnSelectionAction.
  */
-public class AddIncludeTest extends TestCase {
+public class AddIncludeTest extends BaseTestCase {
 	private static final String PROJECT= "AddIncludeTests";
 
 	private static final class EmptyBundle extends ListResourceBundle {
@@ -59,8 +61,7 @@ public class AddIncludeTest extends TestCase {
 			super.setUp();
 			fCProject= EditorTestHelper.createCProject(PROJECT, "resources/addInclude");
 			CCorePlugin.getIndexManager().setIndexerId(fCProject, IPDOMManager.ID_FAST_INDEXER);		
-			// Wait until the indexer is done
-			assertTrue(CCorePlugin.getIndexManager().joinIndexer(10000, new NullProgressMonitor()));
+			waitForIndexer(fCProject);
 		}
 
 		@Override
@@ -95,8 +96,20 @@ public class AddIncludeTest extends TestCase {
 	}
 
 	private void assertAddIncludeResult() throws Exception {
-		AddIncludeOnSelectionAction.sIsJUnitTest= true;
-		new AddIncludeOnSelectionAction(fEditor).run();
+		AddIncludeAction action = new AddIncludeAction(fEditor);
+		action.setAmbiguityResolver(new IElementSelector() {
+			@Override
+			public <T> T selectElement(Collection<T> elements) {
+				switch (elements.size()) {
+				case 0:
+					return null;
+				case 1:
+					return elements.iterator().next();
+				}
+				throw new RuntimeException("Ambiguous input: " + elements); //$NON-NLS-1$
+			}
+		});
+		action.run();
 
 		String file= createFileName(".expected");
 		String expected= ResourceTestHelper.read(file).toString();

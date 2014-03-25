@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2012 IBM Corporation and others.
+ * Copyright (c) 2005, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -12,6 +12,7 @@
  *     Andrew Ferguson (Symbian)
  *     Jens Elmenthaler - http://bugs.eclipse.org/173458 (camel case completion)
  *     Sergey Prigogin (Google)
+ *     Marc-Andre Laperle (Ericsson)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.c;
 
@@ -103,6 +104,7 @@ import org.eclipse.cdt.internal.core.dom.parser.ITypeContainer;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemBinding;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemType;
 import org.eclipse.cdt.internal.core.dom.parser.SizeofCalculator;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil;
 import org.eclipse.cdt.internal.core.parser.util.ContentAssistMatcherFactory;
 
 /**
@@ -649,7 +651,7 @@ public class CVisitor extends ASTQueries {
 			}
 		}
 
-		return new CBasicType(Kind.eInt, 0, expr);
+		return new CBasicType(Kind.eInt, IBasicType.IS_LONG, expr);
 	}
 
 	static IType get_SIZE_T(IASTExpression expr) {
@@ -727,8 +729,9 @@ public class CVisitor extends ASTQueries {
         boolean isFunction= false;
         if (parent instanceof IASTParameterDeclaration || parent.getPropertyInParent() == ICASTKnRFunctionDeclarator.FUNCTION_PARAMETER) {
         	IASTDeclarator fdtor = (IASTDeclarator) parent.getParent();
-        	if (ASTQueries.findTypeRelevantDeclarator(fdtor) instanceof IASTFunctionDeclarator) {
-        		IASTName n= ASTQueries.findInnermostDeclarator(fdtor).getName();
+			// Create parameter bindings only if the declarator declares a function
+        	if (ASTQueries.findTypeRelevantDeclarator(fdtor) == fdtor) {
+        		IASTName n = ASTQueries.findInnermostDeclarator(fdtor).getName();
         		IBinding temp = n.resolveBinding();
         		if (temp != null && temp instanceof CFunction) {
         			binding = ((CFunction) temp).resolveParameter(name);
@@ -1374,6 +1377,9 @@ public class CVisitor extends ASTQueries {
 		    for (int i = 0; i < parms.length; i++) {
 		    	parmTypes[i] = createType(parms[i].getDeclarator());
 		    }
+
+		    if (parmTypes.length == 1 && SemanticUtil.isVoidType(parmTypes[0]))
+				return IType.EMPTY_TYPE_ARRAY; // f(void) is the same as f()
 		    return parmTypes;
 		} else if (decltor instanceof ICASTKnRFunctionDeclarator) {
 			IASTName parms[] = ((ICASTKnRFunctionDeclarator) decltor).getParameterNames();
@@ -1526,13 +1532,17 @@ public class CVisitor extends ASTQueries {
     
 	private static IBinding[] findBindingForContentAssist(ICASTFieldDesignator fd, boolean isPrefix) {
 		IASTNode blockItem = getContainingBlockItem(fd);
-		
-		IASTNode parent= blockItem;
-		while (parent != null && !(parent instanceof IASTSimpleDeclaration))
-			parent= parent.getParent();
-		
-		if (parent instanceof IASTSimpleDeclaration) {
-			IASTSimpleDeclaration simpleDecl = (IASTSimpleDeclaration) parent;
+
+		IASTNode declarationNode = blockItem;
+		if (blockItem instanceof IASTDeclarationStatement && ((IASTDeclarationStatement) blockItem).getDeclaration() instanceof IASTSimpleDeclaration) {
+			declarationNode = ((IASTDeclarationStatement) blockItem).getDeclaration();
+		} else {
+			while (declarationNode != null && !(declarationNode instanceof IASTSimpleDeclaration))
+				declarationNode= declarationNode.getParent();
+		}
+
+		if (declarationNode instanceof IASTSimpleDeclaration) {
+			IASTSimpleDeclaration simpleDecl = (IASTSimpleDeclaration) declarationNode;
 			IBinding struct= null;
 			if (simpleDecl.getDeclSpecifier() instanceof IASTNamedTypeSpecifier) {
 				struct = ((IASTNamedTypeSpecifier) simpleDecl.getDeclSpecifier()).getName().resolveBinding();
@@ -1549,6 +1559,7 @@ public class CVisitor extends ASTQueries {
 				}
 			}
 		}
+
 		return null;
 	}
 	

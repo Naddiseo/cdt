@@ -1,12 +1,13 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2009 Wind River Systems, Inc. and others.
+ * Copyright (c) 2007, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Markus Schorn - initial API and implementation
+ *     Markus Schorn - initial API and implementation
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.scanner;
 
@@ -27,10 +28,12 @@ public class LexerTests extends BaseTestCase {
 	private static final LexerOptions NO_DOLLAR = new LexerOptions();
 	private static final LexerOptions NO_MINMAX = new LexerOptions();
 	private static final LexerOptions SLASH_PERCENT = new LexerOptions();
+	private static final LexerOptions CPP_OPTIONS = new LexerOptions();
 	static {
 		NO_DOLLAR.fSupportDollarInIdentifiers= false;
 		NO_MINMAX.fSupportMinAndMax= false;
 		SLASH_PERCENT.fSupportSlashPercentComments= true;
+		CPP_OPTIONS.fSupportRawStringLiterals= true;
 	}
 	
 	static String TRIGRAPH_REPLACES_CHARS= "#^[]|{}~\\";
@@ -41,7 +44,7 @@ public class LexerTests extends BaseTestCase {
 	}
 
 	private Lexer fLexer;
-	private TestLexerLog fLog= new TestLexerLog();
+	private final TestLexerLog fLog= new TestLexerLog();
 	private int fLastEndOffset;
 
 	public LexerTests() {
@@ -199,7 +202,29 @@ public class LexerTests extends BaseTestCase {
 		id("ab");
 		eof();
 	}
-	
+
+	public void testLessColonColon() throws Exception {
+		// 2.5-3
+		// <: is treated as digraph [
+		init("<::>"); 
+		token(IToken.tLBRACKET);
+		token(IToken.tRBRACKET);
+		eof();
+
+		// <: is treated as digraph [
+		init("<:::"); 
+		token(IToken.tLBRACKET);
+		token(IToken.tCOLONCOLON);
+		eof();
+
+		// <:: is treated as < and ::
+		init("<::A"); 
+		token(IToken.tLT);
+		token(IToken.tCOLONCOLON);
+		token(IToken.tIDENTIFIER);
+		eof();
+	}
+
 	public void testWindowsLineEnding() throws Exception {
 		init("\n\n");
 		nl(); nl(); eof();
@@ -576,51 +601,51 @@ public class LexerTests extends BaseTestCase {
 
 	public void testRawStringLiteral() throws Exception {
 		String lit= "abc0123\\\"'.:; \\\\ \n\"(";
-		init("R\"(" + lit + ")\"");
+		init("R\"(" + lit + ")\"", CPP_OPTIONS);
 		rstr("", lit);
 		eof();
 
-		init("LR\"(" + lit + ")\"");
+		init("LR\"(" + lit + ")\"", CPP_OPTIONS);
 		wrstr("", lit);
 		eof();
 
-		init("u8R\"(" + lit + ")\"");
+		init("u8R\"(" + lit + ")\"", CPP_OPTIONS);
 		utf8rstr("", lit);
 		eof();
 
-		init("uR\"(" + lit + ")\"");
+		init("uR\"(" + lit + ")\"", CPP_OPTIONS);
 		utf16rstr("", lit);
 		eof();
 		
-		init("UR\"(" + lit + ")\"");
+		init("UR\"(" + lit + ")\"", CPP_OPTIONS);
 		utf32rstr("", lit);
 		eof();
 
-		init("R\"ut");
+		init("R\"ut", CPP_OPTIONS);
 		problem(IProblem.SCANNER_UNBOUNDED_STRING, "R\"ut");
 		token(IToken.tSTRING, "R\"ut");
 		eof();
 
-		init("LR\"(ut");
+		init("LR\"(ut", CPP_OPTIONS);
 		problem(IProblem.SCANNER_UNBOUNDED_STRING, "LR\"(ut");
 		token(IToken.tLSTRING, "LR\"(ut");
 		eof();
 		
-		init("uR\"p()");
+		init("uR\"p()", CPP_OPTIONS);
 		problem(IProblem.SCANNER_UNBOUNDED_STRING, "uR\"p()");
 		token(IToken.tUTF16STRING, "uR\"p()");
 		eof();
 		
-		init("UR\"(ut");
+		init("UR\"(ut", CPP_OPTIONS);
 		problem(IProblem.SCANNER_UNBOUNDED_STRING, "UR\"(ut");
 		token(IToken.tUTF32STRING, "UR\"(ut");
 		eof();
 		
-		init("R\"+=(Text)=+\"Text)+=\"");
+		init("R\"+=(Text)=+\"Text)+=\"", CPP_OPTIONS);
 		rstr("+=", "Text)=+\"Text");
 		eof();
 		
-		init("UR uR LR u8R U8R\"\"");
+		init("UR uR LR u8R U8R\"\"", CPP_OPTIONS);
 		id("UR"); ws();
 		id("uR"); ws();
 		id("LR"); ws();
@@ -630,7 +655,7 @@ public class LexerTests extends BaseTestCase {
 	}
 		
 	public void testRawStringLiteralInInactiveCode() throws Exception {
-		init("start\n" + "inactive: Rbla\n" + "#end");
+		init("start\n" + "inactive: Rbla\n" + "#end", CPP_OPTIONS);
 		id("start");
 		nextDirective();
 		token(IToken.tPOUND);
@@ -638,7 +663,7 @@ public class LexerTests extends BaseTestCase {
 		eof();
 
 		// raw string containing a directive
-		init("start\n" + "inactive: uR\"(\n#endif\n)\"\n" + "#end");
+		init("start\n" + "inactive: uR\"(\n#endif\n)\"\n" + "#end", CPP_OPTIONS);
 		id("start");
 		nextDirective();
 		token(IToken.tPOUND);

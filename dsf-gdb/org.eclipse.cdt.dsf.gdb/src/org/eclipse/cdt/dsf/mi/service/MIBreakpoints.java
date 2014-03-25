@@ -7,6 +7,7 @@
  *
  * Contributors:
  *     Ericsson - Initial API and implementation 
+ *     Mike Wrighton (Mentor Graphics) - Formatting address for a watchpoint (Bug 376105)
  *******************************************************************************/
 
 package org.eclipse.cdt.dsf.mi.service;
@@ -20,6 +21,7 @@ import java.util.Map;
 
 import org.eclipse.cdt.dsf.concurrent.CountingRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
+import org.eclipse.cdt.dsf.concurrent.ImmediateExecutor;
 import org.eclipse.cdt.dsf.concurrent.ImmediateRequestMonitor;
 import org.eclipse.cdt.dsf.concurrent.Immutable;
 import org.eclipse.cdt.dsf.concurrent.RequestMonitor;
@@ -50,6 +52,7 @@ import org.eclipse.cdt.dsf.service.AbstractDsfService;
 import org.eclipse.cdt.dsf.service.DsfServiceEventHandler;
 import org.eclipse.cdt.dsf.service.DsfSession;
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.osgi.framework.BundleContext;
 
@@ -57,7 +60,7 @@ import org.osgi.framework.BundleContext;
  * Initial breakpoint service implementation.
  * Implements the IBreakpoints interface.
  */
-public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, IBreakpointsExtension
+public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, IBreakpointsExtension, IMIBreakpointPathAdjuster
 {
     /**
      * Breakpoint attributes markers used in the map parameters of insert/updateBreakpoint().
@@ -685,7 +688,7 @@ public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, I
 
 							@Override
 							protected void handleError() {
-								rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, BREAKPOINT_INSERTION_FAILURE, null));
+    							rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, BREAKPOINT_INSERTION_FAILURE, getStatus().getException()));
 								rm.done();
 							}
 						});
@@ -734,6 +737,11 @@ public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, I
 		boolean isRead    = (Boolean) getProperty(attributes, READ,    false);
 		boolean isWrite   = (Boolean) getProperty(attributes, WRITE,   false);
 
+		if (expression.length() > 0 && Character.isDigit(expression.charAt(0))) {
+			// If expression is an address, we need the '*' prefix.
+			expression = "*" + expression; //$NON-NLS-1$
+		}
+		
 		// The DataRequestMonitor for the add request
 		DataRequestMonitor<MIBreakInsertInfo> addWatchpointDRM =
 			new DataRequestMonitor<MIBreakInsertInfo>(getExecutor(), drm) {
@@ -775,7 +783,7 @@ public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, I
 
 				@Override
 	            protected void handleError() {
-               		drm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, WATCHPOINT_INSERTION_FAILURE, null));
+					drm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, WATCHPOINT_INSERTION_FAILURE, getStatus().getException()));
                		drm.done();
 				}
 			};
@@ -839,22 +847,18 @@ public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, I
 								// Flag the event
 								getSession().dispatchEvent(new BreakpointAddedEvent(dmc), getProperties());
 
-								// Break/Watch/Catchpoints that are disabled when set are delayed (we
-								// don't tell gdb about them until the user enables them). So, we shouldn't 
-								// be here if this is a disabled breakpoint
-								assert ((Boolean)getProperty(attributes, IS_ENABLED, true)) == true;
-								
-			               		// Condition, ignore count and cannot be specified at creation time.
+			               		// Condition, ignore count and state cannot be specified at creation time.
 			               		// Therefore, we have to update the catchpoint if any of these is present
 			               		Map<String,Object> delta = new HashMap<String,Object>();
 			               		delta.put(CONDITION,    getProperty(attributes, CONDITION, NULL_STRING));
 			               		delta.put(IGNORE_COUNT, getProperty(attributes, IGNORE_COUNT, 0 ));
+			               		delta.put(IS_ENABLED,   getProperty(attributes, IS_ENABLED, true));
 			               		modifyBreakpoint(dmc, delta, rm, false);
 							}
 
 							@Override
 							protected void handleError() {
-								rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, CATCHPOINT_INSERTION_FAILURE, null));
+    							rm.setStatus(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, REQUEST_FAILED, CATCHPOINT_INSERTION_FAILURE, getStatus().getException()));
 								rm.done();
 							}
 						});
@@ -917,26 +921,16 @@ public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, I
 			return;
 		}
 
-	    final Step deleteBreakpointStep = new Step() {
-    		@Override
-    		public void execute(final RequestMonitor rm) {
-    			// Queue the command
-    			fConnection.queueCommand(
-    					fCommandFactory.createMIBreakDelete(context, new int[] { reference }),
-    					new DataRequestMonitor<MIInfo>(getExecutor(), rm) {
-    						@Override
-    						protected void handleCompleted() {
-    							if (isSuccess()) {
-    								getSession().dispatchEvent(new BreakpointRemovedEvent(dmc), getProperties());
-    								contextBreakpoints.remove(reference);
-    							}
-    							rm.done();
-    						}
-    					});
-    		}
-	    };
-		
-		fRunControl.executeWithTargetAvailable(context, new Step[] { deleteBreakpointStep }, finalRm);
+		deleteBreakpointFromTarget(context, reference, new RequestMonitor(ImmediateExecutor.getInstance(), finalRm) {
+			@Override
+			protected void handleCompleted() {
+				if (isSuccess()) {
+					getSession().dispatchEvent(new BreakpointRemovedEvent(dmc), getProperties());
+					contextBreakpoints.remove(reference);
+				}
+				finalRm.done();
+			}
+		});
 	}
 
 	// -------------------------------------------------------------------------
@@ -1283,6 +1277,24 @@ public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, I
 		fRunControl.executeWithTargetAvailable(context, new Step[] { disableBreakpointStep }, finalRm);
 	}
 
+	/**
+	 * This method deletes the target breakpoint with the given reference number.
+	 * @since 4.2
+	 */
+	protected void deleteBreakpointFromTarget(final IBreakpointsTargetDMContext context, final int reference, RequestMonitor finalRm) {
+	    final Step deleteBreakpointStep = new Step() {
+    		@Override
+    		public void execute(final RequestMonitor rm) {
+    			// Queue the command
+    			fConnection.queueCommand(
+					fCommandFactory.createMIBreakDelete(context, new int[] { reference }), 
+					new DataRequestMonitor<MIInfo>(getExecutor(), rm));
+    		}
+	    };
+		
+		fRunControl.executeWithTargetAvailable(context, new Step[] { deleteBreakpointStep }, finalRm);
+	}
+
     /**
      * @nooverride This method is not intended to be re-implemented or extended by clients.
      * @noreference This method is not intended to be referenced by clients.
@@ -1338,5 +1350,37 @@ public class MIBreakpoints extends AbstractDsfService implements IBreakpoints, I
         }
         fBreakpointHitMap.remove(container);
     }
-    
+
+    /**
+     * Returns a breakpoint target context for given breakpoint number.
+	 * @since 4.2
+	 */
+    protected IBreakpointsTargetDMContext getBreakpointTargetContext(int reference) {
+    	for (IBreakpointsTargetDMContext context : fBreakpoints.keySet()) {
+    		Map<Integer, MIBreakpointDMData> map = fBreakpoints.get(context);
+    		if (map != null && map.keySet().contains(Integer.valueOf(reference))) {
+    			return context;
+    		}
+    	}
+    	return null;
+    }
+
+	/**
+	 * See https://bugs.eclipse.org/bugs/show_bug.cgi?id=232415
+	 * Returns the simple filename if running on Windows and [originalPath] is not an
+	 * absolute UNIX one. Otherwise, [originalPath] is returned
+	 * @since 4.2
+	 */
+	@Override
+	public String adjustDebuggerPath(String originalPath) {
+    	String result = originalPath;
+    	// Make it MinGW-specific
+    	if (Platform.getOS().startsWith("win")) { //$NON-NLS-1$
+        	if (!originalPath.startsWith("/")) { //$NON-NLS-1$
+        		originalPath = originalPath.replace('\\', '/');
+        		result = originalPath.substring(originalPath.lastIndexOf('/') + 1);
+        	}
+    	}
+    	return result;
+	}
 }

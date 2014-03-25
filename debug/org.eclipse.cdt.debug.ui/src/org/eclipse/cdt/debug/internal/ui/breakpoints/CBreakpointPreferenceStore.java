@@ -8,6 +8,7 @@
  * Contributors:
  *     QNX Software Systems - Initial API and implementation
  *     QNX Software Systems - Refactored to use platform implementation
+ *     Marc Khouzam (Ericsson) - Added support for Tracepoints (bug 376116)
  *******************************************************************************/
 package org.eclipse.cdt.debug.internal.ui.breakpoints;
 
@@ -22,7 +23,9 @@ import java.util.Set;
 
 import org.eclipse.cdt.debug.core.CDIDebugModel;
 import org.eclipse.cdt.debug.core.model.ICBreakpoint;
+import org.eclipse.cdt.debug.core.model.ICBreakpoint2;
 import org.eclipse.cdt.debug.core.model.ICLineBreakpoint2;
+import org.eclipse.cdt.debug.core.model.ICTracepoint;
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRunnable;
@@ -36,7 +39,8 @@ import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.jface.util.PropertyChangeEvent;
 
 /**
- * A preference store that presents the state of the properties of a C/C++ breakpoint. 
+ * A preference store that presents the state of the properties of a C/C++ breakpoint
+ * or Tracepoint. 
  */
 public class CBreakpointPreferenceStore implements IPersistentPreferenceStore {
 
@@ -131,18 +135,33 @@ public class CBreakpointPreferenceStore implements IPersistentPreferenceStore {
 						else if ( property.equals( ICBreakpoint.IGNORE_COUNT ) ) {
 							breakpoint.setIgnoreCount( getInt( ICBreakpoint.IGNORE_COUNT ) );
 						}
+						else if ( breakpoint instanceof ICTracepoint && property.equals( ICTracepoint.PASS_COUNT ) ) {
+							((ICTracepoint)breakpoint).setPassCount( getInt( ICTracepoint.PASS_COUNT ) );
+						}
 						else if ( property.equals( ICBreakpoint.CONDITION ) ) {
 							breakpoint.setCondition( getString( ICBreakpoint.CONDITION ) );
 						}
 						else if ( property.equals( IMarker.LINE_NUMBER ) ) {
-							// already workspace runnable, setting markers are safe
-							breakpoint.getMarker().setAttribute(IMarker.LINE_NUMBER, getInt(IMarker.LINE_NUMBER));
-							breakpoint.getMarker().setAttribute(ICLineBreakpoint2.REQUESTED_LINE, getInt(IMarker.LINE_NUMBER));
+							if (breakpoint instanceof ICLineBreakpoint2) {
+								// Must set the REQUESTED_LINE attribute first, or else the breakpoint
+								// message will be refreshed improperly
+								((ICLineBreakpoint2)breakpoint).setRequestedLine(getInt(IMarker.LINE_NUMBER));
+								((ICLineBreakpoint2)breakpoint).setInstalledLineNumber(getInt(IMarker.LINE_NUMBER));
+							} else {
+								// already workspace runnable, setting markers are safe
+								breakpoint.getMarker().setAttribute(IMarker.LINE_NUMBER, getInt(IMarker.LINE_NUMBER));
+								breakpoint.getMarker().setAttribute(ICLineBreakpoint2.REQUESTED_LINE, getInt(IMarker.LINE_NUMBER));
+							}
 						} else {
 						    // this allow set attributes contributed by other plugins
 							Object value = fProperties.get(property);
 							if ( value != null ) {
 								marker.setAttribute(property, value);
+								if (breakpoint instanceof ICBreakpoint2) {
+									// To be safe, refresh the breakpoint message as the property
+									// change might affect it.
+									((ICBreakpoint2)breakpoint).refreshMessage();
+								}
 							}
 						}
 					}

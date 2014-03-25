@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2012 Ericsson and others.
+ * Copyright (c) 2008, 2013 Ericsson and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,6 +10,7 @@
  *     Onur Akdemir (TUBITAK BILGEM-ITI) - Multi-process debugging (Bug 237306)
  *     John Dallaway - GDB 7.x MI thread details field ignored (Bug 325556)
  *     Marc Khouzam (Ericsson) - Make each thread an IDisassemblyDMContext (bug 352748) 
+ *     Andy Jin (QNX) - Not output thread osId as a string when it is null (Bug 397039)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.service;
 
@@ -774,13 +775,20 @@ public class GDBProcesses_7_0 extends AbstractDsfService
         	        		if (getData().getThreadList().length != 0) {
         	        			MIThread thread = getData().getThreadList()[0];
         	        			if (thread.getThreadId().equals(threadDmc.getId())) {
-        	        				String id = thread.getOsId();
+				        			String id = ""; //$NON-NLS-1$
+				        			if (thread.getOsId() != null) {
+				        				id = thread.getOsId();
+				        			}
         	        				// append thread details (if any) to the thread ID
         	        				// as for GDB 6.x with CLIInfoThreadsInfo#getOsId()
         	        				final String details = thread.getDetails();
         	        				if (details != null && details.length() > 0) {
-        	        					id += " (" + details + ")"; //$NON-NLS-1$ //$NON-NLS-2$
+        	        					if (!id.isEmpty()) id += " "; //$NON-NLS-1$
+        	        					id += "(" + details + ")"; //$NON-NLS-1$ //$NON-NLS-2$
         	        				}
+        	        				// We must indicate and empty id by using null
+        	        				if (id.isEmpty()) id = null;
+
         	        				threadData = new MIThreadDMData("", id); //$NON-NLS-1$
         	        			}
         	        		}
@@ -903,6 +911,19 @@ public class GDBProcesses_7_0 extends AbstractDsfService
 	    						// Store the fully formed container context so it can be returned to the caller.
 							    dataRm.setData(fContainerDmc);
 
+								// Initialize memory data for this process.
+								IGDBMemory memory = getServicesTracker().getService(IGDBMemory.class);
+								IMemoryDMContext memContext = DMContexts.getAncestorOfType(fContainerDmc, IMemoryDMContext.class);
+								if (memory == null || memContext == null) {
+									rm.done();
+									return;
+								}
+								memory.initializeMemoryData(memContext, rm);
+	    					}
+	    				},
+	    				new Step() { 
+	    					@Override
+	    					public void execute(RequestMonitor rm) {
 								// Start tracking breakpoints.
 								MIBreakpointsManager bpmService = getServicesTracker().getService(MIBreakpointsManager.class);
 								IBreakpointsTargetDMContext bpTargetDmc = DMContexts.getAncestorOfType(fContainerDmc, IBreakpointsTargetDMContext.class);
@@ -1222,16 +1243,9 @@ public class GDBProcesses_7_0 extends AbstractDsfService
 
 	@Override
 	public void terminate(IThreadDMContext thread, final RequestMonitor rm) {
-		// If we will terminate GDB as soon as the last inferior terminates, then let's
-		// just terminate GDB itself if this is the last inferior.  
-		// This is more robust since we actually monitor the success of terminating GDB.
-		// Also, for a core session, there is no concept of killing the inferior,
+		// For a core session, there is no concept of killing the inferior,
 		// so lets kill GDB
-   		if (fBackend.getSessionType() == SessionType.CORE ||
-   		   (fNumConnected == 1 && 
-   			Platform.getPreferencesService().getBoolean(GdbPlugin.PLUGIN_ID,
-				IGdbDebugPreferenceConstants.PREF_AUTO_TERMINATE_GDB,
-				true, null))) {
+   		if (fBackend.getSessionType() == SessionType.CORE) {
    			fCommandControl.terminate(rm);
    		} else if (thread instanceof IMIProcessDMContext) {
 			getDebuggingContext(

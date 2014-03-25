@@ -11,40 +11,46 @@
  *******************************************************************************/
 package org.eclipse.cdt.core.testplugin;
 
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 
-import org.eclipse.cdt.core.parser.IExtendedScannerInfo;
+import org.eclipse.cdt.core.parser.ExtendedScannerInfo;
 
-public class TestScannerInfo implements IExtendedScannerInfo {
-	private static final String[] EMPTY = new String[0];
-	private static final Map EMPTY_MAP = new HashMap(0);
+public class TestScannerInfo extends ExtendedScannerInfo {
+	private static final String[] EMPTY = {};
 	private String[] fIncludes;
 	private String[] fIncludeFiles;
 	private String[] fMacroFiles;
+	private Map<String, String> fDefinedSymbols;
 
-	public TestScannerInfo(String[] includes, String[] includeFiles, String[] macroFiles) {
+	public TestScannerInfo(String[] includes, String[] macroFiles, String[] includeFiles,
+			Map<String, String> definedSymbols) {
 		fIncludes= includes;
 		fIncludeFiles= includeFiles;
 		fMacroFiles= macroFiles;
+		fDefinedSymbols= definedSymbols;
 	}
+
 	@Override
 	public Map getDefinedSymbols() {
-		return EMPTY_MAP;
+		return fDefinedSymbols == null ? Collections.emptyMap() : fDefinedSymbols;
 	}
 
 	@Override
 	public String[] getIncludePaths() {
 		return fIncludes == null ? EMPTY : fIncludes;
 	}
+
 	@Override
 	public String[] getIncludeFiles() {
 		return fIncludeFiles == null ? EMPTY: fIncludeFiles;
 	}
+
 	@Override
 	public String[] getLocalIncludePath() {
 		return null;
 	}
+
 	@Override
 	public String[] getMacroFiles() {
 		return fMacroFiles == null ? EMPTY: fMacroFiles;

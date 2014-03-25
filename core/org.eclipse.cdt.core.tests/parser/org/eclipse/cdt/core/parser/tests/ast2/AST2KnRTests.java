@@ -1,14 +1,14 @@
 /*******************************************************************************
- *  Copyright (c) 2005, 2009 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2005, 2013 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
- *    IBM Rational Software - Initial API and implementation
- *    Anton Leherbauer (Wind River Systems)
- *    Markus Schorn (Wind River Systems)
+ * Contributors:
+ *     IBM Rational Software - Initial API and implementation
+ *     Anton Leherbauer (Wind River Systems)
+ *     Markus Schorn (Wind River Systems)
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.ast2;
 
@@ -59,7 +59,7 @@ import org.eclipse.cdt.internal.core.dom.parser.c.ICInternalBinding;
 /**
  * @author dsteffle
  */
-public class AST2KnRTests extends AST2BaseTest {
+public class AST2KnRTests extends AST2TestBase {
 	
     public AST2KnRTests() {
 	}
@@ -608,7 +608,7 @@ public class AST2KnRTests extends AST2BaseTest {
     	buffer.append("void f(int);        \n"); //$NON-NLS-1$
     	
 		IASTTranslationUnit tu = parse(buffer.toString(), ParserLanguage.C, true);
-        CNameCollector col = new CNameCollector();
+        NameCollector col = new NameCollector();
         tu.accept(col);
 
         IFunction def = (IFunction) col.getName(0).resolveBinding();
@@ -637,25 +637,24 @@ public class AST2KnRTests extends AST2BaseTest {
         assertTrue(stmts[3] instanceof IASTNullStatement);
     }
     
-    // see https://bugs.eclipse.org/bugs/show_bug.cgi?id=203050
+	//  typedef long time_t;
+	//
+	//  void (foo)(timep)
+	//  	const time_t * const timep;
+	//  {
+	//  	struct tm tmp;
+	//
+	//  	bar(timep, &tmp);
+	//  }
+	//
+	//  int (bar)(timep, tmp)
+	//  	const time_t * const	timep;
+	//  	struct tm * tmp;
+	//  {
+	//  	return 0;
+	//  }
     public void testBug203050() throws Exception {
-    	StringBuilder buffer = new StringBuilder();
-    	buffer.append("typedef long time_t;\n" +  //$NON-NLS-1$
-    			"\n" +  //$NON-NLS-1$
-    			"void (foo) (timep)\n" +  //$NON-NLS-1$
-    			"	const time_t * const timep;\n" +  //$NON-NLS-1$
-    			"{\n" +  //$NON-NLS-1$
-    			"	struct tm tmp;\n" +  //$NON-NLS-1$
-    			"	bar(timep, &tmp);\n" +  //$NON-NLS-1$
-    			"}\n" +  //$NON-NLS-1$
-    			"int (bar) (timep, tmp)\n" +  //$NON-NLS-1$
-    			"	const time_t * const	timep;\n" +  //$NON-NLS-1$
-    			"	struct tm * tmp;\n" +  //$NON-NLS-1$
-    			"{\n" +  //$NON-NLS-1$
-    			"	return 0;\n" +  //$NON-NLS-1$
-    			"}\n"); //$NON-NLS-1$
-    	
-		IASTTranslationUnit tu = parse(buffer.toString(), ParserLanguage.C, true, true);
+		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, true, true);
         assertTrue(tu.getDeclarations()[0] instanceof IASTSimpleDeclaration);
         assertTrue(tu.getDeclarations()[1] instanceof IASTFunctionDefinition);
         assertTrue(tu.getDeclarations()[2] instanceof IASTFunctionDefinition);

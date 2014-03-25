@@ -21,10 +21,10 @@ import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.ICPPASTCompletionContext;
+import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConstructorChainInitializer;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConstructorInitializer;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFunctionDefinition;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPBase;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPConstructor;
@@ -69,12 +69,8 @@ public class CPPASTConstructorChainInitializer extends ASTNode implements
 		CPPASTConstructorChainInitializer copy = new CPPASTConstructorChainInitializer();
 		copy.setMemberInitializerId(name == null ? null : name.copy(style));
 		copy.setInitializer(initializer == null ? null : initializer.copy(style));
-		copy.setOffsetAndLength(this);
 		copy.fIsPackExpansion = fIsPackExpansion;
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -174,8 +170,10 @@ public class CPPASTConstructorChainInitializer extends ASTNode implements
 				IBinding method= fdef.getDeclarator().getName().resolveBinding();
 				if (method instanceof ICPPMethod) {
 					ICPPClassType cls= ((ICPPMethod) method).getClassOwner();
-					for (ICPPBase base : cls.getBases()) {
-						result.put(base.getBaseClassSpecifierName().getSimpleID());
+					for (ICPPBase base : ClassTypeHelper.getBases(cls, fdef)) {
+						IType baseType= base.getBaseClassType();
+						if (baseType instanceof IBinding)
+							result.put(((IBinding) baseType).getNameCharArray());
 					}
 					return result;
 				}
@@ -238,16 +236,13 @@ public class CPPASTConstructorChainInitializer extends ASTNode implements
 	@Override
 	public IASTImplicitName[] getImplicitNames() {
 		if (implicitNames == null) {
-			ICPPConstructor ctor = CPPSemantics.findImplicitlyCalledConstructor(this);
+			IBinding ctor = CPPSemantics.findImplicitlyCalledConstructor(this);
 			if (ctor == null) {
 				implicitNames = IASTImplicitName.EMPTY_NAME_ARRAY;
 			} else {
 				CPPASTImplicitName ctorName = new CPPASTImplicitName(ctor.getNameCharArray(), this);
 				ctorName.setBinding(ctor);
-				IASTName id = name;
-				if (id instanceof ICPPASTQualifiedName) {
-					id = ((ICPPASTQualifiedName) id).getLastName();
-				}
+				IASTName id = name.getLastName();
 				ctorName.setOffsetAndLength((ASTNode) id);
 				implicitNames = new IASTImplicitName[] { ctorName };
 			}

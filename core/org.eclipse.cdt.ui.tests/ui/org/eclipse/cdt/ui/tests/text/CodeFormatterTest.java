@@ -723,7 +723,7 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//};
 
 	//int
-	//foo()
+	//foo ()
 	//{
 	//  try
 	//    {
@@ -733,7 +733,7 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//    }
 	//}
 	//float*
-	//bar();
+	//bar ();
 	//template<typename _CharT, typename _Traits>
 	//  class basic_ios : public ios_base
 	//  {
@@ -815,6 +815,17 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//typedef int int_;
 	//int_ const f(int_ const i);
 	public void testPreserveWhitespaceInParameterDecl_Bug228997() throws Exception {
+		assertFormatterResult();
+	}
+
+	//#include "header.h"  // comment
+	//
+	//class C;
+
+	//#include "header.h"  // comment
+	//
+	//class C;
+	public void testPreserveBlankLineAfterInclude() throws Exception {
 		assertFormatterResult();
 	}
 
@@ -1137,6 +1148,28 @@ public class CodeFormatterTest extends BaseUITestCase {
 		fOptions.put(DefaultCodeFormatterConstants.FORMATTER_TAB_CHAR, CCorePlugin.SPACE);
 		fOptions.put(DefaultCodeFormatterConstants.FORMATTER_ALIGNMENT_FOR_PARAMETERS_IN_METHOD_DECLARATION,
 				Integer.toString(Alignment.M_COMPACT_SPLIT | Alignment.M_INDENT_ON_COLUMN));
+		assertFormatterResult();
+	}
+
+	//struct moveonly {
+	//moveonly()=default;
+	//moveonly(const moveonly&)=delete;
+	//moveonly(moveonly&&)=default;
+	//moveonly& operator=(const moveonly&)=delete;
+	//moveonly& operator=(moveonly&&)=default;
+	//~moveonly()=default;
+	//};
+
+	//struct moveonly {
+	//    moveonly() = default;
+	//    moveonly(const moveonly&) = delete;
+	//    moveonly(moveonly&&) = default;
+	//    moveonly& operator=(const moveonly&) = delete;
+	//    moveonly& operator=(moveonly&&) = default;
+	//    ~moveonly() = default;
+	//};
+	public void testFunctionDefinitionWithoutBody() throws Exception {
+		fOptions.put(DefaultCodeFormatterConstants.FORMATTER_TAB_CHAR, CCorePlugin.SPACE);
 		assertFormatterResult();
 	}
 
@@ -1634,7 +1667,7 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//#define FOREVER for(;;)
 	//
 	//void
-	//foo()
+	//foo ()
 	//{
 	//  int i = 0;
 	//  if (true)
@@ -1650,8 +1683,8 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//      BLOCK
 	//  switch (i)
 	//    {
-	//  case 0:
-	//    BLOCK
+	//    case 0:
+	//      BLOCK
 	//    }
 	//}
 	public void testCompoundStatementAsMacroGNU_Bug244928() throws Exception {
@@ -1743,7 +1776,6 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//	}
 	//#endif
 	//}
-
 	public void testMacroAsFunctionArguments_Bug253039() throws Exception {
 		assertFormatterResult();
 	}
@@ -1876,6 +1908,33 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//};
 	public void testMacroDeclaration() throws Exception {
 		fOptions.put(DefaultCodeFormatterConstants.FORMATTER_TAB_CHAR, CCorePlugin.SPACE);
+		assertFormatterResult();
+	}
+
+	//#define MACRO(a,b) f(a,b)
+	//void f(bool b, int i);
+	//int function_with_loooooooooooooooong_name();
+	//int another_function_with_loooooong_name();
+	//
+	//void test(){
+	//    MACRO("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"=="bbbbbbbbbbbbbbbbbbbbbbbbbbb",function_with_loooooooooooooooong_name()+another_function_with_loooooong_name());
+	//}
+
+	//#define MACRO(a,b) f(a,b)
+	//void f(bool b, int i);
+	//int function_with_loooooooooooooooong_name();
+	//int another_function_with_loooooong_name();
+	//
+	//void test() {
+	//    MACRO("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	//                  == "bbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	//          function_with_loooooooooooooooong_name()
+	//                  + another_function_with_loooooong_name());
+	//}
+	public void testMacroArguments() throws Exception {
+		fOptions.put(DefaultCodeFormatterConstants.FORMATTER_TAB_CHAR, CCorePlugin.SPACE);
+		fOptions.put(DefaultCodeFormatterConstants.FORMATTER_ALIGNMENT_FOR_ARGUMENTS_IN_METHOD_INVOCATION,
+				Integer.toString(Alignment.M_COMPACT_SPLIT | Alignment.M_INDENT_ON_COLUMN));
 		assertFormatterResult();
 	}
 
@@ -2716,13 +2775,13 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//}
 
 	//void
-	//foo()
+	//foo ()
 	//{
 	//  int i;
 	//  for (i = 0; i < 10; i++)
 	//    {
 	//    }
-	//  foo();
+	//  foo ();
 	//}
 	public void testForLoopGNU_Bug351399() throws Exception {
 		fOptions.putAll(DefaultCodeFormatterOptions.getGNUSettings().getMap());
@@ -2870,7 +2929,7 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//void f() {
 	//	if (1) {
 	//	}
-	//	IF(1>0);
+	//	IF(1 > 0);
 	//}
 	public void testMacroAfterCompoundStatement_Bug356690() throws Exception {
 		assertFormatterResult();
@@ -2915,6 +2974,29 @@ public class CodeFormatterTest extends BaseUITestCase {
 	//	}
 	//}
 	public void testDoWhileInMacro_Bug359658() throws Exception {
+		assertFormatterResult();
+	}
+	
+	//#define macro(x) NS::convert(x)
+	//namespace NS {
+	//int convert(int arg) {
+	//return arg;
+	//}
+	//}
+	//int main() {
+	//int i = macro(42);
+	//}
+	
+	//#define macro(x) NS::convert(x)
+	//namespace NS {
+	//int convert(int arg) {
+	//	return arg;
+	//}
+	//}
+	//int main() {
+	//	int i = macro(42);
+	//}
+	public void testFunctionMacroInInitializerExpression() throws Exception {
 		assertFormatterResult();
 	}
 }

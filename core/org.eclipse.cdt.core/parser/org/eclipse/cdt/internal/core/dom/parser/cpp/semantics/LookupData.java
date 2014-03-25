@@ -20,7 +20,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.ast.ASTNodeProperty;
+import org.eclipse.cdt.core.dom.ast.DOMException;
 import org.eclipse.cdt.core.dom.ast.IASTCompositeTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTDeclSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
@@ -42,6 +44,7 @@ import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IScope;
 import org.eclipse.cdt.core.dom.ast.IScope.ScopeLookupData;
 import org.eclipse.cdt.core.dom.ast.IType;
+import org.eclipse.cdt.core.dom.ast.IVariable;
 import org.eclipse.cdt.core.dom.ast.c.ICASTFieldDesignator;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTCompositeTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTCompositeTypeSpecifier.ICPPASTBaseSpecifier;
@@ -51,6 +54,7 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTElaboratedTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTExplicitTemplateInstantiation;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFieldReference;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTInitializerClause;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNameSpecifier;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTQualifiedName;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateDeclaration;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTTemplateId;
@@ -61,7 +65,6 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassScope;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPNamespaceScope;
-import org.eclipse.cdt.core.dom.ast.cpp.ICPPParameterPackType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateArgument;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPUsingDeclaration;
 import org.eclipse.cdt.core.parser.util.ArrayUtil;
@@ -76,7 +79,7 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPEvaluation;
  * Context data for IASTName lookup
  */
 public class LookupData extends ScopeLookupData {
-	final public ICPPTemplateArgument[] fTemplateArguments;
+	public ICPPTemplateArgument[] fTemplateArguments;
 	public Map<ICPPNamespaceScope, List<ICPPNamespaceScope>> usingDirectives= Collections.emptyMap();
 	
 	/** Used to ensure we don't visit things more than once. */
@@ -116,11 +119,15 @@ public class LookupData extends ScopeLookupData {
 		if (n == null)
 			throw new IllegalArgumentException();
 
+		ICPPTemplateArgument[] args = null;
 		if (n instanceof ICPPASTTemplateId) {
-			fTemplateArguments= CPPTemplates.createTemplateArgumentArray((ICPPASTTemplateId) n);
-		} else {
-			fTemplateArguments= null;
+			try {
+				args= CPPTemplates.createTemplateArgumentArray((ICPPASTTemplateId) n);
+			} catch (DOMException e) {
+				CCorePlugin.log(e);
+			}
 		}
+		fTemplateArguments= args;
 		configureWith(n);
 	}
 	
@@ -142,11 +149,7 @@ public class LookupData extends ScopeLookupData {
 		
 		IASTNode parent = tn.getParent();
 		IASTNode nameParent= parent;
-		if (parent instanceof ICPPASTBaseSpecifier
-				|| parent instanceof ICPPASTElaboratedTypeSpecifier
-				|| parent instanceof ICPPASTCompositeTypeSpecifier) {
-			typesOnly= true;
-		} else if (parent instanceof ICPPASTQualifiedName) {
+		if (parent instanceof ICPPASTQualifiedName) {
 			final ICPPASTQualifiedName qn = (ICPPASTQualifiedName) parent;
 			if (qn.getLastName() != tn) {
 				// For resolving template id ambiguities we need to consider non-types.
@@ -156,17 +159,21 @@ public class LookupData extends ScopeLookupData {
 			} else {
 				nameParent= parent.getParent();
 			}
-			final IASTName[] names = qn.getNames();
+			final ICPPASTNameSpecifier[] qualifier = qn.getQualifier();
 			if (qn.isFullyQualified()) {
 				qualified= true;
-			} else if (names.length > 0) {
-				if (names[0] != tn) {
+			} else if (qualifier.length > 0) {
+				if (qualifier[0] != tn) {
 					qualified= true;
 				} 
 			}
 		} 
 		
-		if (nameParent instanceof ICPPASTUsingDeclaration) {
+		if (nameParent instanceof ICPPASTBaseSpecifier
+				|| nameParent instanceof ICPPASTElaboratedTypeSpecifier
+				|| nameParent instanceof ICPPASTCompositeTypeSpecifier) {
+			typesOnly= true;
+		} else if (nameParent instanceof ICPPASTUsingDeclaration) {
 			forUsingDeclaration= true;
 		} else if (nameParent instanceof IASTDeclarator) {
 			fDeclarator= (IASTDeclarator) nameParent;
@@ -330,12 +337,12 @@ public class LookupData extends ScopeLookupData {
         return false;
     }
 
-    public boolean hasTypeOrMemberFunctionResult() {
+    public boolean hasTypeOrMemberFunctionOrVariableResult() {
     	if (foundItems == null)
     		return false;
     	if (foundItems instanceof Object[]) {
     		for (Object item : (Object[]) foundItems) {
-    			if (item instanceof ICPPMethod || item instanceof IType) {
+    			if (item instanceof ICPPMethod || item instanceof IType || item instanceof IVariable) {
     				return true;
     			}
     		}
@@ -351,6 +358,15 @@ public class LookupData extends ScopeLookupData {
     		fImpliedObjectType= determineImpliedObjectType();
     	}
     	return fImpliedObjectType;
+    }
+    
+    /**
+     * Explicitly set the implied object type.
+     * This is for use in cases where implied object type cannot
+     * be determined automatically because there is no lookup name.
+     */
+    public void setImpliedObjectType(IType impliedObjectType) {
+    	fImpliedObjectType = impliedObjectType;
     }
 
 	private IType determineImpliedObjectType() {
@@ -457,12 +473,6 @@ public class LookupData extends ScopeLookupData {
 	public void setFunctionArguments(boolean containsImpliedObject, ICPPEvaluation... exprs) {
 		argsContainImpliedObject= containsImpliedObject;
 		functionArgs= exprs;
-		for (ICPPEvaluation e : exprs) {
-			if (e.isTypeDependent()) {
-				setIgnorePointOfDeclaration(true);
-				break;
-			}
-		}
 	}
 
 	public void setFunctionArguments(boolean containsImpliedObject, IASTInitializerClause... exprs) {
@@ -511,7 +521,7 @@ public class LookupData extends ScopeLookupData {
 		int count= 0;
 		if (functionArgs != null) {
 			for (ICPPEvaluation arg : functionArgs) {
-				if (arg instanceof EvalFixed && arg.getTypeOrFunctionSet(null) instanceof ICPPParameterPackType)
+				if (arg instanceof EvalParameterPack)
 					count++;
 			}
 		}
@@ -541,5 +551,16 @@ public class LookupData extends ScopeLookupData {
 			}
 		}
 		return IBinding.EMPTY_BINDING_ARRAY;
+	}
+	
+	public boolean ignoreRecursionResolvingBindings() {
+		// When name lookup is performed during template instantiation
+		// rather than for an AST name, infinite recursion can sometimes
+		// result when a binding with a given name uses the same name
+		// in its definition (e.g. "typedef C::name name" where C is
+		// the current (template) class). In such cases, we want to
+		// ignore the resulting IRecursionResolvingBindings and allow
+		// name lookup to proceed to outer (or base class) scopes.
+		return getLookupName() == null;
 	}
 }

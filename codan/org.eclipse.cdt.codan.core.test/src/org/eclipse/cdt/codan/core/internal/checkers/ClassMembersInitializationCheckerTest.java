@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2012 Anton Gorenkov and others
+ * Copyright (c) 2011, 2013 Anton Gorenkov and others
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,8 @@
  * Contributors:
  *     Anton Gorenkov   - initial implementation
  *     Marc-Andre Laperle
+ *     Nathan Ridge
+ *     Danny Ferreira
  *******************************************************************************/
 package org.eclipse.cdt.codan.core.internal.checkers;
 
@@ -500,7 +502,7 @@ public class ClassMembersInitializationCheckerTest extends CheckerTestCase {
 	// C::C() {
 	//    initObject();
 	// }
-	public void testBug368419_methodDeclarationInOtherFile() throws Exception {
+	public void testMethodDeclarationInOtherFile_368419() throws Exception {
 		CharSequence[] code = getContents(2);
 		loadcode(code[0].toString());
 		loadcode(code[1].toString());
@@ -514,7 +516,7 @@ public class ClassMembersInitializationCheckerTest extends CheckerTestCase {
 	//    *this = toBeCopied;
 	//  };
 	//};
-	public void testBug368420_assignThis() throws Exception {
+	public void testAssignThis_368420() throws Exception {
 		loadCodeAndRun(getAboveComment());
 		checkNoErrors();
 	}
@@ -525,7 +527,7 @@ public class ClassMembersInitializationCheckerTest extends CheckerTestCase {
 	//    *(&(*this)) = toBeCopied;
 	//  };
 	//};
-	public void testBug368420_assignThisUnaryExpressions() throws Exception {
+	public void testAssignThisUnaryExpressions_368420() throws Exception {
 		loadCodeAndRun(getAboveComment());
 		checkNoErrors();
 	}
@@ -536,7 +538,7 @@ public class ClassMembersInitializationCheckerTest extends CheckerTestCase {
 	//    this = toBeCopied;
 	//  };
 	//};
-	public void testBug368420_assignThisNonLValue() throws Exception {
+	public void testAssignThisNonLValue_368420() throws Exception {
 		loadCodeAndRun(getAboveComment());
 		checkErrorLines(3);
 	}
@@ -549,7 +551,7 @@ public class ClassMembersInitializationCheckerTest extends CheckerTestCase {
 	//    temp = *(&(*this)) = toBeCopied;
 	//  };
 	//};
-	public void testBug368420_assignThisMultiBinaryExpressions() throws Exception {
+	public void testAssignThisMultiBinaryExpressions_368420() throws Exception {
 		loadCodeAndRun(getAboveComment());
 		checkNoErrors();
 	}
@@ -570,11 +572,79 @@ public class ClassMembersInitializationCheckerTest extends CheckerTestCase {
 	//    const A<valueT>& obj;
 	//    B(const A<valueT>& o) : obj(o) {}
 	//};
-	public void testBug368611_templatePartialSpecialization() throws Exception {
+	public void testTemplatePartialSpecialization_368611() throws Exception {
 		CharSequence[] code = getContents(2);
 		loadcode(code[0].toString());
 		loadcode(code[1].toString());
 		runOnProject();
+		checkNoErrors();
+	}
+
+	//	struct S {
+	//	    int i;
+	//	    S() = default;
+	//	};
+	public void testDefaultConstructor_365498() throws Exception {
+		loadCodeAndRun(getAboveComment());
+		checkErrorLine(3);
+	}
+
+	//	struct S {
+	//	    int i;
+	//
+	//	    S(S&) = default;
+	//	    S(const S&) = default;
+	//	    S(volatile S&) = default;
+	//	    S(const volatile S&) = default;
+	//	    S(S&&) = default;
+	//	    S(const S&&) = default;
+	//	    S(volatile S&&) = default;
+	//	    S(const volatile S&&) = default;
+	//	};
+	public void testDefaultCopyOrMoveConstructor_395018() throws Exception {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	template <typename T>
+	//	struct S {
+	//	    int i;
+	//
+	//	    S(const S&) = default;
+	//	    S(S&&) = default;
+	//	};
+	public void testDefaultCopyOrMoveConstructorInTemplate_408303() throws Exception {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	struct A {
+	//	    A(int n) : waldo(n) {}
+	//	    A() : A(42) {}
+	//	    int waldo;
+	//	};
+	public void testDelegatingConstructor_402607() throws Exception {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	struct A {
+	//      typedef A B;
+	//	    A(int n) : waldo(n) {}
+	//	    A() : B(42) {}
+	//	    int waldo;
+	//	};
+	public void testDelegatingConstructorTypedef_402607() throws Exception {
+		loadCodeAndRun(getAboveComment());
+		checkNoErrors();
+	}
+
+	//	struct A {
+	//	    A() {};
+	//	    int x = 0;
+	//	};
+	public void testNonstaticDataMemberInitializer_400673() throws Exception {
+		loadCodeAndRun(getAboveComment());
 		checkNoErrors();
 	}
 }

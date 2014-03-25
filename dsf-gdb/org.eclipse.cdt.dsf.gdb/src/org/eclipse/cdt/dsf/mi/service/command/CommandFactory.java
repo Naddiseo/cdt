@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2012 QNX Software Systems and others.
+ * Copyright (c) 2000, 2014 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -18,6 +18,12 @@
  *     Marc Khouzam (Ericsson) - New method for new MIGDBSetPythonPrintStack (Bug 367788)
  *     Mathias Kunter - New methods for handling different charsets (Bug 370462)
  *     Anton Gorenkov - A preference to use RTTI for variable types determination (Bug 377536)
+ *     Vladimir Prus (Mentor Graphics) - Support for -info-os (Bug 360314)
+ *     John Dallaway - Support for -data-write-memory-bytes (Bug 387793)
+ *     Alvaro Sanchez-Leon (Ericsson) - Make Registers View specific to a frame (Bug (323552)
+ *     Philippe Gil (AdaCore) - Add show/set language CLI commands (Bug 421541)
+ *     Dmitry Kozlov (Mentor Graphics) - New trace-related methods (Bug 390827)
+ *     Alvaro Sanchez-Leon (Ericsson AB) - [Memory] Support 16 bit addressable size (Bug 426730)
  *******************************************************************************/
 
 package org.eclipse.cdt.dsf.mi.service.command;
@@ -26,6 +32,7 @@ import org.eclipse.cdt.dsf.datamodel.IDMContext;
 import org.eclipse.cdt.dsf.debug.service.IBreakpoints.IBreakpointsTargetDMContext;
 import org.eclipse.cdt.dsf.debug.service.IDisassembly.IDisassemblyDMContext;
 import org.eclipse.cdt.dsf.debug.service.IExpressions.IExpressionDMContext;
+import org.eclipse.cdt.dsf.debug.service.IMemory.IMemoryDMContext;
 import org.eclipse.cdt.dsf.debug.service.IModules.IModuleDMContext;
 import org.eclipse.cdt.dsf.debug.service.IModules.ISymbolDMContext;
 import org.eclipse.cdt.dsf.debug.service.IRunControl.IContainerDMContext;
@@ -37,10 +44,12 @@ import org.eclipse.cdt.dsf.gdb.service.IGDBTraceControl.ITraceRecordDMContext;
 import org.eclipse.cdt.dsf.gdb.service.IGDBTraceControl.ITraceTargetDMContext;
 import org.eclipse.cdt.dsf.mi.service.IMIContainerDMContext;
 import org.eclipse.cdt.dsf.mi.service.IMIExecutionDMContext;
+import org.eclipse.cdt.dsf.mi.service.command.commands.CLIAddressableSize;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIAttach;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLICatch;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIDetach;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIExecAbort;
+import org.eclipse.cdt.dsf.mi.service.command.commands.CLIInfoBreak;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIInfoProgram;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIInfoSharedLibrary;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIInfoThreads;
@@ -49,6 +58,7 @@ import org.eclipse.cdt.dsf.mi.service.command.commands.CLIMaintenance;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIPasscount;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIRecord;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIRemoteGet;
+import org.eclipse.cdt.dsf.mi.service.command.commands.CLIShowEndian;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLISource;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLIThread;
 import org.eclipse.cdt.dsf.mi.service.command.commands.CLITrace;
@@ -72,6 +82,7 @@ import org.eclipse.cdt.dsf.mi.service.command.commands.MIDataListRegisterValues;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIDataReadMemory;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIDataReadMemoryBytes;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIDataWriteMemory;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIDataWriteMemoryBytes;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIEnablePrettyPrinting;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIEnvironmentCD;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIEnvironmentDirectory;
@@ -102,9 +113,12 @@ import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetArgs;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetAutoSolib;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetBreakpointPending;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetCharset;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetCircularTraceBuffer;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetDetachOnFork;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetDisconnectedTracing;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetEnv;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetHostCharset;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetLanguage;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetNonStop;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetPagination;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetPrintObject;
@@ -116,8 +130,12 @@ import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetSolibSearchPath;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetTargetAsync;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetTargetCharset;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetTargetWideCharset;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetTraceNotes;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBSetTraceUser;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBShowExitCode;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIGDBShowLanguage;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIInferiorTTYSet;
+import org.eclipse.cdt.dsf.mi.service.command.commands.MIInfoOs;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIInterpreterExec;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIInterpreterExecConsole;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIInterpreterExecConsoleKill;
@@ -162,10 +180,13 @@ import org.eclipse.cdt.dsf.mi.service.command.commands.MIVarSetUpdateRange;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIVarShowAttributes;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIVarShowFormat;
 import org.eclipse.cdt.dsf.mi.service.command.commands.MIVarUpdate;
+import org.eclipse.cdt.dsf.mi.service.command.output.CLIAddressableSizeInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.CLICatchInfo;
+import org.eclipse.cdt.dsf.mi.service.command.output.CLIInfoBreakInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.CLIInfoProgramInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.CLIInfoSharedLibraryInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.CLIInfoThreadsInfo;
+import org.eclipse.cdt.dsf.mi.service.command.output.CLIShowEndianInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.CLIThreadInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.CLITraceDumpInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.CLITraceInfo;
@@ -180,7 +201,9 @@ import org.eclipse.cdt.dsf.mi.service.command.output.MIDataReadMemoryBytesInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIDataReadMemoryInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIDataWriteMemoryInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIGDBShowExitCodeInfo;
+import org.eclipse.cdt.dsf.mi.service.command.output.MIGDBShowLanguageInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIInfo;
+import org.eclipse.cdt.dsf.mi.service.command.output.MIInfoOsInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIListFeaturesInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIListThreadGroupsInfo;
 import org.eclipse.cdt.dsf.mi.service.command.output.MIStackInfoDepthInfo;
@@ -216,6 +239,13 @@ import org.eclipse.cdt.dsf.mi.service.command.output.MIVarUpdateInfo;
  */
 public class CommandFactory {
 
+	/**
+	 * @since 4.4
+	 */
+	public ICommand<CLIAddressableSizeInfo> createCLIAddressableSize(IMemoryDMContext ctx) {
+		return new CLIAddressableSize(ctx);
+	}
+
 	public ICommand<MIInfo> createCLIAttach(IDMContext ctx, int pid) {
 		return new CLIAttach(ctx, pid);
 	}
@@ -234,6 +264,16 @@ public class CommandFactory {
 
 	public ICommand<MIInfo> createCLIExecAbort(ICommandControlDMContext ctx) {
 		return new CLIExecAbort(ctx);
+	}
+
+	/** @since 4.2 */
+	public ICommand<CLIInfoBreakInfo> createCLIInfoBreak(IDMContext ctx) {
+		return new CLIInfoBreak(ctx);
+	}
+	
+	/** @since 4.2 */
+	public ICommand<CLIInfoBreakInfo> createCLIInfoBreak(IDMContext ctx, int bpRef) {
+		return new CLIInfoBreak(ctx, bpRef);
 	}
 
 	public ICommand<CLIInfoProgramInfo> createCLIInfoProgram(IContainerDMContext ctx) {
@@ -272,6 +312,13 @@ public class CommandFactory {
 	/** @since 4.1 */
 	public ICommand<MIInfo> createCLIRemoteGet(ICommandControlDMContext ctx, String remoteFile, String localFile) {
 		return new CLIRemoteGet(ctx, remoteFile, localFile);
+	}
+
+	/**
+	 * @since 4.2
+	 */
+	public ICommand<CLIShowEndianInfo> createCLIShowEndian(IMemoryDMContext ctx) {
+		return new CLIShowEndian(ctx);
 	}
 
 	public ICommand<MIInfo> createCLISource(ICommandControlDMContext ctx, String file) {
@@ -402,11 +449,27 @@ public class CommandFactory {
 		return new MIDataListRegisterNames(ctx, regnos);
 	}
 
+	@Deprecated
 	public ICommand<MIDataListRegisterValuesInfo> createMIDataListRegisterValues(IMIExecutionDMContext ctx, int fmt) {
 		return new MIDataListRegisterValues(ctx, fmt);
 	}
 
+	@Deprecated
 	public ICommand<MIDataListRegisterValuesInfo> createMIDataListRegisterValues(IMIExecutionDMContext ctx, int fmt, int [] regnos) {
+		return new MIDataListRegisterValues(ctx, fmt, regnos);
+	}
+	
+	/**
+	 * @since 4.3
+	 */
+	public ICommand<MIDataListRegisterValuesInfo> createMIDataListRegisterValues(IFrameDMContext ctx, int fmt) {
+		return new MIDataListRegisterValues(ctx, fmt);
+	}
+
+	/**
+	 * @since 4.3
+	 */
+	public ICommand<MIDataListRegisterValuesInfo> createMIDataListRegisterValues(IFrameDMContext ctx, int fmt, int [] regnos) {
 		return new MIDataListRegisterValues(ctx, fmt, regnos);
 	}
 
@@ -422,9 +485,22 @@ public class CommandFactory {
 		return new MIDataReadMemoryBytes(ctx, address, offset, num_bytes);
 	}
 
+	/**
+	 * @since 4.4
+	 */
+	public ICommand<MIDataReadMemoryBytesInfo> createMIDataReadMemoryBytes(IDMContext ctx, String address, 
+			long offset, int word_count, int word_size) {
+		return new MIDataReadMemoryBytes(ctx, address, offset, word_count, word_size);
+	}
+	
 	public ICommand<MIDataWriteMemoryInfo> createMIDataWriteMemory(IDMContext ctx, long offset, String address, 
 			int wordFormat, int wordSize, String value) {
 		return new MIDataWriteMemory(ctx, offset, address, wordFormat, wordSize, value);
+	}
+
+	/** @since 4.2 */
+	public ICommand<MIInfo> createMIDataWriteMemoryBytes(IDMContext ctx, String address, byte[] contents) {
+		return new MIDataWriteMemoryBytes(ctx, address, contents);
 	}
 
 	/** @since 4.0 */
@@ -631,10 +707,20 @@ public class CommandFactory {
 		return new MIGDBSetCharset(ctx, charset);
 	}
 
+	/** @since 4.4 */
+	public ICommand<MIInfo> createMIGDBSetCircularTraceBuffer(ITraceTargetDMContext ctx, boolean useCircularBuffer) {
+		return new MIGDBSetCircularTraceBuffer(ctx, useCircularBuffer);
+	}
+	
 	/** @since 4.0 */
 	public ICommand<MIInfo> createMIGDBSetDetachOnFork(ICommandControlDMContext ctx, boolean detach) {
 		return new MIGDBSetDetachOnFork(ctx, detach);
-	}	
+	}
+
+	/** @since 4.4 */
+	public ICommand<MIInfo> createMIGDBSetDisconnectedTracing(ITraceTargetDMContext ctx, boolean disconnectedTracing) {
+		return new MIGDBSetDisconnectedTracing(ctx, disconnectedTracing);
+	}
 
 	public ICommand<MIInfo> createMIGDBSetEnv(ICommandControlDMContext dmc, String name) {
 		return new MIGDBSetEnv(dmc, name);
@@ -647,6 +733,11 @@ public class CommandFactory {
 	/** @since 4.1 */
 	public ICommand<MIInfo> createMIGDBSetHostCharset(ICommandControlDMContext ctx, String hostCharset) {
 		return new MIGDBSetHostCharset(ctx, hostCharset);
+	}
+
+	/** @since 4.3 */
+	public ICommand<MIInfo> createMIGDBSetLanguage(IDMContext ctx, String language) {
+		return new MIGDBSetLanguage(ctx, language);
 	}
 
 	public ICommand<MIInfo> createMIGDBSetNonStop(ICommandControlDMContext ctx, boolean isSet) {
@@ -699,8 +790,23 @@ public class CommandFactory {
 		return new MIGDBSetTargetAsync(ctx, isSet);
 	}
 
+	/** @since 4.4 */
+	public ICommand<MIInfo> createMIGDBSetTraceNotes(ITraceTargetDMContext ctx, String notes) {
+		return new MIGDBSetTraceNotes(ctx, notes);
+	}
+
+	/** @since 4.4*/
+	public ICommand<MIInfo> createMIGDBSetTraceUser(ITraceTargetDMContext ctx, String userName) {
+		return new MIGDBSetTraceUser(ctx, userName);
+	}
+
 	public ICommand<MIGDBShowExitCodeInfo> createMIGDBShowExitCode(ICommandControlDMContext ctx) {
 		return new MIGDBShowExitCode(ctx);
+	}
+
+	/** @since 4.3 */
+	public ICommand<MIGDBShowLanguageInfo> createMIGDBShowLanguage(IDMContext ctx) {
+		return new MIGDBShowLanguage(ctx);
 	}
 
 	/** @since 4.0 */
@@ -708,6 +814,20 @@ public class CommandFactory {
 		return new MIInferiorTTYSet(dmc, tty);
 	}
 
+	/**
+	 * @since 4.2
+	 */
+	public ICommand<MIInfoOsInfo> createMIInfoOS(IDMContext ctx) {
+		return new MIInfoOs(ctx);
+	}
+
+	/**
+	 * @since 4.2
+	 */
+	public ICommand<MIInfoOsInfo> createMIInfoOS(IDMContext ctx, String resourceClass) {
+		return new MIInfoOs(ctx, resourceClass);
+	}
+	
 	public ICommand<MIInfo> createMIInterpreterExec(IDMContext ctx, String interpreter, String cmd) {
 		return new MIInterpreterExec<MIInfo>(ctx, interpreter, cmd);
 	}

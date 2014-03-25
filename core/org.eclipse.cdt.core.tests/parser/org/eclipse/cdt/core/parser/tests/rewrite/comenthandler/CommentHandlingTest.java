@@ -30,6 +30,7 @@ import org.eclipse.cdt.core.parser.tests.rewrite.TestSourceFile;
 import org.eclipse.cdt.internal.core.dom.rewrite.commenthandler.ASTCommenter;
 import org.eclipse.cdt.internal.core.dom.rewrite.commenthandler.NodeCommentMap;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.Path;
 
 /**
  * This test tests the behavior of the class ASTCommenter. It checks if the ASTCommenter assigns
@@ -96,13 +97,13 @@ public class CommentHandlingTest extends RewriteBaseTest {
 		
 		for (String fileName : fileMap.keySet()) {
 			TestSourceFile file = fileMap.get(fileName);
-			NodeCommentMap nodeMap = ASTCommenter.getCommentedNodeMap(getUnit(fileName));
-			
-			StringBuilder expectedResultBuilder = buildExpectedResult(file);
-			StringBuilder actualResultBuilder = buildActualResult(nodeMap);
-			
-			assertEquals(expectedResultBuilder.toString(), actualResultBuilder.toString());
+			NodeCommentMap nodeMap = getNodeMapForFile(fileName);
+			assertEquals(buildExpectedResult(file).toString(), buildActualResult(nodeMap).toString());
 		}
+	}
+
+	protected NodeCommentMap getNodeMapForFile(String fileName) throws Exception {
+		return ASTCommenter.getCommentedNodeMap(getUnit(fileName));
 	}
 
 	private StringBuilder buildExpectedResult(TestSourceFile file) {
@@ -158,15 +159,17 @@ public class CommentHandlingTest extends RewriteBaseTest {
 		return output.toString().trim();
 	}
 
-	private String getSignature(IASTNode actNode) {
-		if (actNode instanceof IASTCompositeTypeSpecifier) {
-			IASTCompositeTypeSpecifier comp = (IASTCompositeTypeSpecifier) actNode;
+	private String getSignature(IASTNode node) {
+		if (node instanceof IASTCompositeTypeSpecifier) {
+			IASTCompositeTypeSpecifier comp = (IASTCompositeTypeSpecifier) node;
 			return comp.getName().toString();
-		} else if (actNode instanceof IASTEnumerationSpecifier) {
-			IASTEnumerationSpecifier comp = (IASTEnumerationSpecifier) actNode;
+		} else if (node instanceof IASTEnumerationSpecifier) {
+			IASTEnumerationSpecifier comp = (IASTEnumerationSpecifier) node;
 			return comp.getName().toString();
+		} else if (node instanceof IASTTranslationUnit) {
+			return Path.fromOSString(node.getFileLocation().getFileName()).lastSegment();
 		}
-		return actNode.getRawSignature();
+		return node.getRawSignature();
 	}
 
 	private static String getSeparatingRegexp() {
@@ -174,7 +177,7 @@ public class CommentHandlingTest extends RewriteBaseTest {
 				ANY_CHAR_REGEXP + FREESTANDING_COMMENT_SEPARATOR + ANY_CHAR_REGEXP;
 	}
 	
-	private IASTTranslationUnit getUnit(String fileName) throws CoreException {
+	protected IASTTranslationUnit getUnit(String fileName) throws CoreException {
 		ITranslationUnit tu = (ITranslationUnit) CCorePlugin.getDefault().getCoreModel().create(
 				project.getFile(fileName));
 		return tu.getAST();

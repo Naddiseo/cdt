@@ -7,12 +7,13 @@
  *
  * Contributors:
  *    Markus Schorn - initial API and implementation
- *******************************************************************************/ 
+ *******************************************************************************/
 package org.eclipse.cdt.internal.ui.callhierarchy;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import org.eclipse.core.runtime.IAdaptable;
 
@@ -27,12 +28,12 @@ import org.eclipse.cdt.internal.ui.util.CoreUtility;
 /**
  * Represents a node in the include browser
  */
-public class CHNode implements IAdaptable {	
+public class CHNode implements IAdaptable {
 	private CHNode fParent;
 	private ICElement fRepresentedDecl;
 	private ITranslationUnit fFileOfReferences;
     private List<CHReferenceInfo> fReferences;
-    
+
     protected int fHashCode;
     private long fTimestamp;
     private boolean fIsRecursive;
@@ -44,7 +45,8 @@ public class CHNode implements IAdaptable {
     /**
      * Creates a new node for the include browser
      */
-    public CHNode(CHNode parent, ITranslationUnit fileOfReferences, long timestamp, ICElement decl, int linkageID) {
+    public CHNode(CHNode parent, ITranslationUnit fileOfReferences, long timestamp, ICElement decl,
+    		int linkageID) {
         fParent= parent;
         fFileOfReferences= fileOfReferences;
         fReferences= Collections.emptyList();
@@ -54,7 +56,7 @@ public class CHNode implements IAdaptable {
         fTimestamp= timestamp;
         fLinkageID= linkageID;
     }
-    
+
 	private int computeHashCode() {
         int hashCode= 1;
         if (fParent != null) {
@@ -64,13 +66,13 @@ public class CHNode implements IAdaptable {
         	hashCode+= fRepresentedDecl.hashCode();
         }
         return hashCode;
-    }   
+    }
 
     @Override
 	public int hashCode() {
         return fHashCode;
     }
-    
+
     @Override
 	public boolean equals(Object o) {
 		if (!(o instanceof CHNode)) {
@@ -82,9 +84,9 @@ public class CHNode implements IAdaptable {
 			return false;
 		}
 
-		return CoreUtility.safeEquals(fRepresentedDecl, rhs.fRepresentedDecl);
+		return Objects.equals(fRepresentedDecl, rhs.fRepresentedDecl);
     }
-    
+
     private boolean computeIsRecursive(CHNode parent, ICElement decl) {
         if (parent == null || decl == null) {
             return false;
@@ -113,11 +115,11 @@ public class CHNode implements IAdaptable {
 	public int getReferenceCount() {
 		return fReferences.size();
 	}
-	
+
 	public CHReferenceInfo getReference(int idx) {
 		return fReferences.get(idx);
 	}
-	
+
 	public ICElement getRepresentedDeclaration() {
 		return fRepresentedDecl;
 	}
@@ -134,11 +136,11 @@ public class CHNode implements IAdaptable {
 		return fRepresentedDecl instanceof IVariableDeclaration ||
 			fRepresentedDecl instanceof IEnumerator;
 	}
-	
+
 	public int getFirstReferenceOffset() {
 		return fReferences.isEmpty() ? -1 : getReference(0).getOffset();
 	}
-	
+
 	public void addReference(CHReferenceInfo info) {
 		switch (fReferences.size()) {
 		case 0:
@@ -163,7 +165,7 @@ public class CHNode implements IAdaptable {
 		}
 		return null;
 	}
-	
+
 	public boolean isMultiDef() {
 		return false;
 	}

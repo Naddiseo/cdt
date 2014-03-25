@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2011 QNX Software Systems and others.
+ * Copyright (c) 2000, 2013 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -61,7 +61,7 @@ public class Spawner extends Process {
 
 	int pid = 0;
 	int status;
-	final int[] fChannels = new int[3];
+	final int[] fChannels = { -1, -1, -1 };
 	boolean isDone;
 	OutputStream out;
 	InputStream in;
@@ -348,7 +348,7 @@ public class Spawner extends Process {
 		}
 	}
 
-	private void exec_pty(String[] cmdarray, String[] envp, String dirpath, PTY pty) throws IOException {
+	private void exec_pty(String[] cmdarray, String[] envp, String dirpath, final PTY pty) throws IOException {
 		String command = cmdarray[0];
 		SecurityManager s = System.getSecurityManager();
 		if (s != null)
@@ -356,17 +356,15 @@ public class Spawner extends Process {
 		if (envp == null)
 			envp = new String[0];
 
-		final String slaveName = pty.getSlaveName();
-		final int masterFD = pty.getMasterFD().getFD();
-		final boolean console = pty.isConsole();
-		//int fdm = pty.get
 		Reaper reaper = new Reaper(cmdarray, envp, dirpath) {
-			/* (non-Javadoc)
-			 * @see org.eclipse.cdt.utils.spawner.Spawner.Reaper#execute(java.lang.String[], java.lang.String[], java.lang.String, int[])
-			 */
 			@Override
 			int execute(String[] cmd, String[] env, String dir, int[] channels) throws IOException {
-				return exec2(cmd, env, dir, channels, slaveName, masterFD, console);
+				return pty.exec_pty(Spawner.this, cmd, env, dir, channels);
+			}
+
+			@Override
+			protected int waitFor(int pid) {
+			    return pty.waitFor(Spawner.this, pid);
 			}
 		};
 		reaper.setDaemon(true);
@@ -400,9 +398,6 @@ public class Spawner extends Process {
 		if (pid == -1) {
 			throw new IOException("Exec error"); //$NON-NLS-1$
 		}
-		fChannels[0] = -1;
-		fChannels[1] = -1;
-		fChannels[2] = -1;
 	}
 
 	/**
@@ -435,18 +430,20 @@ public class Spawner extends Process {
 
 	/**
 	 * Native method when executing with a terminal emulation. 
+	 * @noreference This method is not intended to be referenced by clients.
 	 */
-	native int exec2( String[] cmdarray, String[] envp, String dir, int[] chan, String slaveName, int masterFD, boolean console) throws IOException;
+	public native int exec2( String[] cmdarray, String[] envp, String dir, int[] chan, String slaveName, int masterFD, boolean console) throws IOException;
 
 	/**
 	 * Native method to drop a signal on the process with pid.
 	 */
 	public native int raise(int processID, int sig);
 
-	/*
+	/**
 	 * Native method to wait(3) for process to terminate.
+	 * @noreference This method is not intended to be referenced by clients.
 	 */
-	native int waitFor(int processID);
+	public native int waitFor(int processID);
 
 	static {
 		try {
@@ -480,21 +477,27 @@ public class Spawner extends Process {
 			return exec0(cmdarray, envp, dir, channels);
 		}
 
+		int waitFor(int pid) {
+			return Spawner.this.waitFor(pid);
+		}
+
 		@Override
 		public void run() {
+			int _pid;
 			try {
-				pid = execute(fCmdarray, fEnvp, fDirpath, fChannels);
+				_pid = execute(fCmdarray, fEnvp, fDirpath, fChannels);
 			} catch (Exception e) {
-				pid = -1;
+				_pid = -1;
 				fException= e;
 			}
 
 			// Tell spawner that the process started.
 			synchronized (Spawner.this) {
+				pid = _pid;
 				Spawner.this.notifyAll();
 			}
 
-			if (pid != -1) {
+			if (_pid != -1) {
 				// Sync with spawner and notify when done.
 				status = waitFor(pid);
 				synchronized (Spawner.this) {

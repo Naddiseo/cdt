@@ -6,9 +6,9 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Doug Schaefer (QNX) - Initial API and implementation
- *    Markus Schorn (Wind River Systems)
- *    Sergey Prigogin (Google)
+ *     Doug Schaefer (QNX) - Initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.pdom.dom.cpp;
 
@@ -41,7 +41,6 @@ import org.eclipse.core.runtime.CoreException;
  * Enumerations in the index.
  */
 class PDOMCPPEnumeration extends PDOMCPPBinding implements IPDOMCPPEnumType, IPDOMMemberOwner {
-
 	private static final int OFFSET_ENUMERATOR_LIST = PDOMBinding.RECORD_SIZE;
 	private static final int OFFSET_MIN_VALUE= OFFSET_ENUMERATOR_LIST + Database.PTR_SIZE;
 	private static final int OFFSET_MAX_VALUE= OFFSET_MIN_VALUE + 8;
@@ -114,7 +113,7 @@ class PDOMCPPEnumeration extends PDOMCPPBinding implements IPDOMCPPEnumType, IPD
 		if (node instanceof PDOMCPPEnumerator) {
 			PDOMNodeLinkedList list = new PDOMNodeLinkedList(getLinkage(), record + OFFSET_ENUMERATOR_LIST);
 			list.addMember(node);
-			PDOMCPPEnumScope.updateCache(this, (PDOMCPPEnumerator) node);
+			PDOMCPPEnumScope.updateCache(this, (IPDOMCPPEnumerator) node);
 		}
 	}
 
@@ -218,14 +217,14 @@ class PDOMCPPEnumeration extends PDOMCPPBinding implements IPDOMCPPEnumType, IPD
 	}
 
 	@Override
-	public void loadEnumerators(final CharArrayMap<PDOMCPPEnumerator> map) {
+	public void loadEnumerators(final CharArrayMap<IPDOMCPPEnumerator> map) {
 		try {
 			PDOMNodeLinkedList list = new PDOMNodeLinkedList(getLinkage(), record + OFFSET_ENUMERATOR_LIST);
 			list.accept(new IPDOMVisitor() {
 				@Override
 				public boolean visit(IPDOMNode node) throws CoreException {
-					if (node instanceof PDOMCPPEnumerator) {
-						final PDOMCPPEnumerator item = (PDOMCPPEnumerator) node;
+					if (node instanceof IPDOMCPPEnumerator) {
+						final IPDOMCPPEnumerator item = (IPDOMCPPEnumerator) node;
 						map.put(item.getNameCharArray(), item);
 					}
 					return true;

@@ -6,7 +6,7 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Mike Kucera (IBM) - Initial API and implementation
+ *     Mike Kucera (IBM) - Initial API and implementation
  *******************************************************************************/
 package org.eclipse.cdt.core.dom.ast.cpp;
 
@@ -19,8 +19,8 @@ import org.eclipse.cdt.core.dom.ast.IASTImplicitNameOwner;
  * @noextend This interface is not intended to be extended by clients.
  * @noimplement This interface is not intended to be implemented by clients.
  */
-public interface ICPPASTFunctionCallExpression extends IASTFunctionCallExpression, ICPPASTExpression, IASTImplicitNameOwner {
-
+public interface ICPPASTFunctionCallExpression
+		extends IASTFunctionCallExpression, ICPPASTExpression, IASTImplicitNameOwner {
 	@Override
 	ICPPASTFunctionCallExpression copy();
 

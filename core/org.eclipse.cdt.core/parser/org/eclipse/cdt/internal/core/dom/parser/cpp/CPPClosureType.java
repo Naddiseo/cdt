@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010, 2011 Wind River Systems, Inc. and others.
+ * Copyright (c) 2010, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,8 @@
  * Contributors:
  *     Markus Schorn (Wind River Systems) - initial API and implementation
  *     Jens Elmenthaler - http://bugs.eclipse.org/173458 (camel case completion)
+ *     Thomas Corbat (IFS)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -16,7 +18,6 @@ import java.util.List;
 
 import org.eclipse.cdt.core.dom.ILinkage;
 import org.eclipse.cdt.core.dom.IName;
-import org.eclipse.cdt.core.dom.ast.ASTTypeUtil;
 import org.eclipse.cdt.core.dom.ast.EScopeKind;
 import org.eclipse.cdt.core.dom.ast.IASTCompoundStatement;
 import org.eclipse.cdt.core.dom.ast.IASTExpression;
@@ -102,15 +103,15 @@ public class CPPClosureType extends PlatformObject implements ICPPClassType, ICP
 		// Function call operator
 		final IType returnType= getReturnType();
 		final IType[] parameterTypes= getParameterTypes();
-		ft= new CPPFunctionType(returnType, parameterTypes, isMutable(), false, false);
+		ft= new CPPFunctionType(returnType, parameterTypes, !isMutable(), false, false);
 
 		ICPPParameter[] params = new ICPPParameter[parameterTypes.length];
 		for (int i = 0; i < params.length; i++) {
-			params[i]= new CPPParameter(parameterTypes[i], 0);
+			params[i]= new CPPParameter(parameterTypes[i], i);
 		}
 		m= new CPPImplicitMethod(scope, OverloadableOperator.PAREN.toCharArray(), ft, params) {
 			@Override
-			public boolean isImplicit() {return false;}
+			public boolean isImplicit() { return false; }
 		};
 		result[4]= m;
 		
@@ -146,7 +147,7 @@ public class CPPClosureType extends PlatformObject implements ICPPClassType, ICP
 			IASTStatement[] stmts = body.getStatements();
 			if (stmts.length > 0) {
 				// Gnu extension allows to deduce return type in complex compound statements
-				IASTStatement stmt= stmts[stmts.length-1];
+				IASTStatement stmt= stmts[stmts.length - 1];
 				if (stmt instanceof IASTReturnStatement) {
 					IASTReturnStatement rtstmt= (IASTReturnStatement) stmt;
 					IASTExpression expr= rtstmt.getReturnValue();
@@ -225,7 +226,9 @@ public class CPPClosureType extends PlatformObject implements ICPPClassType, ICP
 			return true;
 		if (type instanceof ITypedef || type instanceof IIndexBinding)
 			return type.isSameType(this);
-		return false;
+		if (!getClass().equals(type.getClass()))
+			return false;
+		return fLambdaExpression.getFileLocation().equals(((CPPClosureType) type).fLambdaExpression.getFileLocation());
 	}
 	
 	@Override
@@ -304,10 +307,7 @@ public class CPPClosureType extends PlatformObject implements ICPPClassType, ICP
 	 */
 	@Override
 	public String toString() {
-		char[] name= ASTTypeUtil.createNameForAnonymous(this);
-		if (name != null)
-			return new String(name);
-		return null;
+		return fLambdaExpression.getRawSignature();
 	}
 
 	@Override
@@ -338,6 +338,15 @@ public class CPPClosureType extends PlatformObject implements ICPPClassType, ICP
 	public void addDeclaration(IASTNode node) {
 	}
 
+	@Override
+	public boolean isFinal() {
+		return false;
+	}
+
+	@Override
+	public int getVisibility(IBinding member) {
+		throw new IllegalArgumentException(member.getName() + " is not a member of " + getName()); //$NON-NLS-1$
+	}
 
 	private final class ClassScope implements ICPPClassScope {
 		@Override

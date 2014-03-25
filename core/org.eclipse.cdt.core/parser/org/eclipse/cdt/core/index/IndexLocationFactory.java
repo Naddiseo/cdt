@@ -6,9 +6,9 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Andrew Ferguson (Symbian) - initial API and implementation
- *    Markus Schorn (Wind River Systems)
- *    Sergey Prigogin (Google)
+ *     Andrew Ferguson (Symbian) - initial API and implementation
+ *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/ 
 package org.eclipse.cdt.core.index;
 
@@ -142,7 +142,7 @@ public class IndexLocationFactory {
 	public static IIndexFileLocation getIFL(ITranslationUnit tu) {
 		IResource res = tu.getResource();
 		if (res instanceof IFile) {
-			return getWorkspaceIFL((IFile)res);
+			return getWorkspaceIFL((IFile) res);
 		}
 		IPath location = tu.getLocation();
 		if (location != null) {

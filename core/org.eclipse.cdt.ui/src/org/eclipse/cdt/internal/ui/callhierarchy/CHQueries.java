@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2010 Wind River Systems, Inc. and others.
+ * Copyright (c) 2006, 2014 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,7 +7,8 @@
  *
  * Contributors:
  *     Markus Schorn - initial API and implementation
- *******************************************************************************/ 
+ *     Sergey Prigogin (Google)
+ *******************************************************************************/
 package org.eclipse.cdt.internal.ui.callhierarchy;
 
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ import org.eclipse.cdt.core.model.ICElement;
 import org.eclipse.cdt.core.model.ICProject;
 import org.eclipse.cdt.core.model.ISourceReference;
 import org.eclipse.cdt.core.model.ITranslationUnit;
+import org.eclipse.cdt.ui.extensions.ICallHierarchyProvider;
 
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ClassTypeHelper;
 import org.eclipse.cdt.internal.core.model.ext.ICElementHandle;
@@ -40,14 +42,14 @@ import org.eclipse.cdt.internal.ui.viewsupport.IndexUI;
  * @since 4.0
  */
 public class CHQueries {
-	private static final CHNode[] EMPTY_NODES= new CHNode[0];
-	
+	private static final CHNode[] EMPTY_NODES= {};
+
     private CHQueries() {}
-    
+
 	/**
 	 * Searches for functions and methods that call a given element.
 	 */
-	public static CHNode[] findCalledBy(CHContentProvider cp, CHNode node, IIndex index, IProgressMonitor pm) 
+	public static CHNode[] findCalledBy(CHContentProvider cp, CHNode node, IIndex index, IProgressMonitor pm)
 			throws CoreException {
 		CalledByResult result= new CalledByResult();
 		ICElement callee= node.getRepresentedDeclaration();
@@ -60,10 +62,10 @@ public class CHQueries {
 			final ITranslationUnit tu = ((ISourceReference) callee).getTranslationUnit();
 			if (tu == null)
 				return EMPTY_NODES;
-			
+
 			final String ct = tu.getContentTypeId();
 			if (ct.equals(CCorePlugin.CONTENT_TYPE_CXXHEADER)) {
-				// bug 260262: in a header file we need to consider c and c++
+				// Bug 260262: in a header file we need to consider C and C++.
 				findCalledBy(callee, ILinkage.C_LINKAGE_ID, index, result);
 				findCalledBy(callee, ILinkage.CPP_LINKAGE_ID, index, result);
 				done= true;
@@ -72,17 +74,31 @@ public class CHQueries {
 		if (!done) {
 			findCalledBy(callee, linkageID, index, result);
 		}
+		for (ICallHierarchyProvider provider : CHProviderManager.INSTANCE.getCallHierarchyProviders()) {
+			provider.findCalledBy(callee, linkageID, index, result);
+		}
 		return cp.createNodes(node, result);
 	}
 
-	private static void findCalledBy(ICElement callee, int linkageID, IIndex index, CalledByResult result) 
+	/**
+	 * @return {@code true} if the element is owned by an external call hierarchy provider.
+	 */
+	public static boolean isExternal(ICElement element) {
+		for (ICallHierarchyProvider provider : CHProviderManager.INSTANCE.getCallHierarchyProviders()) {
+			if (provider.ownsElement(element))
+				return true;
+		}
+		return false;
+	}
+
+	private static void findCalledBy(ICElement callee, int linkageID, IIndex index, CalledByResult result)
 			throws CoreException {
 		final ICProject project = callee.getCProject();
 		IIndexBinding calleeBinding= IndexUI.elementToBinding(index, callee, linkageID);
 		if (calleeBinding != null) {
 			findCalledBy1(index, calleeBinding, true, project, result);
 			if (calleeBinding instanceof ICPPMethod) {
-				IBinding[] overriddenBindings= ClassTypeHelper.findOverridden((ICPPMethod) calleeBinding);
+				IBinding[] overriddenBindings= ClassTypeHelper.findOverridden((ICPPMethod) calleeBinding, null);
 				for (IBinding overriddenBinding : overriddenBindings) {
 					findCalledBy1(index, overriddenBinding, false, project, result);
 				}
@@ -109,7 +125,7 @@ public class CHQueries {
 					ICElement elem= IndexUI.getCElementForName(project, index, caller);
 					if (elem != null) {
 						result.add(elem, rname);
-					} 
+					}
 				}
 			}
 		}
@@ -118,7 +134,7 @@ public class CHQueries {
 	/**
 	 * Searches for all calls that are made within a given range.
 	 */
-	public static CHNode[] findCalls(CHContentProvider cp, CHNode node, IIndex index, IProgressMonitor pm) 
+	public static CHNode[] findCalls(CHContentProvider cp, CHNode node, IIndex index, IProgressMonitor pm)
 			throws CoreException {
 		ICElement caller= node.getRepresentedDeclaration();
 		CallsToResult result= new CallsToResult();
@@ -147,6 +163,9 @@ public class CHQueries {
 					}
 				}
 			}
+		}
+		for (ICallHierarchyProvider provider : CHProviderManager.INSTANCE.getCallHierarchyProviders()) {
+			provider.findCalls(caller, index, result);
 		}
 		return cp.createNodes(node, result);
 	}

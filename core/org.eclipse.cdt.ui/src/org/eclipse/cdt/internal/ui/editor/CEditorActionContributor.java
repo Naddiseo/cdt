@@ -33,17 +33,16 @@ import org.eclipse.ui.texteditor.RetargetTextEditorAction;
 import org.eclipse.cdt.ui.actions.CdtActionConstants;
 
 import org.eclipse.cdt.internal.ui.IContextMenuConstants;
+import org.eclipse.cdt.internal.ui.actions.FindWordAction;
+import org.eclipse.cdt.internal.ui.actions.GoToNextPreviousMemberAction;
+import org.eclipse.cdt.internal.ui.actions.GotoNextBookmarkAction;
+import org.eclipse.cdt.internal.ui.actions.StructureSelectEnclosingAction;
 import org.eclipse.cdt.internal.ui.actions.StructureSelectHistoryAction;
 import org.eclipse.cdt.internal.ui.actions.StructureSelectNextAction;
 import org.eclipse.cdt.internal.ui.actions.StructureSelectPreviousAction;
 import org.eclipse.cdt.internal.ui.actions.StructureSelectionAction;
-import org.eclipse.cdt.internal.ui.actions.StructureSelectEnclosingAction;
-import org.eclipse.cdt.internal.ui.actions.FindWordAction;
-import org.eclipse.cdt.internal.ui.actions.GoToNextPreviousMemberAction;
-import org.eclipse.cdt.internal.ui.actions.GotoNextBookmarkAction;
 
 public class CEditorActionContributor extends TextEditorActionContributor {
-	
 	private RetargetTextEditorAction fContentAssist;
 	private RetargetTextEditorAction fContextInformation;
 	private TogglePresentationAction fTogglePresentation;
@@ -120,7 +119,6 @@ public class CEditorActionContributor extends TextEditorActionContributor {
 	 */
 	@Override
 	public void contributeToMenu(IMenuManager menu) {
-		
 		super.contributeToMenu(menu);
 		
 		IMenuManager editMenu= menu.findMenuUsingPath(IWorkbenchActionConstants.M_EDIT);
@@ -187,7 +185,6 @@ public class CEditorActionContributor extends TextEditorActionContributor {
 	 */
 	@Override
 	public void setActiveEditor(IEditorPart part) {
-		
 		super.setActiveEditor(part);
 		
 		ITextEditor textEditor= null;
@@ -228,7 +225,8 @@ public class CEditorActionContributor extends TextEditorActionContributor {
 		bars.setGlobalActionHandler(CdtActionConstants.ADD_BLOCK_COMMENT, getAction(textEditor, "AddBlockComment")); //$NON-NLS-1$
 		bars.setGlobalActionHandler(CdtActionConstants.REMOVE_BLOCK_COMMENT, getAction(textEditor, "RemoveBlockComment")); //$NON-NLS-1$
 		bars.setGlobalActionHandler(CdtActionConstants.INDENT, getAction(textEditor, "Indent")); //$NON-NLS-1$
-		bars.setGlobalActionHandler(CdtActionConstants.ADD_INCLUDE, getAction(textEditor, "AddIncludeOnSelection")); //$NON-NLS-1$
+		bars.setGlobalActionHandler(CdtActionConstants.ADD_INCLUDE, getAction(textEditor, "AddInclude")); //$NON-NLS-1$
+		bars.setGlobalActionHandler(CdtActionConstants.ORGANIZE_INCLUDES, getAction(textEditor, "OrganizeIncludes")); //$NON-NLS-1$
 		bars.setGlobalActionHandler(CdtActionConstants.SORT_LINES, getAction(textEditor, "SortLines")); //$NON-NLS-1$
 
 		IAction action= getAction(textEditor, ITextEditorActionConstants.REFRESH);
@@ -245,12 +243,8 @@ public class CEditorActionContributor extends TextEditorActionContributor {
 			CEditor cEditor= (CEditor) part;
 			cEditor.fillActionBars(bars);
 		}
-
 	}
 	
-	/* (non-Javadoc)
-	 * @see org.eclipse.ui.IEditorActionBarContributor#dispose()
-	 */
 	@Override
 	public void dispose() {
 		setActiveEditor(null);

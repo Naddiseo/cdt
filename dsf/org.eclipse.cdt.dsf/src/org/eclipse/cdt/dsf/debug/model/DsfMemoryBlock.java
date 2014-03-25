@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2010 Wind River Systems and others.
+ * Copyright (c) 2007, 2014 Wind River Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@
  *     Ericsson Communication - added support for 64 bit processors
  *     Ericsson Communication - added support for changed bytes
  *     Ericsson Communication - better management of exceptions
+ *     Alvaro Sanchez-Leon (Ericsson AB) - [Memory] Support 16 bit addressable size (Bug 426730)
  *******************************************************************************/
 package org.eclipse.cdt.dsf.debug.model;
 
@@ -325,7 +326,12 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
     @Override
     public MemoryByte[] getBytesFromAddress(BigInteger address, long units) throws DebugException {
 
-        if (isUseCacheData() && fBlockAddress.compareTo(address) == 0 && units * getAddressableSize() <= fBlock.length)
+		int addressableSize = 1;
+		try {
+			addressableSize = getAddressableSize();
+		} catch (DebugException e) {}
+		
+        if (isUseCacheData() && fBlockAddress.compareTo(address) == 0 && units * addressableSize <= fBlock.length)
             return fBlock;
         
         MemoryByte[] newBlock = fetchMemoryBlock(address, units);
@@ -378,7 +384,7 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
                     // Determine the distance between the cached and the requested block addresses
                 	// If the distance does not exceed the length of the cached block,  then there 
                 	// is some overlap between the blocks and we have to mark the changed bytes.
-                    BigInteger bigDistance = address.subtract(fBlockAddress);
+                    BigInteger bigDistance = address.subtract(fBlockAddress).multiply(BigInteger.valueOf(addressableSize));
                     if (bigDistance.compareTo(BigInteger.valueOf(fLength)) == -1) {
                     	// Calculate the length of the data we are going to examine/update
                         int distance = bigDistance.intValue(); 
@@ -391,8 +397,8 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
                         for (int i = 0; i < length; i++) {
                         	if ( i < newLength ) {
                         		newBlock[i].setFlags(fBlock[distance + i].getFlags());
+                    			newBlock[i].setHistoryKnown(true);
                         		if (newBlock[i].getValue() != fBlock[distance + i].getValue()) {
-                        			newBlock[i].setHistoryKnown(true);
                         			newBlock[i].setChanged(true);
                         		}
                         	}
@@ -464,7 +470,7 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
                 	// If the distance does not exceed the length of the new block, then there
                 	// is some overlap between the blocks and we have to update the blanks and
                 	// possibly note they are changed.
-                    BigInteger bigDistance = fBlockAddress.subtract(address);
+                    BigInteger bigDistance = fBlockAddress.subtract(address).multiply(BigInteger.valueOf(addressableSize));
                     if (bigDistance.compareTo(BigInteger.valueOf(newLength)) == -1) {
                         // Calculate the length of the data we are going to examine/update
                         int distance = bigDistance.intValue(); 
@@ -477,8 +483,8 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
                         for (int i = 0; i < length; i++) {
                         	if ( (distance + i) < newLength ) {
                         		newBlock[distance + i].setFlags(fBlock[i].getFlags());
+                    			newBlock[distance + i].setHistoryKnown(true);
                         		if (newBlock[distance + i].getValue() != fBlock[i].getValue()) {
-                        			newBlock[distance + i].setHistoryKnown(true);
                         			newBlock[distance + i].setChanged(true);
                         		}
                         	}
@@ -580,7 +586,7 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
 	 */
     @Override
 	public int getAddressableSize() throws DebugException {
-		return fRetrieval.getAddressableSize();
+		return fWordSize;
 	}
 
     ///////////////////////////////////////////////////////////////////////////
@@ -593,13 +599,21 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
 	 * asynchronous calls to complete before returning.
 	 * 
 	 * @param bigAddress 
-	 * @param length 
+	 * @param count - Number of addressable units for this memory block
 	 * @return MemoryByte[] 
 	 * @throws DebugException
 	 * @since 2.1
 	 */
-    protected MemoryByte[] fetchMemoryBlock(BigInteger bigAddress, final long length) throws DebugException {
-
+    protected MemoryByte[] fetchMemoryBlock(BigInteger bigAddress, final long count) throws DebugException {
+		//resolve the addressable size
+    	int aSize;
+		try {
+			aSize = getAddressableSize();
+		} catch (DebugException e) {
+			aSize = 1;
+		}
+		final int addressableSize = aSize;
+		
     	// For the IAddress interface
     	final Addr64 address = new Addr64(bigAddress);
     	
@@ -607,11 +621,11 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
         Query<MemoryByte[]> query = new Query<MemoryByte[]>() {
 			@Override
 			protected void execute(final DataRequestMonitor<MemoryByte[]> drm) {
-			    IMemory memoryService = (IMemory) fRetrieval.getServiceTracker().getService();
+			    IMemory memoryService = fRetrieval.getServiceTracker().getService();
 			    if (memoryService != null) {
 			        // Go for it
 			        memoryService.getMemory( 
-			            fContext, address, 0, fWordSize, (int) length,
+			            fContext, address, 0, addressableSize, (int) count,
 			            new DataRequestMonitor<MemoryByte[]>(fRetrieval.getExecutor(), drm) {
 			                @Override
 			                protected void handleSuccess() {
@@ -645,7 +659,17 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
 	 * @since 2.1
 	 */
     protected void writeMemoryBlock(final long offset, final byte[] bytes) throws DebugException {
-
+		//resolve the addressable size
+    	int aSize;
+		try {
+			aSize = getAddressableSize();
+		} catch (DebugException e) {
+			aSize = 1;
+		}
+		final int addressableSize = aSize;
+		
+		final int addressableUnits = bytes.length/addressableSize;
+		
     	// For the IAddress interface
     	final Addr64 address = new Addr64(fBaseAddress);
 
@@ -653,11 +677,11 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
         Query<MemoryByte[]> query = new Query<MemoryByte[]>() {
 			@Override
 			protected void execute(final DataRequestMonitor<MemoryByte[]> drm) {
-			    IMemory memoryService = (IMemory) fRetrieval.getServiceTracker().getService();
+			    IMemory memoryService = fRetrieval.getServiceTracker().getService();
 			    if (memoryService != null) {
 			        // Go for it
 	    	        memoryService.setMemory(
-		    	  	      fContext, address, offset, fWordSize, bytes.length, bytes,
+		    	  	      fContext, address, offset, addressableSize, addressableUnits, bytes,
 		    	  	      new RequestMonitor(fRetrieval.getExecutor(), drm));
 			    }
 			    else {
@@ -711,9 +735,16 @@ public class DsfMemoryBlock extends PlatformObject implements IMemoryBlockExtens
 	 * @param length
 	 */
 	public void handleMemoryChange(BigInteger address) {
+    	int addressableSize;
+		try {
+			addressableSize = getAddressableSize();
+		} catch (DebugException e) {
+			addressableSize = 1;
+		}
 		
+		int addressesLength = fLength/addressableSize;
 		// Check if the change affects this particular block (0 is universal)
-		BigInteger fEndAddress = fBlockAddress.add(BigInteger.valueOf(fLength));
+		BigInteger fEndAddress = fBlockAddress.add(BigInteger.valueOf(addressesLength));
 		if (address.equals(BigInteger.ZERO) ||
 		   ((fBlockAddress.compareTo(address) != 1) && (fEndAddress.compareTo(address) == 1)))
 		{

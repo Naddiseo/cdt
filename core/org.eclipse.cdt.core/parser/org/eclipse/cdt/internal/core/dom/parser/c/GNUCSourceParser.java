@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2012 IBM Corporation and others.
+ * Copyright (c) 2005, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@
  *     Ed Swartz (Nokia)
  *     Mike Kucera (IBM) - bug #206952
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.c;
 
@@ -23,7 +24,7 @@ import org.eclipse.cdt.core.dom.ast.DOMException;
 import org.eclipse.cdt.core.dom.ast.IASTArrayDeclarator;
 import org.eclipse.cdt.core.dom.ast.IASTArrayModifier;
 import org.eclipse.cdt.core.dom.ast.IASTArraySubscriptExpression;
-import org.eclipse.cdt.core.dom.ast.IASTAttribute;
+import org.eclipse.cdt.core.dom.ast.IASTAttributeSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTBinaryExpression;
 import org.eclipse.cdt.core.dom.ast.IASTCastExpression;
 import org.eclipse.cdt.core.dom.ast.IASTCompositeTypeSpecifier;
@@ -140,23 +141,17 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
 	protected IASTInitializer optionalInitializer(IASTDeclarator dtor, DeclarationOptions options) throws EndOfFileException, BacktrackException {
         if (LTcatchEOF(1) == IToken.tASSIGN) {
             final int offset= consume().getOffset();
-            IASTInitializerClause initClause = initClause(false);
+            IASTInitializerClause initClause = initClause();
             IASTEqualsInitializer result= nodeFactory.newEqualsInitializer(initClause);
             return setRange(result, offset, calculateEndOffset(initClause));
         }
         return null;
     }
 
-    private IASTInitializerClause initClause(boolean inAggregate) throws EndOfFileException, BacktrackException {
+    private IASTInitializerClause initClause() throws EndOfFileException, BacktrackException {
         final int offset = LA(1).getOffset();
-        if (LT(1) != IToken.tLBRACE) {
-            IASTExpression assignmentExpression= expression(ExprKind.eAssignment);
-            if (inAggregate && skipTrivialExpressionsInAggregateInitializers) {
-            	if (!ASTQueries.canContainName(assignmentExpression))
-            		return null;
-            }
-            return assignmentExpression;
-        }
+        if (LT(1) != IToken.tLBRACE)
+            return expression(ExprKind.eAssignment);
         
         // it's an aggregate initializer
         consume(IToken.tLBRACE);
@@ -175,7 +170,11 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
         	// get designator list
         	List<? extends ICASTDesignator> designator= designatorList();
         	if (designator == null) {
-        		IASTInitializerClause clause= initClause(true);
+        		IASTInitializerClause clause= initClause();
+        		if (result.getSize() >= maximumTrivialExpressionsInAggregateInitializers && !ASTQueries.canContainName(clause)) {
+    				translationUnit.setHasNodesOmitted(true);
+    				clause= null;
+        		}
         		// depending on value of skipTrivialItemsInCompoundInitializers initializer may be null
         		// in any way add the initializer such that the actual size can be tracked.
         		result.addClause(clause);
@@ -191,7 +190,7 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
         			if (LT(1) == IToken.tASSIGN)
         				consume(IToken.tASSIGN);
 
-        			IASTInitializerClause clause= initClause(false);
+        			IASTInitializerClause clause= initClause();
         			desigInitializer.setOperand(clause);
         			adjustLength(desigInitializer, clause);
         		}
@@ -630,7 +629,7 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
         		IASTTypeId t= typeId(DeclarationOptions.TYPEID);
         		consume(IToken.tRPAREN);
         		if (LT(1) == IToken.tLBRACE) {
-        			IASTInitializer i = (IASTInitializerList) initClause(false);
+        			IASTInitializer i = (IASTInitializerList) initClause();
         			firstExpression= nodeFactory.newTypeIdInitializerExpression(t, i);
         			setRange(firstExpression, offset, calculateEndOffset(i));
         			break;        
@@ -1002,6 +1001,13 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
     				encounteredRawType= true;
     				endOffset= consume().getEndOffset();
     				break;
+    			case IGCCToken.t__int128:
+    				if (encounteredTypename)
+    					break declSpecifiers;
+    				simpleType = IASTSimpleDeclSpecifier.t_int128;
+    				encounteredRawType= true;
+    				endOffset= consume().getEndOffset();
+    				break;
     			case IToken.t_long:
     				if (encounteredTypename)
     					break declSpecifiers;
@@ -1020,6 +1026,13 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
     				if (encounteredTypename)
     					break declSpecifiers;
     				simpleType = IASTSimpleDeclSpecifier.t_double;
+    				encounteredRawType= true;
+    				endOffset= consume().getEndOffset();
+    				break;
+    			case IGCCToken.t__float128:
+    				if (encounteredTypename)
+    					break declSpecifiers;
+    				simpleType = IASTSimpleDeclSpecifier.t_float128;
     				encounteredRawType= true;
     				endOffset= consume().getEndOffset();
     				break;
@@ -1338,7 +1351,7 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
         }
             
         // Accept __attribute__ or __declspec between pointer operators and declarator.
-        List<IASTAttribute> attributes =
+        List<IASTAttributeSpecifier> attributes =
         		__attribute_decl_seq(supportAttributeSpecifiers, supportDeclspecSpecifiers);
         
         // Look for identifier or nested declarator
@@ -1409,7 +1422,7 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
     }
         
 	private IASTDeclarator declarator(final List<IASTPointerOperator> pointerOps,
-			List<IASTAttribute> attributes, final IASTName declaratorName,
+			List<IASTAttributeSpecifier> attributes, final IASTName declaratorName,
 			final IASTDeclarator nestedDeclarator, final int startingOffset, int endOffset, 
 			final DeclarationOptions option) throws EndOfFileException, BacktrackException {
         IASTDeclarator result= null;
@@ -1476,8 +1489,8 @@ public class GNUCSourceParser extends AbstractGNUSourceCodeParser {
 		}
 
         if (attributes != null) {
-        	for (IASTAttribute attribute : attributes) {
-        		result.addAttribute(attribute);
+        	for (IASTAttributeSpecifier specifier : attributes) {
+        		result.addAttributeSpecifier(specifier);
         	}
         }
 

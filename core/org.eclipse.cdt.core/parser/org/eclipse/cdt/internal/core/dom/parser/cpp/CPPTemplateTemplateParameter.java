@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2010 IBM Corporation and others.
+ * Copyright (c) 2005, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
  *     Andrew Niefer (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
@@ -69,7 +70,7 @@ public class CPPTemplateTemplateParameter extends CPPTemplateParameter implement
 	    	IASTNode[] nodes = getDeclarations();
 	    	if (nodes != null && nodes.length > 0)
 	    		n = (IASTName) nodes[0];
-	        unknownScope = new CPPUnknownScope(this, n);
+	        unknownScope = new CPPUnknownTypeScope(this, n);
 	    }
 	    return unknownScope;
 	}
@@ -131,7 +132,7 @@ public class CPPTemplateTemplateParameter extends CPPTemplateParameter implement
 		if (d == null)
 			return null;
 		
-		return new CPPTemplateArgument(d);
+		return new CPPTemplateTypeArgument(d);
 	}
 
 	@Override
@@ -232,11 +233,6 @@ public class CPPTemplateTemplateParameter extends CPPTemplateParameter implement
 	}
 	
 	@Override
-	public IASTName getUnknownName() {
-		return new CPPASTName(getNameCharArray());
-	}
-
-	@Override
 	public boolean isAnonymous() {
 		return false;
 	}
@@ -244,5 +240,15 @@ public class CPPTemplateTemplateParameter extends CPPTemplateParameter implement
 	@Override
 	public ICPPDeferredClassInstance asDeferredInstance() {
 		return null;
+	}
+
+	@Override
+	public boolean isFinal() {
+		return false;
+	}
+
+	@Override
+	public int getVisibility(IBinding member) {
+		throw new IllegalArgumentException(member.getName() + " is not a member of " + getName());  //$NON-NLS-1$
 	}
 }

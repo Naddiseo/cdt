@@ -1,11 +1,11 @@
 /*******************************************************************************
- *  Copyright (c) 2000, 2011 IBM Corporation and others.
- *  All rights reserved. This program and the accompanying materials
- *  are made available under the terms of the Eclipse Public License v1.0
- *  which accompanies this distribution, and is available at
- *  http://www.eclipse.org/legal/epl-v10.html
+ * Copyright (c) 2000, 2013 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
  * 
- *  Contributors:
+ * Contributors:
  *     IBM Corporation - initial API and implementation
  *     Anton Leherbauer (Wind River Systems) - Adapted for CDT
  *******************************************************************************/
@@ -20,13 +20,12 @@ import org.eclipse.cdt.internal.ui.editor.SemanticHighlightings;
 
 /**
  * Semantic highlighting tests.
- * 
+ *
  * <p>Derived from JDT.<p>
  *
  * @since 4.0
  */
 public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
-	
 	private static final boolean PRINT_POSITIONS= false;
 
 	private static final Class<?> THIS= SemanticHighlightingTest.class;
@@ -101,7 +100,7 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 				createPosition(108, 4, 26),
 				createPosition(112, 4, 25),
 				createPosition(117, 4, 32),
-		};
+			};
 		if (PRINT_POSITIONS) System.out.println(toString(actual));
 		assertEqualPositions(expected, actual);
 	}
@@ -121,10 +120,9 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 				createPosition(108, 4, 26),
 				createPosition(112, 4, 25),
 				createPosition(117, 4, 32),
-				createPosition(118, 23, 9),
 				createPosition(122, 4, 15),
 				createPosition(130, 13, 9),
-		};
+			};
 		Position[] actual= getSemanticHighlightingPositions();
 		if (PRINT_POSITIONS) System.out.println(toString(actual));
 		assertEqualPositions(expected, actual);
@@ -134,7 +132,7 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 		setUpSemanticHighlighting(SemanticHighlightings.STATIC_METHOD_INVOCATION);
 		Position[] expected= new Position[] {
 				createPosition(122, 4, 15),
-		};
+			};
 		Position[] actual= getSemanticHighlightingPositions();
 		if (PRINT_POSITIONS) System.out.println(toString(actual));
 		assertEqualPositions(expected, actual);
@@ -256,6 +254,7 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 				createPosition(112, 4, 14),
 				createPosition(117, 4, 14),
 				createPosition(118, 4, 9),
+				createPosition(118, 23, 9),
 				createPosition(120, 4, 8),
 				createPosition(129, 4, 8),
 				createPosition(147, 42, 7),
@@ -274,6 +273,7 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 				createPosition(102, 8, 13),
 				createPosition(137, 4, 1),
 				createPosition(144, 10, 1),
+				createPosition(150, 5, 1),
 			};
 		if (PRINT_POSITIONS) System.out.println(toString(actual));
 		assertEqualPositions(expected, actual);
@@ -292,11 +292,11 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 				createPosition(131, 4, 11),
 				createPosition(137, 4, 1),
 				createPosition(144, 10, 1),
+				createPosition(150, 5, 1),
 			};
 		if (PRINT_POSITIONS) System.out.println(toString(actual));
 		assertEqualPositions(expected, actual);
 	}
-	
 	
 	public void testGlobalVariableHighlighting() throws Exception {
 		setUpSemanticHighlighting(SemanticHighlightings.GLOBAL_VARIABLE);
@@ -308,6 +308,7 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 				createPosition(33, 15, 20),
 				createPosition(101, 8, 12),
 				createPosition(104, 8, 12),
+				createPosition(151, 15, 14),
 			};
 		if (PRINT_POSITIONS) System.out.println(toString(actual));
 		assertEqualPositions(expected, actual);
@@ -421,5 +422,4 @@ public class SemanticHighlightingTest extends AbstractSemanticHighlightingTest {
 		if (PRINT_POSITIONS) System.out.println(toString(actual));
 		assertEqualPositions(expected, actual);
 	}
-	
 }

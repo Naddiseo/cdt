@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -13,7 +13,10 @@
 package org.eclipse.cdt.internal.core.dom.parser.cpp;
 
 import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.LVALUE;
-import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.*;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.CVTYPE;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.REF;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.TDEF;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.getNestedType;
 
 import org.eclipse.cdt.core.dom.ast.ASTVisitor;
 import org.eclipse.cdt.core.dom.ast.DOMException;
@@ -29,6 +32,7 @@ import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTExpressionList;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTFunctionCallExpression;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTInitializerClause;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
@@ -141,7 +145,7 @@ public class CPPASTFunctionCallExpression extends ASTNode
 			n2.setAlternate(true);
 			
 			if (fArguments.length == 0) {
-				int idEndOffset = ((ASTNode)functionName).getOffset() + ((ASTNode)functionName).getLength();
+				int idEndOffset = ((ASTNode) functionName).getOffset() + ((ASTNode) functionName).getLength();
 				try {
 					IToken lparen = functionName.getTrailingSyntax();
 					IToken rparen = lparen.getNext();
@@ -163,7 +167,7 @@ public class CPPASTFunctionCallExpression extends ASTNode
 				}
 			} else {
 				n1.computeOperatorOffsets(functionName, true);
-				n2.computeOperatorOffsets(fArguments[fArguments.length-1], true);
+				n2.computeOperatorOffsets(fArguments[fArguments.length - 1], true);
 			}
 			
 			implicitNames = new IASTImplicitName[] { n1, n2 };
@@ -219,8 +223,6 @@ public class CPPASTFunctionCallExpression extends ASTNode
 		}
 	}
     
-    
-
 	@Override
 	@Deprecated
     public IASTExpression getParameterExpression() {
@@ -264,12 +266,12 @@ public class CPPASTFunctionCallExpression extends ASTNode
 		
 		if (eval instanceof EvalTypeId) {
 			if (!eval.isTypeDependent()) {
-				IType t= getNestedType(((EvalTypeId) eval).getInputType(), TDEF|CVTYPE|REF);
+				IType t= getNestedType(((EvalTypeId) eval).getInputType(), TDEF | CVTYPE | REF);
 				if (t instanceof ICPPClassType && !(t instanceof ICPPUnknownBinding)) {
 					ICPPClassType cls= (ICPPClassType) t;
 					LookupData data= CPPSemantics.createLookupData(((IASTIdExpression) functionName).getName());
 					try {
-						IBinding b= CPPSemantics.resolveFunction(data, cls.getConstructors(), true);
+						IBinding b= CPPSemantics.resolveFunction(data, ClassTypeHelper.getConstructors(cls, data.getLookupPoint()), true);
 						if (b instanceof ICPPFunction)
 							return (ICPPFunction) b;
 					} catch (DOMException e) {
@@ -296,12 +298,12 @@ public class CPPASTFunctionCallExpression extends ASTNode
 		if (conversion != null)
 			return conversion;
 		
-		ICPPEvaluation[] args= new ICPPEvaluation[fArguments.length+1];
+		ICPPEvaluation[] args= new ICPPEvaluation[fArguments.length + 1];
 		args[0]= functionName.getEvaluation();
 		for (int i = 1; i < args.length; i++) {
-			args[i]= ((ICPPASTExpression) fArguments[i-1]).getEvaluation();
+			args[i]= ((ICPPASTInitializerClause) fArguments[i - 1]).getEvaluation();
 		}
-		return new EvalFunctionCall(args);
+		return new EvalFunctionCall(args, this);
 	}
 	
 	private ICPPEvaluation checkForExplicitTypeConversion() {
@@ -310,15 +312,14 @@ public class CPPASTFunctionCallExpression extends ASTNode
 			IBinding b= name.resolvePreBinding();
 			if (b instanceof IType) {
 				ICPPEvaluation[] args= new ICPPEvaluation[fArguments.length];
-				for (int i = 1; i < args.length; i++) {
-					args[i]= ((ICPPASTExpression) fArguments[i]).getEvaluation();
+				for (int i = 0; i < args.length; i++) {
+					args[i]= ((ICPPASTInitializerClause) fArguments[i]).getEvaluation();
 				}
-				return new EvalTypeId((IType) b, args);
+				return new EvalTypeId((IType) b, this, args);
 			}
 		}
 		return null;
 	}
-
     
     @Override
 	public IType getExpressionType() {

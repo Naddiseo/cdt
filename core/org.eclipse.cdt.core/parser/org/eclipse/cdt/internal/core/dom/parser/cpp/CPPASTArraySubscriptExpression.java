@@ -54,11 +54,7 @@ public class CPPASTArraySubscriptExpression extends ASTNode
 		CPPASTArraySubscriptExpression copy = new CPPASTArraySubscriptExpression();
 		copy.setArrayExpression(arrayExpression == null ? null : arrayExpression.copy(style));
 		copy.setArgument(subscriptExp == null ? null : subscriptExp.copy(style));
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -197,7 +193,7 @@ public class CPPASTArraySubscriptExpression extends ASTNode
 	private ICPPEvaluation computeEvaluation() {
 		if (arrayExpression == null || subscriptExp == null)
 			return EvalFixed.INCOMPLETE;
-		return new EvalBinary(EvalBinary.op_arrayAccess, arrayExpression.getEvaluation(), subscriptExp.getEvaluation());
+		return new EvalBinary(EvalBinary.op_arrayAccess, arrayExpression.getEvaluation(), subscriptExp.getEvaluation(), this);
 	}
     
     @Override

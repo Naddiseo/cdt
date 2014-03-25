@@ -7,8 +7,7 @@
  *
  * Contributors:
  *     QNX Software Systems - Initial API and implementation
- *     Ken Ryall (Nokia) - bug 178731
- *     Ken Ryall (Nokia) - bug 246201
+ *     Ken Ryall (Nokia) - bugs 178731, 246201
  *******************************************************************************/
 package org.eclipse.cdt.debug.internal.ui.launch;
 
@@ -70,7 +69,6 @@ import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 import org.eclipse.ui.dialogs.TwoPaneElementSelector;
 
 public class CApplicationLaunchShortcut implements ILaunchShortcut2 {
-
 	@Override
 	public void launch(IEditorPart editor, String mode) {
 		searchAndLaunch(new Object[] { editor.getEditorInput() }, mode);
@@ -192,7 +190,7 @@ public class CApplicationLaunchShortcut implements ILaunchShortcut2 {
 			String projectName = bin.getResource().getProjectRelativePath().toString();
 			ILaunchConfigurationType configType = getCLaunchConfigType();
 			ILaunchConfigurationWorkingCopy wc =
-					configType.newInstance(null, getLaunchManager().generateUniqueLaunchConfigurationNameFrom(bin.getElementName()));
+					configType.newInstance(null, getLaunchManager().generateLaunchConfigurationName(bin.getElementName()));
 			wc.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROGRAM_NAME, projectName);
 			wc.setAttribute(ICDTLaunchConfigurationConstants.ATTR_PROJECT_NAME, bin.getCProject().getElementName());
 			wc.setMappedResources(new IResource[] { bin.getResource().getProject() });

@@ -191,7 +191,13 @@
             id="org.eclipse.cdt.dsf.gdb.tracepoint.common"
             name="%tracepoints.property.common">
          <enabledWhen>
-            <adapt type="org.eclipse.cdt.debug.core.model.ICTracepoint"/>
+            <or>
+	           <adapt type="org.eclipse.cdt.debug.core.model.ICTracepoint"/>
+               <and>
+                  <instanceof value="org.eclipse.cdt.debug.ui.breakpoints.ICBreakpointContext"/>
+                  <test property="org.eclipse.cdt.debug.ui.createBreakpointAdapt" value="org.eclipse.cdt.debug.core.model.ICTracepoint"/>
+               </and>
+            </or>
          </enabledWhen>
       </page>
    </extension>
@@ -209,54 +215,6 @@
             id="org.eclipse.cdt.dsf.gdb.ui.coreFilePrompter"
             plugin="org.eclipse.cdt.dsf.gdb.ui">
       </statusHandler>
-   </extension>
-   <extension
-         point="org.eclipse.ui.popupMenus">
-      <viewerContribution
-            id="org.eclipse.cdt.dsf.gdb.ui.debugview.context"
-            targetID="org.eclipse.debug.ui.DebugView">
-         <action
-               class="org.eclipse.cdt.dsf.gdb.internal.ui.actions.ConnectActionDelegate"
-               icon="icons/full/obj16/connect.gif"
-               id="org.eclipse.cdt.dsf.gdb.ui.connect"
-               label="%action.connect.label"
-               menubarPath="threadGroup"
-               tooltip="%action.connect.tooltip">
-            <enablement>
-               <pluginState
-                     id="org.eclipse.cdt.dsf.gdb.ui"
-                     value="activated">
-               </pluginState>
-            </enablement>
-         </action>
-         <visibility>
-            <pluginState
-                  id="org.eclipse.cdt.dsf.gdb.ui"
-                  value="activated">
-            </pluginState>
-         </visibility>
-      </viewerContribution>
-   </extension>
-   <extension
-         point="org.eclipse.ui.viewActions">
-      <viewContribution
-            id="org.eclipse.cdt.dsf.gdb.ui.debugview.toolbar"
-            targetID="org.eclipse.debug.ui.DebugView">
-         <action
-               class="org.eclipse.cdt.dsf.gdb.internal.ui.actions.ConnectActionDelegate"
-               icon="icons/full/obj16/connect.gif"
-               id="org.eclipse.cdt.dsf.gdb.ui.connect"
-               label="%action.connect.label"
-               toolbarPath="threadGroup"
-               tooltip="%action.connect.tooltip">
-            <enablement>
-               <pluginState
-                     id="org.eclipse.cdt.dsf.gdb.ui"
-                     value="activated">
-               </pluginState>
-            </enablement>
-         </action>
-      </viewContribution>
    </extension>
    <extension
          point="org.eclipse.core.expressions.definitions">
@@ -311,15 +269,22 @@
             id="org.eclipse.cdt.dsf.gdb.ui.tracecontrol.view"
             name="%view.traceControl.name">
       </view>
+      <view
+            category="org.eclipse.debug.ui"
+            class="org.eclipse.cdt.dsf.gdb.internal.ui.osview.OSResourcesView"
+            id="org.eclipse.cdt.dsf.gdb.ui.osresources.view"
+            name="%view.osresources.name"
+            icon="icons/full/view16/osresources_view.gif">
+      </view>
    </extension>
    <extension
          point="org.eclipse.ui.perspectiveExtensions">
       <perspectiveExtension
             targetID="org.eclipse.debug.ui.DebugPerspective">
          <view
-               relative="org.eclipse.ui.views.ContentOutline"
+               relative="org.eclipse.debug.ui.DebugView"
                visible="false"
-               relationship="stack"
+               relationship="right"
                id="org.eclipse.cdt.dsf.gdb.ui.tracecontrol.view">
          </view>
          <viewShortcut
@@ -379,16 +344,13 @@
                label="%toolbar.prevTraceRecord.label"
                style="push">
          </command>
+         <command
+               commandId="org.eclipse.cdt.debug.ui.command.saveTraceData"
+               icon="icons/full/obj16/savetrace.gif"
+               label="%toolbar.saveTracing.name"
+               style="push">
+         </command>
       </menuContribution>
-         <menuContribution
-               locationURI="menu:org.eclipse.cdt.dsf.gdb.ui.tracecontrol.view?after=additions">
-            <command
-                  commandId="org.eclipse.cdt.debug.ui.command.saveTraceData"
-                  icon="icons/full/obj16/savetrace.gif"
-                  label="%toolbar.saveTracing.name"
-                  style="push">
-            </command>
-         </menuContribution>
    </extension>
    <extension
          point="org.eclipse.cdt.debug.ui.BreakpointActionPage">

@@ -7,6 +7,7 @@
  *
  * Contributors:
  *     Markus Schorn - initial API and implementation
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp.semantics;
 
@@ -14,21 +15,29 @@ import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.PRVALUE;
 
 import org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
+import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.IValue;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassSpecialization;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameterMap;
 import org.eclipse.cdt.internal.core.dom.parser.ISerializableEvaluation;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeMarshalBuffer;
-import org.eclipse.cdt.internal.core.dom.parser.Value;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPEvaluation;
 import org.eclipse.core.runtime.CoreException;
 
 /**
- * Performs evaluation of an expression.
+ * Performs evaluation of a compound statement expression. Most but not all methods
+ * delegate to the evaluation of the last expression in the compound one.
  */
-public class EvalCompound extends CPPEvaluation {
+public class EvalCompound extends CPPDependentEvaluation {
 	private final ICPPEvaluation fDelegate;
 
-	public EvalCompound(ICPPEvaluation delegate) {
+	public EvalCompound(ICPPEvaluation delegate, IASTNode pointOfDefinition) {
+		this(delegate, findEnclosingTemplate(pointOfDefinition));
+	}
+
+	public EvalCompound(ICPPEvaluation delegate, IBinding templateDefinition) {
+		super(templateDefinition);
 		fDelegate= delegate;
 	}
 
@@ -55,6 +64,11 @@ public class EvalCompound extends CPPEvaluation {
 	public boolean isValueDependent() {
 		return fDelegate.isValueDependent();
 	}
+	
+	@Override
+	public boolean isConstantExpression(IASTNode point) {
+		return fDelegate.isConstantExpression(point);		
+	}
 
 	@Override
 	public IType getTypeOrFunctionSet(IASTNode point) {
@@ -63,7 +77,7 @@ public class EvalCompound extends CPPEvaluation {
 
 	@Override
 	public IValue getValue(IASTNode point) {
-		return Value.create(this, point);
+		return fDelegate.getValue(point);
 	}
 
 	@Override
@@ -73,12 +87,42 @@ public class EvalCompound extends CPPEvaluation {
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer, boolean includeValue) throws CoreException {
-		buffer.putByte(ITypeMarshalBuffer.EVAL_COMPOUND);
+		buffer.putShort(ITypeMarshalBuffer.EVAL_COMPOUND);
 		buffer.marshalEvaluation(fDelegate, includeValue);
+		marshalTemplateDefinition(buffer);
 	}
 
-	public static ISerializableEvaluation unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
+	public static ISerializableEvaluation unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
 		ICPPEvaluation arg= (ICPPEvaluation) buffer.unmarshalEvaluation();
-		return new EvalCompound(arg);
+		IBinding templateDefinition= buffer.unmarshalBinding();
+		return new EvalCompound(arg, templateDefinition);
+	}
+
+	@Override
+	public ICPPEvaluation instantiate(ICPPTemplateParameterMap tpMap, int packOffset,
+			ICPPClassSpecialization within, int maxdepth, IASTNode point) {
+		ICPPEvaluation delegate = fDelegate.instantiate(tpMap, packOffset, within, maxdepth, point);
+		if (delegate == fDelegate)
+			return this;
+		return new EvalCompound(delegate, getTemplateDefinition());
+	}
+
+	@Override
+	public ICPPEvaluation computeForFunctionCall(CPPFunctionParameterMap parameterMap,
+			int maxdepth, IASTNode point) {
+		ICPPEvaluation delegate = fDelegate.computeForFunctionCall(parameterMap, maxdepth, point);
+		if (delegate == fDelegate)
+			return this;
+		return new EvalCompound(delegate, getTemplateDefinition());
+	}
+
+	@Override
+	public int determinePackSize(ICPPTemplateParameterMap tpMap) {
+		return fDelegate.determinePackSize(tpMap);
+	}
+
+	@Override
+	public boolean referencesTemplateParameter() {
+		return fDelegate.referencesTemplateParameter();
 	}
 }

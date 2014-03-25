@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2006 QNX Software Systems and others.
+ * Copyright (c) 2000, 2013 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -30,6 +30,7 @@ import org.eclipse.cdt.make.internal.core.makefile.NullMakefile;
 import org.eclipse.cdt.make.internal.ui.MakeUIImages;
 import org.eclipse.cdt.make.internal.ui.MakeUIPlugin;
 import org.eclipse.cdt.make.ui.IWorkingCopyManager;
+import org.eclipse.cdt.ui.CDTSharedImages;
 import org.eclipse.jface.action.IMenuListener;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.IToolBarManager;
@@ -47,7 +48,9 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.ui.IActionBars;
 import org.eclipse.ui.IEditorInput;
+import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.IWorkbenchActionConstants;
+import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.part.IPageSite;
 import org.eclipse.ui.views.contentoutline.ContentOutlinePage;
 
@@ -55,9 +58,7 @@ import org.eclipse.ui.views.contentoutline.ContentOutlinePage;
  * MakefileContentOutlinePage
  */
 public class MakefileContentOutlinePage extends ContentOutlinePage {
-
 	private class MakefileContentProvider implements ITreeContentProvider {
-
 		protected boolean showMacroDefinition = true;
 		protected boolean showTargetRule = true;
 		protected boolean showInferenceRule = true;
@@ -66,9 +67,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 		protected IMakefile makefile;
 		protected IMakefile nullMakefile = new NullMakefile();
 
-		/* (non-Javadoc)
-		* @see org.eclipse.jface.viewers.ITreeContentProvider#getChildren(java.lang.Object)
-		*/
 		@Override
 		public Object[] getChildren(Object element) {
 			if (element == fInput) {
@@ -79,9 +77,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 			return new Object[0];
 		}
 
-		/* (non-Javadoc)
-		 * @see org.eclipse.jface.viewers.ITreeContentProvider#getParent(java.lang.Object)
-		 */
 		@Override
 		public Object getParent(Object element) {
 			if (element instanceof IMakefile) {
@@ -92,9 +87,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 			return fInput;
 		}
 
-		/* (non-Javadoc)
-		 * @see org.eclipse.jface.viewers.ITreeContentProvider#hasChildren(java.lang.Object)
-		 */
 		@Override
 		public boolean hasChildren(Object element) {
 			if (element == fInput) {
@@ -109,9 +101,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 			return false;
 		}
 
-		/* (non-Javadoc)
-		 * @see org.eclipse.jface.viewers.IStructuredContentProvider#getElements(java.lang.Object)
-		 */
 		@Override
 		public Object[] getElements(Object inputElement) {
 			IDirective[] directives;
@@ -129,35 +118,29 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 				directives = new IDirective[0];
 			}
 			List<IDirective> list = new ArrayList<IDirective>(directives.length);
-			for (int i = 0; i < directives.length; i++) {
-				if (showMacroDefinition && directives[i] instanceof IMacroDefinition) {
-					list.add(directives[i]);
-				} else if (showInferenceRule && directives[i] instanceof IInferenceRule) {
-					list.add(directives[i]);
-				} else if (showTargetRule && directives[i] instanceof ITargetRule) {
-					list.add(directives[i]);
+			for (IDirective directive : directives) {
+				if (showMacroDefinition && directive instanceof IMacroDefinition) {
+					list.add(directive);
+				} else if (showInferenceRule && directive instanceof IInferenceRule) {
+					list.add(directive);
+				} else if (showTargetRule && directive instanceof ITargetRule) {
+					list.add(directive);
 				} else {
-					boolean irrelevant = (directives[i] instanceof IComment ||
-						directives[i] instanceof IEmptyLine ||
-						directives[i] instanceof ITerminal);
+					boolean irrelevant = (directive instanceof IComment ||
+							directive instanceof IEmptyLine ||
+							directive instanceof ITerminal);
 					if (!irrelevant) {
-						list.add(directives[i]);
+						list.add(directive);
 					}
 				}
 			}
 			return list.toArray();
 		}
 
-		/* (non-Javadoc)
-		 * @see org.eclipse.jface.viewers.IContentProvider#dispose()
-		 */
 		@Override
 		public void dispose() {
 		}
 
-		/* (non-Javadoc)
-		 * @see org.eclipse.jface.viewers.IContentProvider#inputChanged(org.eclipse.jface.viewers.Viewer, java.lang.Object, java.lang.Object)
-		 */
 		@Override
 		public void inputChanged(Viewer viewer, Object oldInput, Object newInput) {
 			if (oldInput != null) {
@@ -172,37 +155,29 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 				}
 			}
 		}
-
 	}
 
 	private class MakefileLabelProvider extends LabelProvider {
-
-		/* (non-Javadoc)
-		* @see org.eclipse.jface.viewers.ILabelProvider#getImage(java.lang.Object)
-		*/
 		@Override
 		public Image getImage(Object element) {
 			if (element instanceof ITargetRule) {
-				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_MAKEFILE_TARGET_RULE);
+				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_TARGET);
 			} else if (element instanceof IInferenceRule) {
-				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_MAKEFILE_INFERENCE_RULE);
+				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_INFERENCE_RULE);
 			} else if (element instanceof IMacroDefinition) {
-				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_MAKEFILE_MACRO);
+				return CDTSharedImages.getImage(CDTSharedImages.IMG_OBJS_VARIABLE);
 			} else if (element instanceof ICommand) {
-				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_MAKEFILE_COMMAND);
+				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_COMMAND);
 			} else if (element instanceof IInclude) {
-				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_MAKEFILE_INCLUDE);
+				return MakeUIImages.getImage(MakeUIImages.IMG_ETOOL_MAKEFILE);
 			} else if (element instanceof IBadDirective) {
-				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_ERROR);
+				return PlatformUI.getWorkbench().getSharedImages().getImage(ISharedImages.IMG_OBJS_INFO_TSK);
 			} else if (element instanceof IParent) {
-				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_MAKEFILE_RELATION);
+				return MakeUIImages.getImage(MakeUIImages.IMG_OBJS_RELATION);
 			}
 			return super.getImage(element);
 		}
 
-		/* (non-Javadoc)
-		 * @see org.eclipse.jface.viewers.ILabelProvider#getText(java.lang.Object)
-		 */
 		@Override
 		public String getText(Object element) {
 			String name;
@@ -221,7 +196,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 			}
 			return name;
 		}
-
 	}
 
 	protected MakefileEditor fEditor;
@@ -236,9 +210,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 		fOpenIncludeAction = new OpenIncludeAction(this);
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.ui.part.IPage#createControl(org.eclipse.swt.widgets.Composite)
-	 */
 	@Override
 	public void createControl(Composite parent) {
 		super.createControl(parent);
@@ -262,9 +233,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 		tree.setMenu(menu);
 
 		viewer.addDoubleClickListener(new IDoubleClickListener() {
-			/* (non-Javadoc)
-			 * @see org.eclipse.jface.viewers.IDoubleClickListener#doubleClick(org.eclipse.jface.viewers.DoubleClickEvent)
-			 */
 			@Override
 			public void doubleClick(DoubleClickEvent event) {
 				if (fOpenIncludeAction != null) {
@@ -276,7 +244,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 		IPageSite site= getSite();
 		site.registerContextMenu(MakeUIPlugin.getPluginId() + ".outline", manager, viewer); //$NON-NLS-1$
 		site.setSelectionProvider(viewer);
-
 	}
 
 	/**
@@ -329,9 +296,6 @@ public class MakefileContentOutlinePage extends ContentOutlinePage {
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.ui.part.IPage#setActionBars(org.eclipse.ui.IActionBars)
-	 */
 	@Override
 	public void setActionBars(IActionBars actionBars) {
 		super.setActionBars(actionBars);

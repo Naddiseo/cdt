@@ -57,11 +57,7 @@ public class CPPASTCastExpression extends ASTNode implements ICPPASTCastExpressi
 		copy.setTypeId(typeId == null ? null : typeId.copy(style));
 		IASTExpression operand = getOperand();
 		copy.setOperand(operand == null ? null : operand.copy(style));
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -155,7 +151,7 @@ public class CPPASTCastExpression extends ASTNode implements ICPPASTCastExpressi
 		if (type == null || type instanceof IProblemType)
 			return EvalFixed.INCOMPLETE;
 		
-		return new EvalTypeId(type, operand.getEvaluation());
+		return new EvalTypeId(type, this, operand.getEvaluation());
 	}
 
     @Override

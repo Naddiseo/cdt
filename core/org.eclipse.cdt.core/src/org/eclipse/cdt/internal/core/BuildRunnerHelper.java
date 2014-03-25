@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012 Andrew Gvozdev and others.
+ * Copyright (c) 2012, 2013 Andrew Gvozdev and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -35,6 +35,7 @@ import org.eclipse.cdt.core.resources.IConsole;
 import org.eclipse.cdt.core.resources.RefreshScopeManager;
 import org.eclipse.cdt.core.settings.model.ICConfigurationDescription;
 import org.eclipse.cdt.utils.EFSExtensionManager;
+import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspace;
@@ -193,10 +194,34 @@ public class BuildRunnerHelper implements Closeable {
 		}
 		try {
 			monitor.beginTask("", IProgressMonitor.UNKNOWN); //$NON-NLS-1$
-			if (rc != null) {
-				monitor.subTask(CCorePlugin.getFormattedString("BuildRunnerHelper.removingMarkers", rc.getFullPath().toString())); //$NON-NLS-1$
-				rc.deleteMarkers(ICModelMarker.C_MODEL_PROBLEM_MARKER, false,  IResource.DEPTH_INFINITE);
+			try {
+				if (rc != null) {
+					monitor.subTask(CCorePlugin.getFormattedString("BuildRunnerHelper.removingMarkers", rc.getFullPath().toString())); //$NON-NLS-1$
+					rc.deleteMarkers(ICModelMarker.C_MODEL_PROBLEM_MARKER, false,  IResource.DEPTH_INFINITE);
+				}
+			} catch (CoreException e) {
+				// ignore
 			}
+			if (project != null) {
+				// Remove markers which source is this project from other projects
+				try {
+					IWorkspace workspace = project.getWorkspace();
+					IMarker[] markers = workspace.getRoot().findMarkers(ICModelMarker.C_MODEL_PROBLEM_MARKER, true, IResource.DEPTH_INFINITE);
+					String projectName = project.getName();
+					List<IMarker> markersList = new ArrayList<IMarker>();
+					for (IMarker marker : markers) {
+						if (projectName.equals(marker.getAttribute(IMarker.SOURCE_ID))) {
+							markersList.add(marker);
+						}
+					}
+					if (markersList.size() > 0) {
+						workspace.deleteMarkers(markersList.toArray(new IMarker[markersList.size()]));
+					}
+				} catch (CoreException e) {
+					// ignore
+				}
+			}
+
 		} finally {
 			monitor.done();
 		}
@@ -227,14 +252,14 @@ public class BuildRunnerHelper implements Closeable {
 			if (workingDirectoryURI != null) {
 				pathFromURI = EFSExtensionManager.getDefault().getPathFromURI(workingDirectoryURI);
 			}
-			if(pathFromURI == null) {
+			if (pathFromURI == null) {
 				// fallback to CWD
 				pathFromURI = System.getProperty("user.dir"); //$NON-NLS-1$
 			}
 			IPath workingDirectory = new Path(pathFromURI);
 
 			String errMsg = null;
-			monitor.subTask(CCorePlugin.getFormattedString("BuildRunnerHelper.invokingCommand", launcher.getCommandLine())); //$NON-NLS-1$
+			monitor.subTask(CCorePlugin.getFormattedString("BuildRunnerHelper.invokingCommand", guessCommandLine(buildCommand.toString(), args))); //$NON-NLS-1$
 			Process p = launcher.execute(buildCommand, args, envp, workingDirectory, monitor);
 			monitor.worked(TICKS_EXECUTE_PROGRAM);
 			if (p != null) {
@@ -262,6 +287,8 @@ public class BuildRunnerHelper implements Closeable {
 			if (!isCancelled && project != null) {
 				project.setSessionProperty(progressPropertyName, new Integer(streamProgressMonitor.getWorkDone()));
 			}
+		} catch (Exception e) {
+			CCorePlugin.log(e);
 		} finally {
 			monitor.done();
 		}
@@ -323,7 +350,8 @@ public class BuildRunnerHelper implements Closeable {
 			monitor = new NullProgressMonitor();
 		}
 		try {
-			monitor.beginTask(CCorePlugin.getResourceString("BuildRunnerHelper.updatingProject"), IProgressMonitor.UNKNOWN); //$NON-NLS-1$
+			monitor.beginTask(CCorePlugin.getFormattedString("BuildRunnerHelper.refreshingProject", project.getName()), IProgressMonitor.UNKNOWN); //$NON-NLS-1$
+			monitor.subTask(""); //$NON-NLS-1$
 
 			// Do not allow the cancel of the refresh, since the builder is external
 			// to Eclipse, files may have been created/modified and we will be out-of-sync.
@@ -453,6 +481,19 @@ public class BuildRunnerHelper implements Closeable {
 		errorParserManager.processLine(msg);
 	}
 
+	/**
+	 * Compose command line that presumably will be run by launcher.
+	 */
+	private static String guessCommandLine(String command, String[] args) {
+		StringBuffer buf = new StringBuffer(command + ' ');
+		if (args != null) {
+			for (String arg : args) {
+				buf.append(arg);
+				buf.append(' ');
+			}
+		}
+		return buf.toString().trim();
+	}
 	/**
 	 * Print a message to the console info output. Note that this message is colored
 	 * with the color assigned to "Info" stream.

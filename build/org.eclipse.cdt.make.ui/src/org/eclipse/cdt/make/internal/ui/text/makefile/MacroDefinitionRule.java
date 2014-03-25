@@ -65,7 +65,7 @@ class MacroDefinitionRule implements IPredicateRule {
 				case END_VAR_STATE :
 					if (c != '\n' && Character.isWhitespace((char) c)) {
 						state = END_VAR_STATE;
-					} else if (c == ':' || c == '+') {
+					} else if (c == ':' || c == '+' || c == '?') {
 						state = EQUAL_STATE;
 					} else if (c == '=') {
 						state = FINISH_STATE;
@@ -157,9 +157,13 @@ class MacroDefinitionRule implements IPredicateRule {
 
 		return true;
 	}
+
 	protected boolean isValidCharacter(int c) {
-		char c0 = (char) c;
-		return Character.isLetterOrDigit(c0) || (c0 == '_');
+		// From GNUMakefile manual:
+		// A variable name may be any sequence of characters not containing ‘:’, ‘#’, ‘=’, or leading or trailing whitespace.
+		// However, variable names containing characters other than letters, numbers, and underscores should be avoided,
+		// as they may be given special meanings in the future, and with some shells they cannot be passed through the environment to a sub-make
+		return !Character.isWhitespace(c) && c != ':' && c != '#' && c != '=';
 	}
 
 }

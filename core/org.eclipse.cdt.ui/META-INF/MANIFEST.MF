@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: %pluginName
 Bundle-SymbolicName: org.eclipse.cdt.ui; singleton:=true
-Bundle-Version: 5.5.0.qualifier
+Bundle-Version: 5.8.0.qualifier
 Bundle-Activator: org.eclipse.cdt.ui.CUIPlugin
 Bundle-Vendor: %providerName
 Bundle-Localization: plugin
@@ -10,7 +10,7 @@ Export-Package: org.eclipse.cdt.internal.corext;x-internal:=true,
  org.eclipse.cdt.internal.corext.codemanipulation;x-internal:=true,
  org.eclipse.cdt.internal.corext.fix;x-internal:=true,
  org.eclipse.cdt.internal.corext.template.c;x-internal:=true,
- org.eclipse.cdt.internal.corext.util;x-internal:=true,
+ org.eclipse.cdt.internal.corext.util;x-friends:="org.eclipse.cdt.codan.ui",
  org.eclipse.cdt.internal.ui;x-friends:="org.eclipse.cdt.debug.edc.tests",
  org.eclipse.cdt.internal.ui.actions;x-internal:=true,
  org.eclipse.cdt.internal.ui.browser.opentype;x-internal:=true,
@@ -22,7 +22,7 @@ Export-Package: org.eclipse.cdt.internal.corext;x-internal:=true,
  org.eclipse.cdt.internal.ui.dialogs;x-internal:=true,
  org.eclipse.cdt.internal.ui.dialogs.cpaths;x-internal:=true,
  org.eclipse.cdt.internal.ui.dnd;x-internal:=true,
- org.eclipse.cdt.internal.ui.editor;x-friends:="org.eclipse.cdt.codan.ui.cxx",
+ org.eclipse.cdt.internal.ui.editor;x-friends:="org.eclipse.cdt.codan.ui,org.eclipse.cdt.codan.ui.cxx",
  org.eclipse.cdt.internal.ui.editor.asm;x-internal:=true,
  org.eclipse.cdt.internal.ui.filters;x-internal:=true,
  org.eclipse.cdt.internal.ui.help;x-internal:=true,
@@ -42,6 +42,7 @@ Export-Package: org.eclipse.cdt.internal.corext;x-internal:=true,
  org.eclipse.cdt.internal.ui.refactoring.gettersandsetters;x-friends:="org.eclipse.cdt.ui.tests",
  org.eclipse.cdt.internal.ui.refactoring.hidemethod;x-friends:="org.eclipse.cdt.ui.tests",
  org.eclipse.cdt.internal.ui.refactoring.implementmethod;x-friends:="org.eclipse.cdt.ui.tests",
+ org.eclipse.cdt.internal.ui.refactoring.includes;x-friends:="org.eclipse.cdt.ui.tests",
  org.eclipse.cdt.internal.ui.refactoring.rename;x-friends:="org.eclipse.cdt.ui.tests",
  org.eclipse.cdt.internal.ui.refactoring.togglefunction;x-friends:="org.eclipse.cdt.ui.tests",
  org.eclipse.cdt.internal.ui.refactoring.utils;x-friends:="org.eclipse.cdt.ui.tests",
@@ -65,7 +66,7 @@ Export-Package: org.eclipse.cdt.internal.corext;x-internal:=true,
  org.eclipse.cdt.internal.ui.viewsupport;x-internal:=true,
  org.eclipse.cdt.internal.ui.wizards;x-internal:=true,
  org.eclipse.cdt.internal.ui.wizards.classwizard;x-internal:=true,
- org.eclipse.cdt.internal.ui.wizards.dialogfields;x-internal:=true,
+ org.eclipse.cdt.internal.ui.wizards.dialogfields;x-friends:="org.eclipse.cdt.codan.ui",
  org.eclipse.cdt.internal.ui.wizards.filewizard;x-internal:=true,
  org.eclipse.cdt.internal.ui.wizards.folderwizard;x-internal:=true,
  org.eclipse.cdt.internal.ui.wizards.indexwizards;x-internal:=true,
@@ -75,6 +76,7 @@ Export-Package: org.eclipse.cdt.internal.corext;x-internal:=true,
  org.eclipse.cdt.ui.actions,
  org.eclipse.cdt.ui.browser.typeinfo,
  org.eclipse.cdt.ui.dialogs,
+ org.eclipse.cdt.ui.extensions,
  org.eclipse.cdt.ui.internal.templateengine.wizard;x-internal:=true,
  org.eclipse.cdt.ui.language.settings.providers,
  org.eclipse.cdt.ui.newui,
@@ -119,4 +121,4 @@ Require-Bundle: org.eclipse.cdt.core;bundle-version="[5.2.0,6.0.0)",
  org.eclipse.ui.workbench.texteditor;bundle-version="[3.5.0,4.0.0)",
  com.ibm.icu;bundle-version="4.4.2"
 Bundle-ActivationPolicy: lazy
-Bundle-RequiredExecutionEnvironment: JavaSE-1.6
+Bundle-RequiredExecutionEnvironment: JavaSE-1.7

@@ -25,6 +25,7 @@ import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.ITypedef;
 import org.eclipse.cdt.core.dom.ast.IVariable;
 import org.eclipse.cdt.core.index.IIndexBinding;
+import org.eclipse.cdt.internal.core.dom.ast.tag.TagManager;
 import org.eclipse.cdt.internal.core.dom.parser.ISerializableEvaluation;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeMarshalBuffer;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemType;
@@ -33,6 +34,7 @@ import org.eclipse.cdt.internal.core.dom.parser.c.CBasicType;
 import org.eclipse.cdt.internal.core.dom.parser.c.CFunctionType;
 import org.eclipse.cdt.internal.core.dom.parser.c.CPointerType;
 import org.eclipse.cdt.internal.core.dom.parser.c.CQualifierType;
+import org.eclipse.cdt.internal.core.index.IIndexBindingConstants;
 import org.eclipse.cdt.internal.core.index.IIndexCBindingConstants;
 import org.eclipse.cdt.internal.core.index.composite.CompositeIndexBinding;
 import org.eclipse.cdt.internal.core.pdom.PDOM;
@@ -60,7 +62,7 @@ class PDOMCLinkage extends PDOMLinkage implements IIndexCBindingConstants {
 
 	@Override
 	public int getNodeType() {
-		return LINKAGE;
+		return IIndexBindingConstants.LINKAGE;
 	}
 	
 	@Override
@@ -97,6 +99,11 @@ class PDOMCLinkage extends PDOMLinkage implements IIndexCBindingConstants {
 				if (pdomBinding != null) {
 					getPDOM().putCachedResult(inputBinding, pdomBinding);
 				}
+
+				// Synchronize the tags associated with the persistent binding to match the set that
+				// is associated with the input binding.
+				TagManager.getInstance().syncTags(pdomBinding, inputBinding);
+
 				return pdomBinding;
 			}
 
@@ -104,7 +111,14 @@ class PDOMCLinkage extends PDOMLinkage implements IIndexCBindingConstants {
 		}
 		
 		if (shouldUpdate(pdomBinding, fromName)) {
-			pdomBinding.update(this, fromName.getBinding());
+			IBinding fromBinding = fromName.getBinding();
+
+			pdomBinding.update(this, fromBinding);
+
+			// Update the tags based on the tags from the new binding.  This cannot be done in
+			// PDOMBinding.update, because not all subclasses (e.g., PDOMCFunction) call
+			// the superclass implementation.
+			TagManager.getInstance().syncTags(pdomBinding, fromBinding);
 		}
 		return pdomBinding;
 	}
@@ -325,26 +339,30 @@ class PDOMCLinkage extends PDOMLinkage implements IIndexCBindingConstants {
 		return addBinding(type, null);
 	}
 
+	@Override
+	public IBinding unmarshalBinding(ITypeMarshalBuffer buffer) throws CoreException {
+		throw new CoreException(CCorePlugin.createStatus("Cannot unmarshal a binding, first byte=" + buffer.getByte())); //$NON-NLS-1$
+	}
 	
 	@Override
 	public IType unmarshalType(ITypeMarshalBuffer buffer) throws CoreException {
-		int firstByte= buffer.getByte();
-		switch((firstByte & ITypeMarshalBuffer.KIND_MASK)) {
+		short firstBytes= buffer.getShort();
+		switch((firstBytes & ITypeMarshalBuffer.KIND_MASK)) {
 		case ITypeMarshalBuffer.ARRAY_TYPE:
-			return CArrayType.unmarshal(firstByte, buffer);
+			return CArrayType.unmarshal(firstBytes, buffer);
 		case ITypeMarshalBuffer.BASIC_TYPE:
-			return CBasicType.unmarshal(firstByte, buffer);
+			return CBasicType.unmarshal(firstBytes, buffer);
 		case ITypeMarshalBuffer.CVQUALIFIER_TYPE:
-			return CQualifierType.unmarshal(firstByte, buffer);
+			return CQualifierType.unmarshal(firstBytes, buffer);
 		case ITypeMarshalBuffer.FUNCTION_TYPE:
-			return CFunctionType.unmarshal(firstByte, buffer);
+			return CFunctionType.unmarshal(firstBytes, buffer);
 		case ITypeMarshalBuffer.POINTER_TYPE:
-			return CPointerType.unmarshal(firstByte, buffer);
+			return CPointerType.unmarshal(firstBytes, buffer);
 		case ITypeMarshalBuffer.PROBLEM_TYPE:
-			return ProblemType.unmarshal(firstByte, buffer);
+			return ProblemType.unmarshal(firstBytes, buffer);
 		}
 		
-		throw new CoreException(CCorePlugin.createStatus("Cannot unmarshal a type, first byte=" + firstByte)); //$NON-NLS-1$
+		throw new CoreException(CCorePlugin.createStatus("Cannot unmarshal a type, first bytes=" + firstBytes)); //$NON-NLS-1$
 	}
 	
 	@Override

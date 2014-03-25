@@ -20,7 +20,7 @@ import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil;
 /**
  * Directly tests parts of the semantics package
  */
-public class SemanticsTests extends AST2BaseTest {
+public class SemanticsTests extends AST2TestBase {
 
 	public SemanticsTests() {}
 	public SemanticsTests(String name) { super(name); }
@@ -90,7 +90,7 @@ public class SemanticsTests extends AST2BaseTest {
 		// Test getDeclaredConversionOperators()
 		BindingAssertionHelper ba= new BindingAssertionHelper(getAboveComment(), true);
 		ICPPClassType c= ba.assertNonProblem("X {", 1, ICPPClassType.class);
-		ICPPMethod[] cops= SemanticUtil.getDeclaredConversionOperators(c);
+		ICPPMethod[] cops= SemanticUtil.getDeclaredConversionOperators(c, null);
 		assertEquals(2, cops.length);
 		Set actual= new HashSet();
 		actual.add(cops[0].getName()); actual.add(cops[1].getName());

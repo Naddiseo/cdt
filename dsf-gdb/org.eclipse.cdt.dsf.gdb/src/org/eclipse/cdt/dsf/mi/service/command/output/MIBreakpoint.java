@@ -11,10 +11,14 @@
  *     Ericsson             - Modified for the breakpoint service
  *     Ericsson             - Added Tracepoint support (284286)
  *     Abeer Bagul (Tensilica) - Differentiate between hw breakpoint and watchpoint
+ *     Marc Khouzam (Ericsson) - Add 'thread-group' field (bug 360735)
  *******************************************************************************/
 
 package org.eclipse.cdt.dsf.mi.service.command.output;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.StringTokenizer;
 
 import org.eclipse.cdt.dsf.gdb.internal.tracepointactions.TracepointActionManager;
@@ -77,7 +81,8 @@ public class MIBreakpoint  {
     String  threadId = "0"; //$NON-NLS-1$
     int     ignore   = 0;
     String  commands = ""; //$NON-NLS-1$
-    
+    String  originalLocation = ""; //$NON-NLS-1$
+
     // For tracepoints
     int     passcount = 0;
 
@@ -104,6 +109,13 @@ public class MIBreakpoint  {
 	 * This concept is only supported starting with GDB 6.8
 	 */
 	private boolean pending;
+	
+	/**
+	 * The list of groupIds to which this breakpoint applies.
+	 * This field is only reported by MI starting with GDB 7.6.
+	 * null will be returned if this field is not present. 
+	 */
+	private String[] groupIds;
 	
     public MIBreakpoint() {
 	}
@@ -134,6 +146,10 @@ public class MIBreakpoint  {
         isCatchpoint = other.isCatchpoint;
         catchpointType = other.catchpointType;
         pending = other.pending;
+        originalLocation = other.originalLocation;
+        if (other.groupIds != null) {
+        	groupIds = Arrays.copyOf(other.groupIds, other.groupIds.length);
+        }
 	}
 
     public MIBreakpoint(MITuple tuple) {
@@ -278,6 +294,13 @@ public class MIBreakpoint  {
         return exp;
     }
 
+    /**
+	 * @since 4.2
+	 */
+    public String getOriginalLocation() {
+    	return originalLocation;
+    }
+
 	/**
 	 * If isCatchpoint is true, then this indicates the type of catchpoint
 	 * (event), as reported by gdb in its response to the CLI catch command.
@@ -409,6 +432,25 @@ public class MIBreakpoint  {
     	return pending;
     }
     
+    /**
+     * Returns the thread-groups to which this breakpoint applies.
+     * Returns null if the data is not known.
+     * 
+     * @since 4.2
+     */
+    public String[] getGroupIds() {
+    	return groupIds;
+    }
+    
+    /**
+     * Sets the list of thread-groups to which this breakpoint applies.
+     * 
+     * @since 4.2
+     */
+    public void setGroupIds(String[] groups) {
+    	groupIds = groups;
+    }
+    
     // Parse the result string
     void parse(MITuple tuple) {
         MIResult[] results = tuple.getMIResults();
@@ -453,6 +495,9 @@ public class MIBreakpoint  {
                 if (type.startsWith("tracepoint") ||  //$NON-NLS-1$
                     type.startsWith("fast tracepoint")) { //$NON-NLS-1$
                 	isTpt = true;
+                }
+                if (type.startsWith("catchpoint")) { //$NON-NLS-1$
+                    isCatchpoint = true;
                 }
                 // type="breakpoint"
                 // default ok.
@@ -504,6 +549,12 @@ public class MIBreakpoint  {
             	if (value instanceof MITuple) {
             		parseCommands((MITuple)value);
             	}
+            } else if (var.equals("thread-groups")) { //$NON-NLS-1$
+                if (value instanceof MIList) {
+            		parseGroups((MIList)value);
+            	}
+            } else if (var.equals("original-location")) { //$NON-NLS-1$
+                originalLocation = str;
             }
         }
     }
@@ -523,5 +574,18 @@ public class MIBreakpoint  {
     	}
     	setCommands(cmds.toString());
 
+    }
+    
+    private void parseGroups(MIList list) {
+		List<String> groups = new ArrayList<String>();
+		
+		MIValue[] values = list.getMIValues();
+		for (int i = 0; i < values.length; i++) {
+			if (values[i] instanceof MIConst) {
+				groups.add(((MIConst)values[i]).getCString());
+			}
+		}
+		
+		groupIds = groups.toArray(new String[groups.size()]);
     }
 }

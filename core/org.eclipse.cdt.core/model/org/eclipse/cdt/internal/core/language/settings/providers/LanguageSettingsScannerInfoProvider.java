@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2010, 2012 Andrew Gvozdev and others.
+ * Copyright (c) 2010, 2013 Andrew Gvozdev and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@
 
 package org.eclipse.cdt.internal.core.language.settings.providers;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -30,14 +31,17 @@ import org.eclipse.cdt.core.parser.ExtendedScannerInfo;
 import org.eclipse.cdt.core.parser.IScannerInfo;
 import org.eclipse.cdt.core.parser.IScannerInfoChangeListener;
 import org.eclipse.cdt.core.parser.IScannerInfoProvider;
-import org.eclipse.cdt.core.settings.model.ACPathEntry;
 import org.eclipse.cdt.core.settings.model.ICConfigurationDescription;
 import org.eclipse.cdt.core.settings.model.ICLanguageSettingEntry;
 import org.eclipse.cdt.core.settings.model.ICMacroEntry;
+import org.eclipse.cdt.core.settings.model.ICPathEntry;
 import org.eclipse.cdt.core.settings.model.ICProjectDescription;
 import org.eclipse.cdt.core.settings.model.ICSettingEntry;
+import org.eclipse.cdt.core.settings.model.util.CDataUtil;
+import org.eclipse.cdt.internal.core.parser.ParserSettings2;
 import org.eclipse.cdt.internal.core.settings.model.CProjectDescriptionManager;
 import org.eclipse.cdt.internal.core.settings.model.SettingsModelMessages;
+import org.eclipse.cdt.utils.EFSExtensionManager;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -125,20 +129,20 @@ public class LanguageSettingsScannerInfoProvider implements IScannerInfoProvider
 			definedMacros.put(name, value);
 		}
 
-		return new ExtendedScannerInfo(definedMacros, includePaths, macroFiles, includeFiles, includePathsLocal);
+		ExtendedScannerInfo extendedScannerInfo = new ExtendedScannerInfo(definedMacros, includePaths, macroFiles, includeFiles, includePathsLocal);
+		extendedScannerInfo.setParserSettings(new ParserSettings2(project));
+		return extendedScannerInfo;
 	}
 
-	private IPath expandVariables(IPath path, ICConfigurationDescription cfgDescription) {
-		ICdtVariableManager varManager = CCorePlugin.getDefault().getCdtVariableManager();
-		String pathStr = path.toString();
+	private String expandVariables(String pathStr, ICConfigurationDescription cfgDescription) {
 		try {
+			ICdtVariableManager varManager = CCorePlugin.getDefault().getCdtVariableManager();
 			pathStr = varManager.resolveValue(pathStr, "", null, cfgDescription); //$NON-NLS-1$
-		} catch (CdtVariableException e) {
+		} catch (Exception e) {
 			// Swallow exceptions but also log them
 			CCorePlugin.log(e);
 		}
-		IPath resolvedLoc = new Path(pathStr);
-		return resolvedLoc;
+		return pathStr;
 	}
 
 	/**
@@ -147,7 +151,7 @@ public class LanguageSettingsScannerInfoProvider implements IScannerInfoProvider
 	 */
 	private static IPath getBuildCWD(ICConfigurationDescription cfgDescription) {
 		IPath buildCWD = cfgDescription.getBuildSetting().getBuilderCWD();
-		if (buildCWD==null) {
+		if (buildCWD == null) {
 			IProject project = cfgDescription.getProjectDescription().getProject();
 			buildCWD = project.getLocation();
 		} else {
@@ -158,7 +162,14 @@ public class LanguageSettingsScannerInfoProvider implements IScannerInfoProvider
 				// still, MBS does that and we need to handle that
 				String buildPathString = buildCWD.toString();
 				buildPathString = mngr.resolveValue(buildPathString, "", null, cfgDescription); //$NON-NLS-1$
-				buildCWD = new Path(buildPathString);
+				if (!buildPathString.isEmpty()) {
+					buildCWD = new Path(buildPathString);
+				} else {
+					IProject project = cfgDescription.getProjectDescription().getProject();
+					URI locationURI = project.getLocationURI();
+					String path = EFSExtensionManager.getDefault().getPathFromURI(locationURI);
+					buildCWD = new Path(path);
+				}
 			} catch (CdtVariableException e) {
 				CCorePlugin.log(e);
 			}
@@ -186,26 +197,42 @@ public class LanguageSettingsScannerInfoProvider implements IScannerInfoProvider
 			CCorePlugin.log(e);
 		}
 		// use OS file separators (i.e. '\' on Windows)
-		if (java.io.File.separatorChar != '/') {
-			location = location.replace('/', java.io.File.separatorChar);
+		if (java.io.File.separatorChar != IPath.SEPARATOR) {
+			location = location.replace(IPath.SEPARATOR, java.io.File.separatorChar);
 		}
 
-		// note that we avoid using org.eclipse.core.runtime.Path for manipulations being careful
-		// to preserve "../" segments and not let collapsing them which is not correct for symbolic links.
-		Path locPath = new Path(location);
-		if (locPath.isAbsolute() && locPath.getDevice()==null) {
-			// prepend device (C:) for Windows
+		IPath locPath = new Path(location);
+		if (locPath.isAbsolute() && locPath.getDevice() == null) {
 			IPath buildCWD = getBuildCWD(cfgDescription);
+			// prepend device (C:) for Windows
 			String device = buildCWD.getDevice();
-			if (device!=null)
+			if (device != null) {
+				// note that we avoid using org.eclipse.core.runtime.Path for manipulations being careful
+				// to preserve "../" segments and not let collapsing them which is not correct for symbolic links.
 				location = device + location;
+			}
 		}
+
 		if (!locPath.isAbsolute()) {
 			// consider relative path to be from build working directory
 			IPath buildCWD = getBuildCWD(cfgDescription);
-			location = buildCWD.toOSString() + locPath;
+			// again, we avoid using org.eclipse.core.runtime.Path for manipulations being careful
+			// to preserve "../" segments and not let collapsing them which is not correct for symbolic links.
+			location = buildCWD.addTrailingSeparator().toOSString() + location;
 		}
 		return location;
+	}
+
+	/**
+	 * Convert path delimiters to OS representation avoiding using org.eclipse.core.runtime.Path
+	 * being careful to preserve "../" segments and not let collapsing them which is not correct for symbolic links.
+	 */
+	private String toOSString(String loc) {
+		// use OS file separators (i.e. '\' on Windows)
+		if (java.io.File.separatorChar != IPath.SEPARATOR) {
+			loc = loc.replace(IPath.SEPARATOR, java.io.File.separatorChar);
+		}
+		return loc;
 	}
 
 	/**
@@ -216,40 +243,48 @@ public class LanguageSettingsScannerInfoProvider implements IScannerInfoProvider
 	 * @param cfgDescription - configuration description for resolving entries.
 	 * @return array of the locations.
 	 */
-	private String[] convertToLocations(LinkedHashSet<ICLanguageSettingEntry> entriesPath, ICConfigurationDescription cfgDescription){
+	private String[] convertToLocations(LinkedHashSet<ICLanguageSettingEntry> entriesPath, ICConfigurationDescription cfgDescription) {
 		List<String> locations = new ArrayList<String>(entriesPath.size());
 		for (ICLanguageSettingEntry entry : entriesPath) {
-			ACPathEntry entryPath = (ACPathEntry)entry;
+			ICPathEntry entryPath = (ICPathEntry)entry;
 			if (entryPath.isValueWorkspacePath()) {
-				IPath loc = entryPath.getLocation();
-				if (loc!=null) {
-					if (checkBit(entryPath.getFlags(), ICSettingEntry.FRAMEWORKS_MAC)) {
-						// handle frameworks, see IScannerInfo.getIncludePaths()
-						locations.add(loc.append(FRAMEWORK_HEADERS_INCLUDE).toOSString());
-						locations.add(loc.append(FRAMEWORK_PRIVATE_HEADERS_INCLUDE).toOSString());
-					} else {
-						locations.add(loc.toOSString());
+				ICLanguageSettingEntry[] entries = new ICLanguageSettingEntry[] {entry};
+				if (!entry.isResolved()) {
+					entries = CDataUtil.resolveEntries(entries, cfgDescription);
+				}
+
+				for (ICLanguageSettingEntry resolved : entries) {
+					IPath loc = ((ICPathEntry) resolved).getLocation();
+					if (loc != null) {
+						if (checkBit(resolved.getFlags(), ICSettingEntry.FRAMEWORKS_MAC)) {
+							// handle frameworks, see IScannerInfo.getIncludePaths()
+							locations.add(loc.append(FRAMEWORK_HEADERS_INCLUDE).toOSString());
+							locations.add(loc.append(FRAMEWORK_PRIVATE_HEADERS_INCLUDE).toOSString());
+						} else {
+							locations.add(loc.toOSString());
+						}
 					}
 				}
 			} else {
-				String locStr = entryPath.getName();
+				// have to use getName() rather than getLocation() to avoid collapsing ".."
+				String loc = entryPath.getName();
 				if (entryPath.isResolved()) {
-					locations.add(locStr);
+					locations.add(loc);
 				} else {
-					locStr = resolveEntry(locStr, cfgDescription);
-					if (locStr!=null) {
+					loc = resolveEntry(loc, cfgDescription);
+					if (loc != null) {
 						if (checkBit(entryPath.getFlags(), ICSettingEntry.FRAMEWORKS_MAC)) {
 							// handle frameworks, see IScannerInfo.getIncludePaths()
-							locations.add(locStr+FRAMEWORK_HEADERS_INCLUDE);
-							locations.add(locStr+FRAMEWORK_PRIVATE_HEADERS_INCLUDE);
+							locations.add(toOSString(loc + FRAMEWORK_HEADERS_INCLUDE));
+							locations.add(toOSString(loc + FRAMEWORK_PRIVATE_HEADERS_INCLUDE));
 						} else {
-							locations.add(locStr);
-							// add relative paths again for indexer to resolve from source file location
-							IPath unresolvedPath = entryPath.getLocation();
-							if (!unresolvedPath.isAbsolute()) {
-								IPath expandedPath = expandVariables(unresolvedPath, cfgDescription);
-								if (!expandedPath.isAbsolute()) {
-									locations.add(expandedPath.toOSString());
+							locations.add(toOSString(loc));
+							String unresolvedPath = entryPath.getName();
+							if (!new Path(unresolvedPath).isAbsolute()) {
+								// add relative paths again for indexer to resolve from source file location
+								String expandedPath = expandVariables(unresolvedPath, cfgDescription);
+								if (!expandedPath.isEmpty() && !new Path(expandedPath).isAbsolute()) {
+									locations.add(toOSString(expandedPath));
 								}
 							}
 						}

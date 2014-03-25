@@ -14,6 +14,7 @@
  * Abeer Bagul (Tensilica) - Allow to better override GdbLaunch (bug 339550)
  * Anton Gorenkov         - Need to use a process factory (Bug 210366)
  * Marc Khouzam (Ericsson) - Cleanup the launch if it is cancelled (Bug 374374)
+ * Marc-Andre Laperle      - Bug 382462
  *******************************************************************************/
 package org.eclipse.cdt.dsf.gdb.launching; 
 
@@ -143,7 +144,7 @@ public class GdbLaunchDelegate extends AbstractCLaunchDelegate2
         	checkBinaryDetails(config);
         }
     	
-        monitor.worked( 1 );
+        monitor.worked(1);
 
         // Must set this here for users that call directly the deprecated newServiceFactory(String)
         fIsNonStopSession = LaunchUtils.getIsNonStopMode(config);
@@ -153,12 +154,14 @@ public class GdbLaunchDelegate extends AbstractCLaunchDelegate2
         // First make sure non-stop is supported, if the user want to use this mode
         if (LaunchUtils.getIsNonStopMode(config) && !isNonStopSupportedInGdbVersion(gdbVersion)) {
 			cleanupLaunch();
-            throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, "Non-stop mode is only supported starting with GDB " + NON_STOP_FIRST_VERSION, null)); //$NON-NLS-1$        	
+            throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED,
+            		"Non-stop mode is not supported for GDB " + gdbVersion + ", GDB " + NON_STOP_FIRST_VERSION + " or higher is required.", null)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$        	
         }
 
         if (LaunchUtils.getIsPostMortemTracing(config) && !isPostMortemTracingSupportedInGdbVersion(gdbVersion)) {
 			cleanupLaunch();
-            throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED, "Post-mortem tracing is only supported starting with GDB " + TRACING_FIRST_VERSION, null)); //$NON-NLS-1$        	
+            throw new DebugException(new Status(IStatus.ERROR, GdbPlugin.PLUGIN_ID, DebugException.REQUEST_FAILED,
+            		"Post-mortem tracing is not supported for GDB " + gdbVersion + ", GDB " + NON_STOP_FIRST_VERSION + " or higher is required.", null)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$        	
         }
 
         launch.setServiceFactory(newServiceFactory(config, gdbVersion));
@@ -275,7 +278,7 @@ public class GdbLaunchDelegate extends AbstractCLaunchDelegate2
 	}
 	
 	/**
-	 * Method used to check that the project, program and binary are correct.
+	 * Method used to check that the project and program are correct.
 	 * Can be overridden to avoid checking certain things.
 	 * @since 3.0
 	 */
@@ -284,8 +287,9 @@ public class GdbLaunchDelegate extends AbstractCLaunchDelegate2
 		ICProject project = verifyCProject(config);
 		// Now verify we know the program to debug.
 		IPath exePath = LaunchUtils.verifyProgramPath(config, project);
-		// Finally, make sure the program is a proper binary.
-		LaunchUtils.verifyBinary(config, exePath);
+		// To allow users to debug with binary parsers turned off, we don't call
+		// LaunchUtils.verifyBinary here. Instead we simply rely on the debugger to
+		// report any issues with the binary.
 		return exePath;
 	}
 

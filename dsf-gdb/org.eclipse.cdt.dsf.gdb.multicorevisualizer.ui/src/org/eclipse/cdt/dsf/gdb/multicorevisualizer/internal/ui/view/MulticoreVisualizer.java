@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2012 Tilera Corporation and others.
+ * Copyright (c) 2012, 2013 Tilera Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,10 +7,20 @@
  *
  * Contributors:
  *     William R. Swanson (Tilera Corporation) - initial API and implementation
+ *     IBM Corporation
+ *     Marc Dumais (Ericsson) - Bug 399281
+ *     Marc Dumais (Ericsson) - Add CPU/core load information to the multicore visualizer (Bug 396268)
+ *     Marc Dumais (Ericsson) - Bug 399419
+ *     Marc Dumais (Ericsson) - Bug 405390
+ *     Marc Dumais (Ericsson) - Bug 409006
+ *     Marc Dumais (Ericsson) - Bug 407321
+ *     Marc-Andre Laperle (Ericsson) - Bug 411634
+ *     Marc Dumais (Ericsson) - Bug 409965
  *******************************************************************************/
 
 package org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.view;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -22,11 +32,16 @@ import org.eclipse.cdt.dsf.datamodel.IDMContext;
 import org.eclipse.cdt.dsf.debug.service.IProcesses.IThreadDMData;
 import org.eclipse.cdt.dsf.gdb.launching.GDBProcess;
 import org.eclipse.cdt.dsf.gdb.launching.GdbLaunch;
+import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.MulticoreVisualizerUIPlugin;
+import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.actions.EnableLoadMetersAction;
+import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.actions.FilterCanvasAction;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.actions.RefreshAction;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.actions.SelectAllAction;
+import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.actions.SetLoadMeterPeriodAction;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model.VisualizerCPU;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model.VisualizerCore;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model.VisualizerExecutionState;
+import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model.VisualizerLoadInfo;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model.VisualizerModel;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.ui.model.VisualizerThread;
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.utils.DSFDebugModel;
@@ -35,6 +50,7 @@ import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.utils.DSFSessionStat
 import org.eclipse.cdt.dsf.gdb.multicorevisualizer.internal.utils.DebugViewUtils;
 import org.eclipse.cdt.dsf.gdb.service.IGDBHardwareAndOS.ICPUDMContext;
 import org.eclipse.cdt.dsf.gdb.service.IGDBHardwareAndOS.ICoreDMContext;
+import org.eclipse.cdt.dsf.gdb.service.IGDBHardwareAndOS2.ILoadInfo;
 import org.eclipse.cdt.dsf.mi.service.IMIExecutionDMContext;
 import org.eclipse.cdt.dsf.mi.service.IMIProcessDMContext;
 import org.eclipse.cdt.dsf.ui.viewmodel.datamodel.IDMVMContext;
@@ -44,6 +60,7 @@ import org.eclipse.cdt.visualizer.ui.plugin.CDTVisualizerUIPlugin;
 import org.eclipse.cdt.visualizer.ui.util.Colors;
 import org.eclipse.cdt.visualizer.ui.util.GUIUtils;
 import org.eclipse.cdt.visualizer.ui.util.SelectionUtils;
+import org.eclipse.cdt.visualizer.ui.util.Timer;
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.internal.ui.commands.actions.DropToFrameCommandAction;
@@ -61,6 +78,7 @@ import org.eclipse.debug.internal.ui.views.launch.LaunchView;
 import org.eclipse.debug.ui.DebugUITools;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.IToolBarManager;
+import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.SelectionChangedEvent;
@@ -105,6 +123,39 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	/** Model changed listener, attached to Debug View. */
 	protected IModelChangedListener m_modelChangedListener = null;
 	
+	// These two arrays are used to cache the CPU and core
+	// contexts, each time the model is recreated.  This way
+	// we can avoid asking the backend for the CPU/core
+	// geometry each time we want to update the load information.
+	/**
+	 * @since 1.1
+	 */
+	protected ICPUDMContext[] m_cpuContextsCache = null;
+	/**
+	 * @since 1.1
+	 */
+	protected ICoreDMContext[] m_coreContextsCache = null;
+	
+	/**
+	 * Main switch that determines if we should display the load meters
+	 * @since 1.1
+	 */
+	protected boolean m_loadMetersEnabled = false;
+	/**
+	 * Timer used to trigger the update of the CPU/core load meters
+	 * @since 1.1
+	 */
+	protected Timer m_updateLoadMeterTimer = null;
+	/**
+	 * @since 1.1
+	 */
+	protected int m_loadMeterTimerPeriod = LOAD_METER_TIMER_MEDIUM; // default 1000ms
+	// Load meters refresh periods, in ms
+	private static final int LOAD_METER_TIMER_MIN = 100;
+	private static final int LOAD_METER_TIMER_FAST = 500;
+	private static final int LOAD_METER_TIMER_MEDIUM = 1000; 
+	private static final int  LOAD_METER_TIMER_SLOW = 5000;
+	
 
 	// --- UI members ---
 
@@ -141,6 +192,22 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	/** Toolbar / menu action */
 	RefreshAction m_refreshAction = null;
 	
+	/** Sub-menu */
+	IMenuManager m_loadMetersSubMenu = null;
+	/** Sub-sub menu */
+	IMenuManager m_loadMetersRefreshSubSubmenu = null;
+	
+	/** Menu action */
+	EnableLoadMetersAction m_enableLoadMetersAction = null;
+	
+	/** Menu action */
+	List<SetLoadMeterPeriodAction> m_setLoadMeterPeriodActions = null;
+	
+	/** Menu action */
+	FilterCanvasAction m_setFilterAction = null;
+
+	/** Menu action */
+	FilterCanvasAction m_clearFilterAction = null;	
 
 	// --- constructors/destructors ---
 	
@@ -156,6 +223,8 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		super.dispose();
 		removeDebugViewerListener();
 		disposeActions();
+		disposeLoadMeterTimer();
+		removeEventListener();
 	}
 	
 	
@@ -165,6 +234,26 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	@Override
 	public void initializeVisualizer() {
 		fEventListener = new MulticoreVisualizerEventListener(this);
+	}
+	
+	/**
+	 * @since 1.1
+	 */
+	protected void initializeLoadMeterTimer() {
+		if (!m_loadMetersEnabled) return;
+		m_updateLoadMeterTimer = DSFDebugModel.getLoadTimer(m_sessionState, m_loadMeterTimerPeriod, this);		
+		// one-shot timer (re-scheduled upon successful triggering)
+		m_updateLoadMeterTimer.setRepeating(false); 
+	}
+	
+	/**
+	 * @since 1.1
+	 */
+	protected void disposeLoadMeterTimer() {
+		if(m_updateLoadMeterTimer != null) {
+			m_updateLoadMeterTimer.dispose();
+			m_updateLoadMeterTimer = null;
+		}
 	}
 	
 	/** Invoked when visualizer is disposed, to permit any cleanup. */
@@ -187,17 +276,37 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	/** Returns localized name to display for this visualizer. */
 	@Override
 	public String getDisplayName() {
-		// TODO: use a string resource here.
-		return "Multicore Visualizer"; //$NON-NLS-1$
+		return Messages.MulticoreVisualizer_name; 
 	}
 	
 	/** Returns localized tooltip text to display for this visualizer. */
 	@Override
 	public String getDescription() {
-		// TODO: use a string resource here.
-		return "Displays current state of selected debug target."; //$NON-NLS-1$
+		return Messages.MulticoreVisualizer_tooltip; 
 	}
 	
+	/**
+	 * @since 1.1
+	 */
+	public void setLoadMeterTimerPeriod(int p) {
+		assert (p > LOAD_METER_TIMER_MIN);
+		if (m_loadMeterTimerPeriod == p) return; 
+		m_loadMeterTimerPeriod = p > LOAD_METER_TIMER_MIN ? p : LOAD_METER_TIMER_MIN;
+		disposeLoadMeterTimer();
+		initializeLoadMeterTimer();
+	}
+	
+	/**
+	 * @since 1.1
+	 */
+	public void setLoadMetersEnabled(boolean enabled) {
+		if (m_loadMetersEnabled == enabled) return;
+		m_loadMetersEnabled = enabled;
+		// save load meter enablement in model
+		fDataModel.setLoadMetersEnabled(m_loadMetersEnabled);
+		disposeLoadMeterTimer();
+		initializeLoadMeterTimer();
+	}
 	
 	// --- canvas management ---
 	
@@ -219,6 +328,7 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 			m_canvas.dispose();
 			m_canvas = null;
 		}
+		disposeLoadMeterTimer();
 	}
 	
 	/** Invoked after visualizer control creation, */
@@ -239,6 +349,23 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	public MulticoreVisualizerCanvas getMulticoreVisualizerCanvas()
 	{
 		return (MulticoreVisualizerCanvas) getCanvas();
+	}
+	
+	/** Sets-up a canvas filter */
+	public void applyCanvasFilter() {
+		m_canvas.applyFilter();
+		refresh();
+	}
+	
+	/** Removes current canvas filter */
+	public void clearCanvasFilter() {
+		m_canvas.clearFilter();
+		refresh();
+	}
+
+	/** Tells if a canvas filter is in effect */
+	public boolean isCanvasFilterActive() {
+		return m_canvas.isFilterActive();
 	}
 	
 	/** Return the data model backing this multicore visualizer */
@@ -285,6 +412,47 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		
 		m_refreshAction = new RefreshAction();
 		m_refreshAction.init(this);
+
+		// create load meters sub-menu and associated actions
+		m_loadMetersSubMenu = new MenuManager(MulticoreVisualizerUIPlugin.getString(
+				"MulticoreVisualizer.actions.LoadMeterSubmenu.text")); //$NON-NLS-1$
+		m_loadMetersRefreshSubSubmenu = new MenuManager(MulticoreVisualizerUIPlugin.getString(
+				"MulticoreVisualizer.actions.LoadMetersRefreshSubSubmenu.text")); //$NON-NLS-1$
+		
+		m_enableLoadMetersAction = new EnableLoadMetersAction(m_loadMetersEnabled);
+		m_enableLoadMetersAction.init(this);
+		// enable the load meter sub-menu 
+    	m_enableLoadMetersAction.setEnabled(true);
+
+		m_setLoadMeterPeriodActions = new ArrayList<SetLoadMeterPeriodAction>();
+		m_setLoadMeterPeriodActions.add(new SetLoadMeterPeriodAction(
+				MulticoreVisualizerUIPlugin.getString("MulticoreVisualizer.actions.SetLoadMeterPeriod.fast.text"),  //$NON-NLS-1$
+				LOAD_METER_TIMER_FAST));
+		
+		SetLoadMeterPeriodAction defaultAction = new SetLoadMeterPeriodAction(
+				MulticoreVisualizerUIPlugin.getString("MulticoreVisualizer.actions.SetLoadMeterPeriod.medium.text"),  //$NON-NLS-1$
+				LOAD_METER_TIMER_MEDIUM);
+		m_setLoadMeterPeriodActions.add(defaultAction);
+		
+		m_setLoadMeterPeriodActions.add(new SetLoadMeterPeriodAction(
+				MulticoreVisualizerUIPlugin.getString("MulticoreVisualizer.actions.SetLoadMeterPeriod.slow.text"),  //$NON-NLS-1$
+				LOAD_METER_TIMER_SLOW));
+		for (SetLoadMeterPeriodAction act : m_setLoadMeterPeriodActions) {
+			act.init(this);
+			act.setEnabled(true);
+		}
+		defaultAction.setChecked(true);
+		defaultAction.run();
+		
+		// canvas filter actions - they will be dynamically enabled/disabled
+		// according to canvas selection
+		m_setFilterAction = new FilterCanvasAction(true);
+		m_setFilterAction.init(this);
+		m_setFilterAction.setEnabled(false);
+
+		m_clearFilterAction = new FilterCanvasAction(false);
+		m_clearFilterAction.init(this);
+		m_clearFilterAction.setEnabled(false);
 		
 		// Note: debug view may not be initialized at startup,
 		// so we'll pretend the actions are not yet updated,
@@ -300,6 +468,17 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		boolean enabled = hasSelection();
 		m_selectAllAction.setEnabled(enabled);
 		m_refreshAction.setEnabled(enabled);
+				
+		// enable "filter-to selection" menu item if there is a 
+		// canvas selection
+		m_setFilterAction.setEnabled(m_canvas.hasSelection());
+		
+		// enable "Clear filter" menu item if filter is active
+		m_clearFilterAction.setEnabled(isCanvasFilterActive());
+		
+    	// show the load meter refresh speed sub-menu only 
+    	// if the load meters are enabled
+    	m_loadMetersRefreshSubSubmenu.setVisible(m_loadMetersEnabled);
 		
 		// We should not change the enablement of the debug view
 		// actions, as they are automatically enabled/disabled
@@ -358,6 +537,40 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 			m_refreshAction = null;
 		}
 		
+		
+		if (m_loadMetersSubMenu != null) {
+			m_loadMetersSubMenu.dispose();
+			m_loadMetersSubMenu = null;
+		}
+		
+		if (m_loadMetersRefreshSubSubmenu != null) {
+			m_loadMetersRefreshSubSubmenu.dispose();
+			m_loadMetersRefreshSubSubmenu = null;
+		}
+		
+		if (m_enableLoadMetersAction != null ) {
+			m_enableLoadMetersAction.dispose();
+			m_enableLoadMetersAction = null;
+		}
+		
+		if (m_setLoadMeterPeriodActions != null) {
+			for (SetLoadMeterPeriodAction act : m_setLoadMeterPeriodActions) {
+				act.dispose();
+			}
+			m_setLoadMeterPeriodActions.clear();
+			m_setLoadMeterPeriodActions = null;
+		}
+		
+		if (m_setFilterAction != null) {
+			m_setFilterAction.dispose();
+			m_setFilterAction = null;
+		}
+
+		if (m_clearFilterAction != null) {
+			m_clearFilterAction.dispose();
+			m_clearFilterAction = null;
+		}
+
 		m_actionsInitialized = false;
 	}
 
@@ -419,6 +632,26 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		
 		menuManager.add(m_selectAllAction);
 		menuManager.add(m_refreshAction);
+		
+		menuManager.add(m_separatorAction);
+		
+		// add load meters sub-menus and actions
+		m_loadMetersSubMenu.removeAll();
+		m_loadMetersRefreshSubSubmenu.removeAll();
+		
+		menuManager.add(m_loadMetersSubMenu);
+		
+		m_loadMetersSubMenu.add(m_enableLoadMetersAction);		
+		m_loadMetersSubMenu.add(m_loadMetersRefreshSubSubmenu);
+		
+		for (SetLoadMeterPeriodAction act : m_setLoadMeterPeriodActions) {
+			m_loadMetersRefreshSubSubmenu.add(act);
+		}
+		
+		// add filtering options
+		menuManager.add(m_separatorAction);
+		menuManager.add(m_setFilterAction);
+		menuManager.add(m_clearFilterAction);
 		
 		updateActions();
 		Point location = m_viewer.getContextMenuLocation();
@@ -494,7 +727,8 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 					{
 						// Execute a refresh after any pending UI updates.
 						GUIUtils.exec( new Runnable() { @Override public void run() {
-							MulticoreVisualizer.this.refresh();
+							// check if we need to update the debug context
+							updateDebugContext();
 						}});
 					}
 				};
@@ -515,14 +749,32 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		}
 	}
 	
+	private void removeEventListener() {
+		if (m_sessionState != null) {
+			m_sessionState.removeServiceEventListener(fEventListener);
+		}
+	}
+
     /**
      * Invoked by VisualizerViewer when workbench selection changes.
      */
 	@Override
 	public void workbenchSelectionChanged(ISelection selection)
 	{
-		refresh();
-		
+		// See if we need to update our debug info from
+		// the workbench selection. This will be done asynchronously.
+		boolean changed = updateDebugContext();
+
+		if (changed) {
+			update();
+		}
+		else {
+			// Even if debug info doesn't change, we still want to
+			// check whether the canvas selection needs to change
+			// to reflect the current workbench selection.
+			updateCanvasSelection();
+		}
+
 		// Also check whether we need to attach debug view listener.
 		updateDebugViewListener();
 	}
@@ -530,14 +782,8 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	/** Refreshes visualizer content from model. */
 	public void refresh()
 	{
-		// See if we need to update our debug info from
-		// the workbench selection. This will be done asynchronously.
-		boolean changed = updateDebugContext();
-		
-		// Even if debug info doesn't change, we still want to
-		// check whether the canvas selection needs to change
-		// to reflect the current workbench selection.
-		if (!changed) updateCanvasSelection();
+		m_canvas.requestRecache();
+		m_canvas.requestUpdate();
 	}
 	
 
@@ -582,45 +828,46 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		
 		List<Object> items = SelectionUtils.getSelectedObjects(workbenchSelection);
 		
-		// Use the current canvas model to match Debug View items
-		// with corresponding threads, if any.
-		VisualizerModel model = m_canvas.getModel();
-		if (model != null) {
-			
-			Set<Object> selected = new HashSet<Object>();
+		if (m_canvas != null) {
+			// Use the current canvas model to match Debug View items
+			// with corresponding threads, if any.
+			VisualizerModel model = m_canvas.getModel();
+			if (model != null) {
 
-			for (Object item : items) {
-				
-				// Currently, we ignore selections other than DSF context objects.
-				// TODO: any other cases where we could map selections to canvas?
-				if (item instanceof IDMVMContext)
-				{
-					IDMContext context = ((IDMVMContext) item).getDMContext();
-					
-					IMIProcessDMContext processContext =
-							DMContexts.getAncestorOfType(context, IMIProcessDMContext.class);
-					int pid = Integer.parseInt(processContext.getProcId());
-					
-					IMIExecutionDMContext execContext =
-						DMContexts.getAncestorOfType(context, IMIExecutionDMContext.class);
-					int tid = (execContext == null) ? 0 : execContext.getThreadId();
-					
-					if (tid == 0) { // process
-						List<VisualizerThread> threads = model.getThreadsForProcess(pid);
-						if (threads != null) {
-							selected.addAll(threads);
+				Set<Object> selected = new HashSet<Object>();
+
+				for (Object item : items) {
+
+					// Currently, we ignore selections other than DSF context objects.
+					// TODO: any other cases where we could map selections to canvas?
+					if (item instanceof IDMVMContext)
+					{
+						IDMContext context = ((IDMVMContext) item).getDMContext();
+
+						IMIProcessDMContext processContext =
+								DMContexts.getAncestorOfType(context, IMIProcessDMContext.class);
+						int pid = Integer.parseInt(processContext.getProcId());
+
+						IMIExecutionDMContext execContext =
+								DMContexts.getAncestorOfType(context, IMIExecutionDMContext.class);
+						int tid = (execContext == null) ? 0 : execContext.getThreadId();
+
+						if (tid == 0) { // process
+							List<VisualizerThread> threads = model.getThreadsForProcess(pid);
+							if (threads != null) {
+								selected.addAll(threads);
+							}
 						}
-					}
-					else { // thread
-						VisualizerThread thread = model.getThread(tid);
-						if (thread != null) {
-							selected.add(thread);
+						else { // thread
+							VisualizerThread thread = model.getThread(tid);
+							if (thread != null) {
+								selected.add(thread);
+							}
 						}
 					}
 				}
+				visualizerSelection = SelectionUtils.toSelection(selected);
 			}
-	
-			visualizerSelection = SelectionUtils.toSelection(selected);
 		}
 		
 		return visualizerSelection;
@@ -658,11 +905,16 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	 *  Returns true if canvas context actually changes, false if not.
 	 */
 	public boolean setDebugSession(String sessionId) {
-		boolean changed = true;
+		boolean changed = false;
 
 		if (m_sessionState != null &&
 			! m_sessionState.getSessionID().equals(sessionId))
 		{
+			// stop timer that updates the load meters
+			disposeLoadMeterTimer();
+			m_cpuContextsCache = null;
+			m_coreContextsCache = null;
+			
 			m_sessionState.removeServiceEventListener(fEventListener);
 			m_sessionState.dispose();
 			m_sessionState = null;
@@ -674,10 +926,10 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		{
 			m_sessionState = new DSFSessionState(sessionId);
 			m_sessionState.addServiceEventListener(fEventListener);
+			// start timer that updates the load meters
+			initializeLoadMeterTimer();
 			changed = true;
 		}
-	
-		if (changed) update();
 		
 		return changed;
 	}
@@ -706,10 +958,11 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	protected void setCanvasModel(VisualizerModel model) {
 		final VisualizerModel model_f = model;
 		GUIUtils.exec(new Runnable() { @Override public void run() {
-			m_canvas.setModel(model_f);
-			
-			// Update the canvas's selection from the current workbench selection.
-			updateCanvasSelectionInternal();
+			if(m_canvas != null) {
+				m_canvas.setModel(model_f);
+				// Update the canvas's selection from the current workbench selection.
+				updateCanvasSelectionInternal();
+			}
 		}});
 	}
 	
@@ -754,13 +1007,15 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	 */
 	@ConfinedToDsfExecutor("getSession().getExecutor()")
 	public void getVisualizerModel() {
-		fDataModel = new VisualizerModel();
+		fDataModel = new VisualizerModel(m_sessionState.getSessionID());
 		DSFDebugModel.getCPUs(m_sessionState, this, fDataModel);
 	}
 	
 	/** Invoked when getModel() request completes. */
 	@ConfinedToDsfExecutor("getSession().getExecutor()")
 	public void getVisualizerModelDone(VisualizerModel model) {
+		fDataModel.setLoadMetersEnabled(m_loadMetersEnabled);
+		updateLoads();
 		model.sort();
 		setCanvasModel(model);
 	}
@@ -773,6 +1028,8 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 	@ConfinedToDsfExecutor("getSession().getExecutor()")
 	public void getCPUsDone(ICPUDMContext[] cpuContexts, Object arg)
 	{
+		// save CPU contexts
+		m_cpuContextsCache = cpuContexts;
 		VisualizerModel model = (VisualizerModel) arg;
 		
 		if (cpuContexts == null || cpuContexts.length == 0) {
@@ -810,6 +1067,8 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 							 ICoreDMContext[] coreContexts,
 							 Object arg)
 	{
+		// save core contexts
+		m_coreContextsCache = coreContexts;
 		VisualizerModel model = (VisualizerModel) arg;
 
 		if (coreContexts == null || coreContexts.length == 0) {
@@ -917,17 +1176,110 @@ public class MulticoreVisualizer extends GraphicCanvasVisualizer
 		// If we can't get the real Linux OS tid, fallback to using the gdb thread id
 		int osTid = (osTIDValue == null) ? tid : Integer.parseInt(osTIDValue);
 
-		model.addThread(new VisualizerThread(core, pid, osTid, tid, state));
+		// add thread if not already there - there is a potential race condition where a 
+		// thread can be added twice to the model: once at model creation and once more 
+		// through the listener.   Checking at both places to prevent this.
+		VisualizerThread t = model.getThread(tid);
+		if (t == null) {
+			model.addThread(new VisualizerThread(core, pid, osTid, tid, state));
+		}
+		// if the thread is already in the model, update it's parameters.  
+		else {
+			t.setCore(core);
+			t.setTID(osTid);
+			t.setState(state);
+		}
+
 		
 		// keep track of threads visited
 		done(1, model);
 	}
+	
+	
+	/**
+	 * @since 1.1
+	 */
+	@ConfinedToDsfExecutor("getSession().getExecutor()")
+	@Override
+	public void updateLoads() {
+		if (m_cpuContextsCache == null || m_coreContextsCache == null) {
+			// not ready to get load info yet
+			return;
+		}
+		// if meters not enabled, do not query backend
+		if (!m_loadMetersEnabled) {
+			return;
+		}
+		
+		VisualizerModel model = fDataModel;
+		
+		// keep track of how many loads we expect
+		int count = m_cpuContextsCache.length + m_coreContextsCache.length;
+		model.getLoadTodo().dispose();
+		model.getLoadTodo().add(count);
+		
+		// ask load for each CPU
+		for (ICPUDMContext cpuCtx : m_cpuContextsCache) {
+			DSFDebugModel.getLoad(m_sessionState, cpuCtx, this, model);
+		}
+		// ask load for each core
+		for (ICoreDMContext coreCtx : m_coreContextsCache) {
+			DSFDebugModel.getLoad(m_sessionState, coreCtx, this, model);
+		}
+	}
+	
+	/**  
+	 * Invoked when a getLoad() request completes.
+	 * @since 1.1*/
+	@Override
+	@ConfinedToDsfExecutor("getSession().getExecutor()")
+	public void getLoadDone(IDMContext context, ILoadInfo load, Object arg) 
+	{
+		VisualizerModel model = (VisualizerModel) arg;
+		Integer l = null;
+		
+		if (load != null) {
+			l = Integer.valueOf(load.getLoad());
+		}
+		
+		// CPU context? Update the correct CPU in the model 
+		if (context instanceof ICPUDMContext) {
+			ICPUDMContext cpuContext = (ICPUDMContext) context;
+			VisualizerCPU cpu = model.getCPU(Integer.parseInt(cpuContext.getId()));
+			cpu.setLoadInfo(new VisualizerLoadInfo(l));
+		}
+		// Core context? Update the correct core in the model
+		else if(context instanceof ICoreDMContext) {
+			ICoreDMContext coreContext = (ICoreDMContext) context;
+			VisualizerCore core = model.getCore(Integer.parseInt(coreContext.getId()));
+			core.setLoadInfo(new VisualizerLoadInfo(l));
+		}
+		
+		loadDone(1, model);
+	}
+	
 	
 	/** Update "done" count for current visualizer model. */
 	protected void done(int n, VisualizerModel model) {
 		model.getTodo().done(n);
 		if (model.getTodo().isDone()) {
 			getVisualizerModelDone(model);
+		}
+	}
+	
+	/** Update "done" count for current visualizer model. */
+	protected void loadDone(int n, VisualizerModel model) {
+		model.getLoadTodo().done(n);
+		if (model.getLoadTodo().isDone()) {
+			// canvas may have been disposed since the transaction has started
+			if (m_canvas != null) {
+				m_canvas.refreshLoadMeters();
+				m_canvas.requestUpdate();
+			}
+			if (m_updateLoadMeterTimer != null) {
+				// re-start timer 
+				m_updateLoadMeterTimer.start();
+			}
 		}
 	}
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2012 IBM Corporation and others.
+ * Copyright (c) 2004, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,9 +10,11 @@
  *     Markus Schorn (Wind River Systems)
  *     Andrew Ferguson (Symbian)
  *     Sergey Prigogin (Google)
+ *     Thomas Corbat (IFS)
  *******************************************************************************/
 package org.eclipse.cdt.core.parser.tests.ast2;
 
+import static org.eclipse.cdt.core.parser.ParserLanguage.C;
 import static org.eclipse.cdt.core.parser.ParserLanguage.CPP;
 
 import java.io.IOException;
@@ -20,6 +22,7 @@ import java.io.IOException;
 import junit.framework.TestSuite;
 
 import org.eclipse.cdt.core.dom.ast.ASTTypeUtil;
+import org.eclipse.cdt.core.dom.ast.ASTVisitor;
 import org.eclipse.cdt.core.dom.ast.EScopeKind;
 import org.eclipse.cdt.core.dom.ast.ExpansionOverlapsBoundaryException;
 import org.eclipse.cdt.core.dom.ast.IASTArrayDeclarator;
@@ -53,12 +56,15 @@ import org.eclipse.cdt.core.dom.ast.IASTIdExpression;
 import org.eclipse.cdt.core.dom.ast.IASTIfStatement;
 import org.eclipse.cdt.core.dom.ast.IASTImageLocation;
 import org.eclipse.cdt.core.dom.ast.IASTInitializer;
+import org.eclipse.cdt.core.dom.ast.IASTInitializerClause;
 import org.eclipse.cdt.core.dom.ast.IASTInitializerList;
 import org.eclipse.cdt.core.dom.ast.IASTLabelStatement;
 import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
+import org.eclipse.cdt.core.dom.ast.IASTMacroExpansionLocation;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNamedTypeSpecifier;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
+import org.eclipse.cdt.core.dom.ast.IASTNodeLocation;
 import org.eclipse.cdt.core.dom.ast.IASTNullStatement;
 import org.eclipse.cdt.core.dom.ast.IASTParameterDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTPointerOperator;
@@ -115,6 +121,7 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPMethod;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPNamespace;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateInstance;
 import org.eclipse.cdt.core.parser.IToken;
 import org.eclipse.cdt.core.parser.ParserLanguage;
 import org.eclipse.cdt.internal.core.dom.parser.ASTNode;
@@ -127,7 +134,7 @@ import org.eclipse.cdt.internal.core.parser.ParserException;
 /**
  * Test cases on the AST.
  */
-public class AST2Tests extends AST2BaseTest {
+public class AST2Tests extends AST2TestBase {
 	private static final int NUM_TESTS = 3;
 
 	public static TestSuite suite() {
@@ -144,21 +151,21 @@ public class AST2Tests extends AST2BaseTest {
 
 	private void parseAndCheckBindings() throws Exception {
 		String code= getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C);
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, C);
+		parseAndCheckBindings(code, CPP);
 	}
 
 	protected IASTTranslationUnit parseAndCheckBindings(String code) throws Exception {
-		return parseAndCheckBindings(code, ParserLanguage.C);
+		return parseAndCheckBindings(code, C);
 	}
 
 	public void testBug75189() throws Exception {
 		parseAndCheckBindings("struct A{};\n typedef int (*F) (struct A*);"); //$NON-NLS-1$
-		parseAndCheckBindings("struct A{};\n typedef int (*F) (A*);", ParserLanguage.CPP); //$NON-NLS-1$
+		parseAndCheckBindings("struct A{};\n typedef int (*F) (A*);", CPP); //$NON-NLS-1$
 	}
 
 	public void testBug75340() throws Exception {
-		IASTTranslationUnit tu = parseAndCheckBindings("void f(int i = 0, int * p = 0);", ParserLanguage.CPP); //$NON-NLS-1$
+		IASTTranslationUnit tu = parseAndCheckBindings("void f(int i = 0, int * p = 0);", CPP); //$NON-NLS-1$
 		IASTSimpleDeclaration sd = (IASTSimpleDeclaration) tu.getDeclarations()[0];
 		isParameterSignatureEqual(sd.getDeclarators()[0], "(int=0, int*=0)"); //$NON-NLS-1$
 	}
@@ -190,8 +197,8 @@ public class AST2Tests extends AST2BaseTest {
 	// int ((*zzz3)) (char);
 	// int (*(zzz4)) (char);
 	public void testBug40768() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 		assertNoProblemBindings(col);
 	}
@@ -201,7 +208,7 @@ public class AST2Tests extends AST2BaseTest {
 	//    int z = x + y;
 	// }
 	public void testBasicFunction() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IScope globalScope = tu.getScope();
@@ -344,7 +351,7 @@ public class AST2Tests extends AST2BaseTest {
 	//     myS.x = 5;
 	// }
 	public void testSimpleStruct() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl = (IASTSimpleDeclaration) tu
@@ -530,7 +537,7 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testMultipleDeclarators() throws Exception {
-		IASTTranslationUnit tu = parse("int r, s;", ParserLanguage.C); //$NON-NLS-1$
+		IASTTranslationUnit tu = parse("int r, s;", C); //$NON-NLS-1$
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -568,7 +575,7 @@ public class AST2Tests extends AST2BaseTest {
 		buffer.append("   struct A * a;      \n"); //$NON-NLS-1$
 		buffer.append("}                     \n"); //$NON-NLS-1$
 
-		IASTTranslationUnit tu = parse(buffer.toString(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(buffer.toString(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -647,7 +654,7 @@ public class AST2Tests extends AST2BaseTest {
 		buffer.append("   struct A * a;      \n"); //$NON-NLS-1$
 		buffer.append("}                     \r\n"); //$NON-NLS-1$
 
-		IASTTranslationUnit tu = parse(buffer.toString(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(buffer.toString(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -712,7 +719,7 @@ public class AST2Tests extends AST2BaseTest {
 		buffer.append("   a->i;                 \n"); //$NON-NLS-1$
 		buffer.append("}                        \n"); //$NON-NLS-1$
 
-		IASTTranslationUnit tu = parse(buffer.toString(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(buffer.toString(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -818,7 +825,7 @@ public class AST2Tests extends AST2BaseTest {
 	//    struct x i;
 	// }
 	public void testStructureNamespace() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -906,7 +913,7 @@ public class AST2Tests extends AST2BaseTest {
 	// }
 	public void testFunctionParameters() throws Exception {
 		final String code = getAboveComment();
-		IASTTranslationUnit tu = parse(code, ParserLanguage.C);
+		IASTTranslationUnit tu = parse(code, C);
 
 		assertTrue(tu.isFrozen());
 		// void f(
@@ -947,7 +954,7 @@ public class AST2Tests extends AST2BaseTest {
 		assertSame(param_2, param_3);
 		assertSame(f_1, f_2);
 
-		tu = parse(code, ParserLanguage.C);
+		tu = parse(code, C);
 		assertTrue(tu.isFrozen());
 		// void f(
 		f_decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -1011,7 +1018,7 @@ public class AST2Tests extends AST2BaseTest {
 
 	// void f(int a, int b) { }
 	public void testSimpleFunction() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTFunctionDefinition fDef = (IASTFunctionDefinition) tu.getDeclarations()[0];
@@ -1061,7 +1068,7 @@ public class AST2Tests extends AST2BaseTest {
 	// }
 	// void f() { }
 	public void testSimpleFunctionCall() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -1130,7 +1137,7 @@ public class AST2Tests extends AST2BaseTest {
 	//    }
 	// }
 	public void testForLoop() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			// void f() {
@@ -1204,7 +1211,7 @@ public class AST2Tests extends AST2BaseTest {
 	//    ((struct A *) 1)->x;
 	// }
 	public void testExpressionFieldReference() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration simpleDecl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -1259,10 +1266,10 @@ public class AST2Tests extends AST2BaseTest {
 	//    end: ;
 	// }
 	public void testLabels() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector collector = new CNameCollector();
+			NameCollector collector = new NameCollector();
 			tu.accept(collector);
 
 			assertEquals(collector.size(), 3);
@@ -1294,7 +1301,7 @@ public class AST2Tests extends AST2BaseTest {
 	// typedef struct { } X;
 	// int f(X x);
 	public void testAnonStruct() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			// test tu.getDeclarationsInAST(IBinding)
@@ -1329,7 +1336,7 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testLongLong() throws ParserException {
-		IASTTranslationUnit tu = parse("long long x;\n", ParserLanguage.C); //$NON-NLS-1$
+		IASTTranslationUnit tu = parse("long long x;\n", C); //$NON-NLS-1$
 
 		// test tu.getDeclarationsInAST(IBinding)
 		IASTSimpleDeclaration decl1 = (IASTSimpleDeclaration) tu
@@ -1350,7 +1357,7 @@ public class AST2Tests extends AST2BaseTest {
 	//       return;
 	// }
 	public void testEnumerations() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl1 = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -1489,7 +1496,7 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testPointerToFunction() throws Exception {
-		IASTTranslationUnit tu = parse("int (*pfi)();", ParserLanguage.C); //$NON-NLS-1$
+		IASTTranslationUnit tu = parse("int (*pfi)();", C); //$NON-NLS-1$
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			assertEquals(tu.getDeclarations().length, 1);
@@ -1520,7 +1527,7 @@ public class AST2Tests extends AST2BaseTest {
 	// const char ** e;
 	// const char * const * const volatile ** const * f;
 	public void testBasicTypes() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl = (IASTSimpleDeclaration) tu
@@ -1623,7 +1630,7 @@ public class AST2Tests extends AST2BaseTest {
 	// unsigned int unsignedInt = 99;
 	// noSpec= 12;
 	public void testBug270275_int_is_equivalent_to_signed_int() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		IASTDeclaration[] declarations = tu.getDeclarations();
 		IType plainInt = ((IVariable)((IASTSimpleDeclaration) declarations[0]).getDeclarators()[0].getName().resolveBinding()).getType();
 		IType signedInt = ((IVariable)((IASTSimpleDeclaration) declarations[1]).getDeclarators()[0].getName().resolveBinding()).getType();
@@ -1640,7 +1647,7 @@ public class AST2Tests extends AST2BaseTest {
 	// struct A * const a2;
 	// AP a3;
 	public void testCompositeTypes() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -1717,7 +1724,7 @@ public class AST2Tests extends AST2BaseTest {
 	// const char * const c[][][];
 	// char* d[const][];
 	public void testArrayTypes() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -1798,7 +1805,7 @@ public class AST2Tests extends AST2BaseTest {
 	// void (*g) (struct A *);
 	// void (* (*h)(struct A**)) (int d);
 	public void testFunctionTypes() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -1935,7 +1942,7 @@ public class AST2Tests extends AST2BaseTest {
 	// Point point = {.width = 100, .pos = &xy};
 	// }
 	public void testDesignatedInitializers() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			assertNotNull(tu);
@@ -2041,7 +2048,7 @@ public class AST2Tests extends AST2BaseTest {
 	// struct S s = {.a=1,.b=2};
 	// }
 	public void testMoregetDeclarationsInAST1() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration S_decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -2081,7 +2088,7 @@ public class AST2Tests extends AST2BaseTest {
 	//  int b;
 	// } s = {.a=1,.b=2};
 	public void testMoregetDeclarationsInAST2() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration S_decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -2122,7 +2129,7 @@ public class AST2Tests extends AST2BaseTest {
 	// typedef t y;
 	// y x = {.a=1,.b=2};
 	public void testMoregetDeclarationsInAST3() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration S_decl = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -2158,7 +2165,7 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void testFnReturningPtrToFn() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"void (* f(int))() {}", ParserLanguage.C); //$NON-NLS-1$
+				"void (* f(int))() {}", C); //$NON-NLS-1$
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTFunctionDefinition def = (IASTFunctionDefinition) tu.getDeclarations()[0];
@@ -2186,7 +2193,7 @@ public class AST2Tests extends AST2BaseTest {
 	// array type derivation.
 	public void testArrayTypeToQualifiedPointerTypeParm() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"void f(int parm[const 3]);", ParserLanguage.C); //$NON-NLS-1$
+				"void f(int parm[const 3]);", C); //$NON-NLS-1$
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration def = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -2225,7 +2232,7 @@ public class AST2Tests extends AST2BaseTest {
 	// int *f2() {}
 	// int (* f3())() {}
 	public void testFunctionDefTypes() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -2268,7 +2275,7 @@ public class AST2Tests extends AST2BaseTest {
 	// any parameter to type function returning T is adjusted to be pointer to
 	// function returning T
 	public void testParmToFunction() throws Exception {
-		IASTTranslationUnit tu = parse("int f(int g(void)) { return g();}", ParserLanguage.C);
+		IASTTranslationUnit tu = parse("int f(int g(void)) { return g();}", C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTFunctionDefinition def = (IASTFunctionDefinition) tu.getDeclarations()[0];
@@ -2282,10 +2289,8 @@ public class AST2Tests extends AST2BaseTest {
 			assertTrue(gt_2 instanceof IFunctionType);
 			IType gt_ret = ((IFunctionType) gt_2).getReturnType();
 			assertTrue(gt_ret instanceof IBasicType);
-			assertEquals(((IBasicType) gt_ret).getType(), IBasicType.t_int);
-			IType gt_parm = ((IFunctionType) gt_2).getParameterTypes()[0];
-			assertTrue(gt_parm instanceof IBasicType);
-			assertEquals(((IBasicType) gt_parm).getType(), IBasicType.t_void);
+			assertEquals(((IBasicType) gt_ret).getKind(), IBasicType.Kind.eInt);
+			assertEquals(0, ((IFunctionType) gt_2).getParameterTypes().length);
 
 			// test tu.getDeclarationsInAST(IBinding)
 			assertTrue(def.getDeclarator() instanceof IASTStandardFunctionDeclarator);
@@ -2304,7 +2309,7 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testArrayPointerFunction() throws Exception {
-		IASTTranslationUnit tu = parse("int (*v[])(int *x, int *y);", ParserLanguage.C);
+		IASTTranslationUnit tu = parse("int (*v[])(int *x, int *y);", C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -2349,7 +2354,7 @@ public class AST2Tests extends AST2BaseTest {
 	// typedef DWORD v;
 	// v signal(int);
 	public void testTypedefExample4a() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -2404,7 +2409,7 @@ public class AST2Tests extends AST2BaseTest {
 	// typedef DWORD (*pfv)(int);
 	// pfv signal(int, pfv);
 	public void testTypedefExample4b() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTSimpleDeclaration decl1 = (IASTSimpleDeclaration) tu.getDeclarations()[0];
@@ -2486,7 +2491,7 @@ public class AST2Tests extends AST2BaseTest {
 	// fv *signal2(int, fv *);
 	// pfv signal3(int, pfv);
 	public void testTypedefExample4c() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
@@ -2575,7 +2580,7 @@ public class AST2Tests extends AST2BaseTest {
 	// int y [ const static x ];
 	public void testBug80992() throws Exception {
 		ICASTArrayModifier mod = (ICASTArrayModifier) ((IASTArrayDeclarator) ((IASTSimpleDeclaration) parse(
-				getAboveComment(), ParserLanguage.C).getDeclarations()[1])
+				getAboveComment(), C).getDeclarations()[1])
 				.getDeclarators()[0]).getArrayModifiers()[0];
 		assertTrue(mod.isConst());
 		assertTrue(mod.isStatic());
@@ -2588,7 +2593,7 @@ public class AST2Tests extends AST2BaseTest {
 	// int y (int [ const *]);
 	public void testBug80978() throws Exception {
 		ICASTArrayModifier mod = (ICASTArrayModifier) ((IASTArrayDeclarator) ((IASTStandardFunctionDeclarator) ((IASTSimpleDeclaration) parse(
-				getAboveComment(), ParserLanguage.C).getDeclarations()[0])
+				getAboveComment(), C).getDeclarations()[0])
 				.getDeclarators()[0]).getParameters()[0].getDeclarator())
 				.getArrayModifiers()[0];
 		assertTrue(mod.isConst());
@@ -2598,14 +2603,14 @@ public class AST2Tests extends AST2BaseTest {
 		assertFalse(mod.isVolatile());
 	}
 
-	//AJN: bug 77383 don't do external variables	
+	//AJN: bug 77383 don't do external variables
 	//    // void f() {
 	//    //    if (a == 0)
 	//    //       a = a + 3;
 	//    // }
 	//    public void testExternalVariable() throws Exception {
-	//        IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-	//        CNameCollector col = new CNameCollector();
+	//        IASTTranslationUnit tu = parse(getAboveComment(), C);
+	//        NameCollector col = new NameCollector();
 	//        tu.accept(col);
 	//
 	//        IVariable a = (IVariable) col.getName(1).resolveBinding();
@@ -2624,10 +2629,10 @@ public class AST2Tests extends AST2BaseTest {
 	//       g(*(&a + 2));
 	// }
 	public void testExternalDefs() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 
 			IVariable a = (IVariable) col.getName(1).resolveBinding();
@@ -2649,10 +2654,10 @@ public class AST2Tests extends AST2BaseTest {
 	//    Coord xy = { .x = 10, .y = 11 };
 	// }
 	public void testFieldDesignators() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 
 			assertEquals(col.size(), 9);
@@ -2674,10 +2679,10 @@ public class AST2Tests extends AST2BaseTest {
 	//    [member_two] = "two"
 	// };
 	public void testArrayDesignator() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 
 			assertEquals(col.size(), 6);
@@ -2700,7 +2705,7 @@ public class AST2Tests extends AST2BaseTest {
 	// g(*(&a + 2));
 	// }
 	public void testBug83737() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
 			IASTIfStatement if_statement = (IASTIfStatement) ((IASTCompoundStatement) ((IASTFunctionDefinition) tu
@@ -2730,10 +2735,10 @@ public class AST2Tests extends AST2BaseTest {
 	//    end: ;
 	// }
 	public void testBug84090_LabelReferences() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 
 			assertEquals(col.size(), 3);
@@ -2750,10 +2755,10 @@ public class AST2Tests extends AST2BaseTest {
 	// enum col { red, blue };
 	// enum col c;
 	public void testBug84092_EnumReferences() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector collector = new CNameCollector();
+			NameCollector collector = new NameCollector();
 			tu.accept(collector);
 
 			assertEquals(collector.size(), 5);
@@ -2769,10 +2774,10 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void testBug84096_FieldDesignatorRef() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"struct s { int a; } ss = { .a = 1 }; \n", ParserLanguage.C); //$NON-NLS-1$
+				"struct s { int a; } ss = { .a = 1 }; \n", C); //$NON-NLS-1$
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector collector = new CNameCollector();
+			NameCollector collector = new NameCollector();
 			tu.accept(collector);
 
 			assertEquals(collector.size(), 4);
@@ -2787,21 +2792,20 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testProblems() throws Exception {
-
 		IASTTranslationUnit tu = parse(
-				"    a += ;", ParserLanguage.C, true, false); //$NON-NLS-1$
+				"    a += ;", C, true, false); //$NON-NLS-1$
 		IASTProblem[] ps = CVisitor.getProblems(tu);
-		assertEquals(ps.length, 1);
+		assertEquals(1, ps.length);
 		ps[0].getMessage();
 	}
 
 	// enum e;
 	// enum e{ one };
 	public void testEnumerationForwards() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 
 			assertEquals(col.size(), 3);
@@ -2821,8 +2825,8 @@ public class AST2Tests extends AST2BaseTest {
 	//    (&p)[0] = 1;
 	// }
 	public void testBug84185() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		assertEquals(col.size(), 3);
@@ -2840,8 +2844,8 @@ public class AST2Tests extends AST2BaseTest {
 	//    (&p)[0] = 1;
 	// }
 	public void testBug84185_2() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		assertEquals(col.size(), 3);
@@ -2862,15 +2866,15 @@ public class AST2Tests extends AST2BaseTest {
 	// p = &((struct s) { j++ });
 	// }
 	public void testBug84176() throws Exception {
-		parse(getAboveComment(), ParserLanguage.C, false, true);
+		parse(getAboveComment(), C, false, true);
 	}
 
 	// struct s { double i; } f(void);
 	// struct s f(void) {}
 	public void testBug84266() throws Exception {
 		final String code = getAboveComment();
-		IASTTranslationUnit tu = parse(code, ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(code, C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 		assertEquals(col.size(), 7);
 
@@ -2878,8 +2882,8 @@ public class AST2Tests extends AST2BaseTest {
 		ICompositeType s_decl = (ICompositeType) col.getName(0).resolveBinding();
 		assertSame(s_ref, s_decl);
 
-		tu = parse(code, ParserLanguage.C);
-		col = new CNameCollector();
+		tu = parse(code, C);
+		col = new NameCollector();
 		tu.accept(col);
 		assertEquals(col.size(), 7);
 
@@ -2889,8 +2893,8 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testBug84266_2() throws Exception {
-		IASTTranslationUnit tu = parse("struct s f(void);", ParserLanguage.C); //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse("struct s f(void);", C); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		assertEquals(col.size(), 3);
@@ -2898,8 +2902,8 @@ public class AST2Tests extends AST2BaseTest {
 		ICompositeType s = (ICompositeType) col.getName(0).resolveBinding();
 		assertNotNull(s);
 
-		tu = parse("struct s f(void) {}", ParserLanguage.C); //$NON-NLS-1$
-		col = new CNameCollector();
+		tu = parse("struct s f(void) {}", C); //$NON-NLS-1$
+		col = new NameCollector();
 		tu.accept(col);
 
 		assertEquals(col.size(), 3);
@@ -2910,7 +2914,7 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void testBug84250() throws Exception {
 		assertTrue(((IASTDeclarationStatement) ((IASTCompoundStatement) ((IASTFunctionDefinition) parse(
-				"void f() { int (*p) [2]; }", ParserLanguage.C).getDeclarations()[0]).getBody()).getStatements()[0]).getDeclaration() instanceof IASTSimpleDeclaration); //$NON-NLS-1$
+				"void f() { int (*p) [2]; }", C).getDeclarations()[0]).getBody()).getStatements()[0]).getDeclaration() instanceof IASTSimpleDeclaration); //$NON-NLS-1$
 	}
 
 	// struct s1 { struct s2 *s2p; /* ... */ }; // D1
@@ -2919,7 +2923,7 @@ public class AST2Tests extends AST2BaseTest {
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			final String code = getAboveComment();
 			IASTTranslationUnit tu = parse(code, lang);
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 			assertEquals(col.size(), 6);
 
@@ -2929,7 +2933,7 @@ public class AST2Tests extends AST2BaseTest {
 
 
 			tu = parse(code, lang);
-			col = new CNameCollector();
+			col = new NameCollector();
 			tu.accept(col);
 			assertEquals(col.size(), 6);
 
@@ -2945,8 +2949,8 @@ public class AST2Tests extends AST2BaseTest {
 	//    funcp()->a;
 	// }
 	public void testBug84267() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		assertEquals(col.size(), 11);
@@ -2972,8 +2976,8 @@ public class AST2Tests extends AST2BaseTest {
 	//    { int x = x; }
 	// }
 	public void testBug84228() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		assertEquals(col.size(), 13);
@@ -2998,7 +3002,7 @@ public class AST2Tests extends AST2BaseTest {
 	public void testBug84236() throws Exception {
 		String code = "double maximum(double a[ ][*]);"; //$NON-NLS-1$
 		IASTSimpleDeclaration d = (IASTSimpleDeclaration) parse(code,
-				ParserLanguage.C).getDeclarations()[0];
+				C).getDeclarations()[0];
 		IASTStandardFunctionDeclarator fd = (IASTStandardFunctionDeclarator) d
 		.getDeclarators()[0];
 		IASTParameterDeclaration p = fd.getParameters()[0];
@@ -3013,7 +3017,7 @@ public class AST2Tests extends AST2BaseTest {
 	// B * bp;  //1
 	// }
 	public void testBug85049() throws Exception {
-		IASTTranslationUnit t = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit t = parse(getAboveComment(), C);
 		IASTFunctionDefinition g = (IASTFunctionDefinition) t.getDeclarations()[1];
 		IASTCompoundStatement body = (IASTCompoundStatement) g.getBody();
 		final IASTStatement statement = body.getStatements()[0];
@@ -3026,8 +3030,8 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void testBug86766() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"char foo; void foo() {}", ParserLanguage.C); //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+				"char foo; void foo() {}", C); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IVariable foo = (IVariable) col.getName(0).resolveBinding();
@@ -3039,8 +3043,8 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void testBug88338_C() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"struct A; struct A* a;", ParserLanguage.C); //$NON-NLS-1$
-		CPPNameCollector col = new CPPNameCollector();
+				"struct A; struct A* a;", C); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		assertTrue(col.getName(0).isDeclaration());
@@ -3048,8 +3052,8 @@ public class AST2Tests extends AST2BaseTest {
 		assertTrue(col.getName(1).isReference());
 		assertFalse(col.getName(1).isDeclaration());
 
-		tu = parse("struct A* a; struct A;", ParserLanguage.C); //$NON-NLS-1$
-		col = new CPPNameCollector();
+		tu = parse("struct A* a; struct A;", C); //$NON-NLS-1$
+		col = new NameCollector();
 		tu.accept(col);
 
 		col.getName(2).resolveBinding();
@@ -3062,8 +3066,8 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void test88460() throws Exception {
-		IASTTranslationUnit tu = parse("void f();", ParserLanguage.C); //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse("void f();", C); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IFunction f = (IFunction) col.getName(0).resolveBinding();
@@ -3072,8 +3076,8 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void testBug90253() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"void f(int par) { int v1; };", ParserLanguage.C); //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+				"void f(int par) { int v1; };", C); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IFunction f = (IFunction) col.getName(0).resolveBinding();
@@ -3101,8 +3105,8 @@ public class AST2Tests extends AST2BaseTest {
 	//    }
 	// }
 	public void testFind() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		ICompositeType S1 = (ICompositeType) col.getName(0).resolveBinding();
@@ -3125,15 +3129,15 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void test92791() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"void f() { int x, y; x * y; }", ParserLanguage.C); //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+				"void f() { int x, y; x * y; }", C); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 		for (int i = 0; i < col.size(); ++i)
 			assertFalse(col.getName(i).resolveBinding() instanceof IProblemBinding);
 
 		tu = parse(
-				"int y; void f() { typedef int x; x * y; }", ParserLanguage.C); //$NON-NLS-1$
-		col = new CNameCollector();
+				"int y; void f() { typedef int x; x * y; }", C); //$NON-NLS-1$
+		col = new NameCollector();
 		tu.accept(col);
 		for (int i = 0; i < col.size(); ++i)
 			assertFalse(col.getName(i).resolveBinding() instanceof IProblemBinding);
@@ -3141,8 +3145,8 @@ public class AST2Tests extends AST2BaseTest {
 
 	public void testBug85786() throws Exception {
 		IASTTranslationUnit tu = parse(
-				"void f(int); void foo () { void * p = &f; ((void (*) (int)) p) (1); }", ParserLanguage.C); //$NON-NLS-1$
-		CNameCollector nameResolver = new CNameCollector();
+				"void f(int); void foo () { void * p = &f; ((void (*) (int)) p) (1); }", C); //$NON-NLS-1$
+		NameCollector nameResolver = new NameCollector();
 		tu.accept(nameResolver);
 		assertNoProblemBindings(nameResolver);
 	}
@@ -3153,8 +3157,8 @@ public class AST2Tests extends AST2BaseTest {
 	// i= (i)&0x00ff;
 	// }
 	public void testBug95720() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
-		CNameCollector nameResolver = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
+		NameCollector nameResolver = new NameCollector();
 		tu.accept(nameResolver);
 		assertNoProblemBindings(nameResolver);
 	}
@@ -3168,7 +3172,7 @@ public class AST2Tests extends AST2BaseTest {
 	// return 0;
 	// }
 	public void testBug94365() throws Exception {
-		parse(getAboveComment(), ParserLanguage.C);
+		parse(getAboveComment(), C);
 	}
 
 	// #define MACRO(a)
@@ -3176,7 +3180,7 @@ public class AST2Tests extends AST2BaseTest {
 	// MACRO('"');
 	// }
 	public void testBug95119_a() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		IASTDeclaration[] declarations = tu.getDeclarations();
 		assertEquals(declarations.length, 1);
 		assertNotNull(declarations[0]);
@@ -3192,7 +3196,7 @@ public class AST2Tests extends AST2BaseTest {
 	// MACRO('X');
 	// }
 	public void testBug95119_b() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(getAboveComment(), C);
 		IASTDeclaration[] declarations = tu.getDeclarations();
 		assertEquals(declarations.length, 1);
 		assertNotNull(declarations[0]);
@@ -3207,13 +3211,13 @@ public class AST2Tests extends AST2BaseTest {
 	// typedef _TYPE TYPE;
 	// int function(TYPE (* pfv)(int parm));
 	public void testBug81739() throws Exception {
-		parse(getAboveComment(), ParserLanguage.C);
+		parse(getAboveComment(), C);
 	}
 
 	// float _Complex x;
 	// double _Complex y;
 	public void testBug95757() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, true, true);
+		IASTTranslationUnit tu = parse(getAboveComment(), C, true, true);
 		IASTDeclaration[] decls = tu.getDeclarations();
 
 		assertTrue(((ICASTSimpleDeclSpecifier)((IASTSimpleDeclaration) decls[0]).getDeclSpecifier()).isComplex());
@@ -3226,8 +3230,8 @@ public class AST2Tests extends AST2BaseTest {
 	// typeof({ int x = foo();
 	//          x; }) zoot;
 	public void testBug93980() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, true);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C, true);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IFunction foo = (IFunction) col.getName(0).resolveBinding();
@@ -3240,15 +3244,15 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testBug95866() throws Exception {
-		IASTTranslationUnit tu = parse("int test[10] = { [0 ... 9] = 2 };", ParserLanguage.C, true, true); //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse("int test[10] = { [0 ... 9] = 2 };", C, true, true); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 		assertNoProblemBindings(col);
 	}
 
 	public void testBug98502() throws Exception {
-		IASTTranslationUnit tu = parse("typedef enum { ONE } e;", ParserLanguage.C, true, true); //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse("typedef enum { ONE } e;", C, true, true); //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IEnumeration etion = (IEnumeration) col.getName(0).resolveBinding();
@@ -3263,8 +3267,8 @@ public class AST2Tests extends AST2BaseTest {
 	//    PIPERR;
 	// }
 	public void testBug98365() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, true);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C, true);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IEnumerator etor = (IEnumerator) col.getName(2).resolveBinding();
@@ -3272,7 +3276,7 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testBug99262() throws Exception {
-		parse("void foo() {void *f; f=__null;}", ParserLanguage.C, true, true); //$NON-NLS-1$
+		parse("void foo() {void *f; f=__null;}", C, true, true); //$NON-NLS-1$
 	}
 
 	// void f1(int*) {
@@ -3280,7 +3284,7 @@ public class AST2Tests extends AST2BaseTest {
 	// void f2() {
 	//   f1(__null);
 	// }
-	public void testBug240567() throws Exception {    	
+	public void testBug240567() throws Exception {
     	BindingAssertionHelper bh= new BindingAssertionHelper(getAboveComment(), false);
 		bh.assertNonProblem("f1(__null", 2, IFunction.class);
 	}
@@ -3290,8 +3294,8 @@ public class AST2Tests extends AST2BaseTest {
 	//    { a; int a; }
 	// }
 	public void testBug98960() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, true);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C, true);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IVariable a1 = (IVariable) col.getName(1).resolveBinding();
@@ -3303,8 +3307,8 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	public void testBug100408() throws Exception {
-		IASTTranslationUnit tu = parse("int foo() { int x=1; (x)*3; }", ParserLanguage.C);  //$NON-NLS-1$
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse("int foo() { int x=1; (x)*3; }", C);  //$NON-NLS-1$
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 		assertNoProblemBindings(col);
 	}
@@ -3319,8 +3323,8 @@ public class AST2Tests extends AST2BaseTest {
 	// {
 	// }
 	public void testBug98760() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, true);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C, true);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IFunction free = (IFunction) col.getName(4).resolveBinding();
@@ -3396,8 +3400,8 @@ public class AST2Tests extends AST2BaseTest {
 	//       blah: x;
 	// }
 	public void testBug104390_2() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, true);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), C, true);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		IVariable x = (IVariable) col.getName(1).resolveBinding();
@@ -3429,9 +3433,9 @@ public class AST2Tests extends AST2BaseTest {
 		buffer.append("((int arg1)) {\r\n"); //$NON-NLS-1$
 		buffer.append("return 0;\r\n"); //$NON-NLS-1$
 		buffer.append("}\r\n"); //$NON-NLS-1$
-		IASTTranslationUnit tu = parse(buffer.toString(), ParserLanguage.C);
+		IASTTranslationUnit tu = parse(buffer.toString(), C);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
-		tu = parse(buffer.toString(), ParserLanguage.CPP);
+		tu = parse(buffer.toString(), CPP);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
 
 		buffer = new StringBuffer();
@@ -3443,9 +3447,9 @@ public class AST2Tests extends AST2BaseTest {
 		buffer.append("((int arg1)) {\n"); //$NON-NLS-1$
 		buffer.append("return 0;\n"); //$NON-NLS-1$
 		buffer.append("}\n"); //$NON-NLS-1$
-		tu= parse(buffer.toString(), ParserLanguage.C);
+		tu= parse(buffer.toString(), C);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
-		tu= parse(buffer.toString(), ParserLanguage.CPP);
+		tu= parse(buffer.toString(), CPP);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
 	}
 
@@ -3459,10 +3463,10 @@ public class AST2Tests extends AST2BaseTest {
 		buffer.append("((int arg1)) {\r\n"); //$NON-NLS-1$
 		buffer.append("return 0;\r\n"); //$NON-NLS-1$
 		buffer.append("}\r\n"); //$NON-NLS-1$
-		IASTTranslationUnit tu= parse(buffer.toString(), ParserLanguage.C);
+		IASTTranslationUnit tu= parse(buffer.toString(), C);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
 
-		tu = parse(buffer.toString(), ParserLanguage.CPP);
+		tu = parse(buffer.toString(), CPP);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
 
 		buffer = new StringBuffer();
@@ -3474,9 +3478,9 @@ public class AST2Tests extends AST2BaseTest {
 		buffer.append("((int arg1)) {\n"); //$NON-NLS-1$
 		buffer.append("return 0;\n"); //$NON-NLS-1$
 		buffer.append("}\n"); //$NON-NLS-1$
-		tu = parse(buffer.toString(), ParserLanguage.C);
+		tu = parse(buffer.toString(), C);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
-		tu = parse(buffer.toString(), ParserLanguage.CPP);
+		tu = parse(buffer.toString(), CPP);
 		assertFalse(tu.getDeclarations()[1] instanceof IASTProblemDeclaration);
 	}
 
@@ -3522,7 +3526,7 @@ public class AST2Tests extends AST2BaseTest {
 	//     return newWindow;
 	// }
 	public void testBug143502() throws Exception {
-		parse(getAboveComment(), ParserLanguage.C, true, false);
+		parse(getAboveComment(), C, true, false);
 	}
 
 	// void func(int a) {
@@ -3537,13 +3541,13 @@ public class AST2Tests extends AST2BaseTest {
 	// }
 	public void testBracketAroundIdentifier_168924() throws IOException, ParserException {
 		String content= getAboveComment();
-		IASTTranslationUnit tu= parse(content, ParserLanguage.C, true, true);
+		IASTTranslationUnit tu= parse(content, C, true, true);
 		IASTFunctionDefinition func= (IASTFunctionDefinition) tu.getDeclarations()[0];
 		IASTParameterDeclaration[] params= ((IASTStandardFunctionDeclarator) func.getDeclarator()).getParameters();
 		IBinding binding= params[0].getDeclarator().getName().resolveBinding();
 		assertEquals(7, tu.getReferences(binding).length);
 
-		tu= parse(content, ParserLanguage.CPP, true, true);
+		tu= parse(content, CPP, true, true);
 		func= (IASTFunctionDefinition) tu.getDeclarations()[0];
 		params= ((IASTStandardFunctionDeclarator) func.getDeclarator()).getParameters();
 		binding= params[0].getDeclarator().getName().resolveBinding();
@@ -3555,7 +3559,7 @@ public class AST2Tests extends AST2BaseTest {
 	//     MAC(");
 	//  }
 	public void testBug179383() throws ParserException, IOException {
-		parse(getAboveComment(), ParserLanguage.C, false, false);
+		parse(getAboveComment(), C, false, false);
 	}
 
 	/**
@@ -3572,7 +3576,7 @@ public class AST2Tests extends AST2BaseTest {
 			"  return func(LIT);   // fails to parse\r\n" +
 			"}\r\n";
 
-		IASTTranslationUnit tu = parse(simple, ParserLanguage.CPP, true, true);
+		IASTTranslationUnit tu = parse(simple, CPP, true, true);
 
 		// actual reduced test case, plus extra cases
 		String text =
@@ -3594,7 +3598,7 @@ public class AST2Tests extends AST2BaseTest {
 			;
 
 		// essential test: this code should be parseable
-		tu = parse(text, ParserLanguage.CPP, true, true);
+		tu = parse(text, CPP, true, true);
 
 		// verify macros
 		IASTPreprocessorMacroDefinition[] macroDefinitions = tu.getMacroDefinitions();
@@ -3692,11 +3696,11 @@ public class AST2Tests extends AST2BaseTest {
 
 		// this should work
 		String textNoComment = noCommentMacro + textTail;
-		IASTTranslationUnit tu = parse(textNoComment, ParserLanguage.CPP, true, true);
+		IASTTranslationUnit tu = parse(textNoComment, CPP, true, true);
 
 		// this fails
 		String textComment = commentMacro + textTail;
-		tu = parse(textComment, ParserLanguage.CPP, true, true);
+		tu = parse(textComment, CPP, true, true);
 
 	}
 
@@ -3716,7 +3720,7 @@ public class AST2Tests extends AST2BaseTest {
 			"    } \n" +
 			"}\n";
 
-		parseAndCheckBindings(code, ParserLanguage.C);
+		parseAndCheckBindings(code, C);
 	}
 
 	//	template <typename T>
@@ -3744,10 +3748,10 @@ public class AST2Tests extends AST2BaseTest {
 	//	  }
 	//	};
 	public void test186736() throws Exception {
-		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP);
+		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), CPP);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 			IBinding methodb= col.getName(27).resolveBinding();
 			IBinding methodc= col.getName(30).resolveBinding();
@@ -3796,10 +3800,10 @@ public class AST2Tests extends AST2BaseTest {
 	//	  }
 	//	};
 	public void test186736_variant1() throws Exception {
-		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP);
+		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), CPP);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 			IBinding methodA= col.getName(30).resolveBinding();
 			IBinding methodAA= col.getName(33).resolveBinding();
@@ -3834,7 +3838,7 @@ public class AST2Tests extends AST2BaseTest {
 	//		(&a)->foo();
 	//	}
 	public void test186736_variant2() throws Exception {
-		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP);
+		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), CPP);
 		validateCopy(tu);
 	}
 
@@ -3843,8 +3847,8 @@ public class AST2Tests extends AST2BaseTest {
 	//   return *p;
 	// }
 	public void test167833() throws Exception {
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP);
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.C);
+		parseAndCheckBindings(getAboveComment(), CPP);
+		parseAndCheckBindings(getAboveComment(), C);
 	}
 
 	// // this is a \
@@ -3866,7 +3870,7 @@ public class AST2Tests extends AST2BaseTest {
 	public void testBug192165() throws Exception {
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			IASTTranslationUnit tu = parse(getAboveComment(), lang, true, false);
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 			assertInstance(col.getName(0).resolveBinding(), IProblemBinding.class);
 			assertInstance(col.getName(1).resolveBinding(), ITypedef.class);
@@ -3885,7 +3889,7 @@ public class AST2Tests extends AST2BaseTest {
 			final IBinding typedef = col.getName(12).resolveBinding();
 			final IBinding secondJ = col.getName(13).resolveBinding();
 			assertInstance(typedef, ITypedef.class);
-			if (lang == ParserLanguage.CPP) {
+			if (lang == CPP) {
 				assertInstance(secondJ, IProblemBinding.class);
 			} else {
 				// for plain C this is actually not a problem, the second J has to be interpreted as a (useless)
@@ -3901,8 +3905,8 @@ public class AST2Tests extends AST2BaseTest {
 	// INVALID(1, 2)
 	//
 	public void test192639() throws Exception {
-		parse(getAboveComment(), ParserLanguage.CPP, false, false);
-		parse(getAboveComment(), ParserLanguage.C, false, false);
+		parse(getAboveComment(), CPP, false, false);
+		parse(getAboveComment(), C, false, false);
 	}
 
 	public void test195943() throws Exception {
@@ -3914,19 +3918,19 @@ public class AST2Tests extends AST2BaseTest {
 		}
 		buffer.append("int a= M" + (depth-1) + ";\n");
 		long time= System.currentTimeMillis();
-		parse(buffer.toString(), ParserLanguage.CPP);
-		parse(buffer.toString(), ParserLanguage.C);
+		parse(buffer.toString(), CPP);
+		parse(buffer.toString(), C);
 		assertTrue(System.currentTimeMillis()-time < 2000);
 	}
 
 	// int array[12]= {};
 	public void testBug196468_emptyArrayInitializer() throws Exception {
 		final String content = getAboveComment();
-		parse(content, ParserLanguage.CPP, false);
-		parse(content, ParserLanguage.CPP, true);
-		parse(content, ParserLanguage.C, true);
+		parse(content, CPP, false);
+		parse(content, CPP, true);
+		parse(content, C, true);
 		try {
-			parse(content, ParserLanguage.C, false);
+			parse(content, C, false);
 			fail("C89 does not allow empty braces in array initializer");
 		}
 		catch (ParserException e) {
@@ -3945,16 +3949,16 @@ public class AST2Tests extends AST2BaseTest {
 	//  }
 	public void testBug197633_parenthesisInVarargMacros() throws Exception {
 		final String content = getAboveComment();
-		parse(content, ParserLanguage.CPP);
-		parse(content, ParserLanguage.C);
+		parse(content, CPP);
+		parse(content, C);
 	}
 
 	// void  (__attribute__((__stdcall__))* foo1) (int);
 	// void  (* __attribute__((__stdcall__)) foo2) (int);
 	// void  (* __attribute__((__stdcall__))* foo3) (int);
 	public void testBug191450_attributesInBetweenPointers() throws Exception {
-		parse(getAboveComment(), ParserLanguage.CPP, true, true);
-		parse(getAboveComment(), ParserLanguage.C, true, true);
+		parse(getAboveComment(), CPP, true, true);
+		parse(getAboveComment(), C, true, true);
 	}
 
 	// class NameClash {};
@@ -3962,10 +3966,10 @@ public class AST2Tests extends AST2BaseTest {
 	// namespace NameClash2 {};
 	// class NameClash2 {};
 	public void testBug202271_nameClash() throws Exception {
-		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP, true);
+		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment(), CPP, true);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 			assertInstance(col.getName(0).resolveBinding(), ICPPClassType.class);
 			assertInstance(col.getName(1).resolveBinding(), ICPPNamespace.class);
@@ -3982,7 +3986,7 @@ public class AST2Tests extends AST2BaseTest {
 	// int b= WRAP(MACRO);
 	public void testBug94673_refsForMacrosAsArguments() throws Exception {
 		String content= getAboveComment();
-		IASTTranslationUnit tu= parseAndCheckBindings(content, ParserLanguage.CPP, true);
+		IASTTranslationUnit tu= parseAndCheckBindings(content, CPP, true);
 		IASTPreprocessorMacroDefinition[] defs= tu.getMacroDefinitions();
 		assertEquals(2, defs.length);
 		IASTPreprocessorMacroDefinition md= defs[1];
@@ -4041,10 +4045,10 @@ public class AST2Tests extends AST2BaseTest {
 		CharSequence[] buffer = getContents(2);
 		final String content1 = buffer[0].toString();
 		final String content2 = buffer[1].toString();
-		parse(content1, ParserLanguage.CPP);
-		parse(content1, ParserLanguage.C);
-		parse(content2, ParserLanguage.CPP);
-		parse(content2, ParserLanguage.C);
+		parse(content1, CPP);
+		parse(content1, C);
+		parse(content2, CPP);
+		parse(content2, C);
 	}
 
 
@@ -4065,15 +4069,15 @@ public class AST2Tests extends AST2BaseTest {
 	//
 	// int foo() {
 	// 	Point p1 = {.x = 1, .y = 2};
-	// 	
+	//
 	// 	Line l1 = {.p1 = {.x = 1, .y = 2}, {.x = 1, .y = 2}, {.tag = 5}};
 	// 	Line l2 = {.t.tag = 9, .p1.x = 1, .p2.x = 3, .p1.y = 4, .p2.y = 9};
 	//
 	// 	Point points[] = {{.x=1, .y=1}, {.x=2, .y=2}};
 	// }
 	public void _testBug210019_nestedDesignatedInitializers() throws Exception {
-		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), ParserLanguage.C);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), C);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 
 		// Point p1
@@ -4150,10 +4154,10 @@ public class AST2Tests extends AST2BaseTest {
 	//   3, 4
 	// };
 	public void testBug210019_designatedInitializers() throws Exception {
-		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), C);
 		assertTrue(tu.isFrozen());
 		for (int i = 0; i < NUM_TESTS; i++) {
-			CNameCollector col = new CNameCollector();
+			NameCollector col = new NameCollector();
 			tu.accept(col);
 
 			assertField(col.getName(6).resolveBinding(), "f", "S1");
@@ -4189,7 +4193,7 @@ public class AST2Tests extends AST2BaseTest {
 	//    externFunc();
 	// }
 	public void testBug183126_nestedLinkageSpecs() throws Exception {
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP);
+		parseAndCheckBindings(getAboveComment(), CPP);
 	}
 
 	// int* i= 0;
@@ -4203,8 +4207,8 @@ public class AST2Tests extends AST2BaseTest {
 	//  f3(&i); // ok
 	// }
 	public void testBug213029_cvConversion() throws Exception {
-		IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.CPP, false);
-		CNameCollector col = new CNameCollector();
+		IASTTranslationUnit tu = parse(getAboveComment(), CPP, false);
+		NameCollector col = new NameCollector();
 		tu.accept(col);
 		for (Object o : col.nameList) {
 			IASTName n = (IASTName) o;
@@ -4692,10 +4696,10 @@ public class AST2Tests extends AST2BaseTest {
 	// void test() {
 	//    a= b ? : c;
 	// }
-	public void testOmittedPositiveExpression_Bug212905() throws Exception {
+	public void testOmittedPositiveExpression_212905() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C);
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, C);
+		parseAndCheckBindings(code, CPP);
 	}
 
 	// #define __inline__ __inline__ __attribute__((always_inline))
@@ -4703,55 +4707,55 @@ public class AST2Tests extends AST2BaseTest {
 	// static __inline__  __u32 f(int x) {
 	//   return x;
 	// }
-	public void testRedefinedGCCKeywords_Bug226112() throws Exception {
+	public void testRedefinedGCCKeywords_226112() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	//	int foo asm ("myfoo") __attribute__((__used__)), ff asm("ss") = 2;
 	//	extern void func () asm ("FUNC") __attribute__((__used__));
-	public void testASMLabels_Bug226121() throws Exception {
+	public void testASMLabels_226121() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	// void test() {
 	//    ({1;}) != 0;
 	// }
-	public void testCompoundStatementExpression_Bug226274() throws Exception {
+	public void testCompoundStatementExpression_226274() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	// void test(int count) {
 	//    __typeof__(count) a= 1;
 	//    int ret0 = ((__typeof__(count)) 1);
 	// }
-	public void testTypeofUnaryExpression_Bug226492() throws Exception {
+	public void testTypeofUnaryExpression_226492() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	// void test(int count) {
 	//    typeof(count==1) a= 1;
 	// }
-	public void testTypeofExpression_Bug226492() throws Exception {
+	public void testTypeofExpression_226492() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	//	void func() {
 	//	  typeof(__attribute__((regparm(3)))void (*)(int *)) a;
 	//	}
-	public void testTypeofExpressionWithAttribute_Bug226492() throws Exception {
+	public void testTypeofExpressionWithAttribute_226492() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	// void test(int count) {
@@ -4759,10 +4763,10 @@ public class AST2Tests extends AST2BaseTest {
 	//       case 1 ... 3: break;
 	//    }
 	// }
-	public void testCaseRange_Bug211882() throws Exception {
+	public void testCaseRange_211882() throws Exception {
 		final String code = getAboveComment();
 		{
-			IASTTranslationUnit tu = parseAndCheckBindings(code, ParserLanguage.C, true);
+			IASTTranslationUnit tu = parseAndCheckBindings(code, C, true);
 			IASTCompoundStatement body = (IASTCompoundStatement)((IASTFunctionDefinition) tu.getDeclarations()[0]).getBody();
 			IASTSwitchStatement switchStmt = (IASTSwitchStatement) body.getStatements()[0];
 			IASTCaseStatement caseStmt = (IASTCaseStatement)((IASTCompoundStatement) switchStmt.getBody()).getStatements()[0];
@@ -4772,7 +4776,7 @@ public class AST2Tests extends AST2BaseTest {
 			assertTrue(binExpr.getOperand2() instanceof IASTLiteralExpression);
 		}
 		{
-			IASTTranslationUnit tu = parseAndCheckBindings(code, ParserLanguage.CPP, true);
+			IASTTranslationUnit tu = parseAndCheckBindings(code, CPP, true);
 			IASTCompoundStatement body = (IASTCompoundStatement)((IASTFunctionDefinition) tu.getDeclarations()[0]).getBody();
 			IASTSwitchStatement switchStmt = (IASTSwitchStatement) body.getStatements()[0];
 			IASTCaseStatement caseStmt = (IASTCaseStatement)((IASTCompoundStatement) switchStmt.getBody()).getStatements()[0];
@@ -4786,10 +4790,10 @@ public class AST2Tests extends AST2BaseTest {
 	//	typedef int* TIntPtr;
 	//	int x(int (int * a));
 	//	int x(int(TIntPtr));
-	public void testInfiniteRecursion_Bug269052() throws Exception {
+	public void testInfiniteRecursion_269052() throws Exception {
 		final String code= getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	//	template<typename T> class X {
@@ -4799,29 +4803,29 @@ public class AST2Tests extends AST2BaseTest {
 	//	};
 	public void testTypenameInExpression() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, CPP);
 	}
 
 	//	struct __attribute__((declspec)) bla;
-	public void testAttributeInElaboratedTypeSpecifier_Bug227085() throws Exception {
+	public void testAttributeInElaboratedTypeSpecifier_227085() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	// struct X;
 	// void test(struct X* __restrict result);
-	public void testRestrictReference_Bug227110() throws Exception {
+	public void testRestrictReference_227110() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	// char buf[256];
 	// int x= sizeof(buf)[0];
-	public void testSizeofUnaryWithParenthesis_Bug227122() throws Exception {
+	public void testSizeofUnaryWithParenthesis_227122() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C);
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, C);
+		parseAndCheckBindings(code, CPP);
 	}
 
 	//	class X {
@@ -4833,9 +4837,9 @@ public class AST2Tests extends AST2BaseTest {
 	//	void test1() {
 	//		X* it = buffer == 0 ?  new (buffer) X : 0;
 	//	}
-	public void testPlacementNewInConditionalExpression_Bug227104() throws Exception {
+	public void testPlacementNewInConditionalExpression_227104() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, CPP);
 	}
 
     // int f(x) {
@@ -4843,7 +4847,7 @@ public class AST2Tests extends AST2BaseTest {
     // }
     public void testBug228422_noKnrParam() throws Exception {
     	CharSequence buffer = getContents(1)[0];
-    	parse(buffer.toString(), ParserLanguage.C, false);
+    	parse(buffer.toString(), C, false);
     }
 
     //    struct {
@@ -4896,8 +4900,8 @@ public class AST2Tests extends AST2BaseTest {
     //    }
     public void testTypeOfPointerOperations() throws Exception {
     	String code= getAboveComment();
-    	parseAndCheckBindings(code, ParserLanguage.C);
-    	parseAndCheckBindings(code, ParserLanguage.CPP);
+    	parseAndCheckBindings(code, C);
+    	parseAndCheckBindings(code, CPP);
     }
 
     //    int globalArray[4] = {1,2,3,4};
@@ -4910,7 +4914,7 @@ public class AST2Tests extends AST2BaseTest {
     //    void function2() {
     //        function1(); // ref
     //    }
-    public void testOutOfOrderResolution_Bug232300() throws Exception {
+    public void testOutOfOrderResolution_232300() throws Exception {
     	String code= getAboveComment();
     	for (ParserLanguage lang: ParserLanguage.values()) {
     		BindingAssertionHelper ba= new BindingAssertionHelper(code, lang);
@@ -4924,7 +4928,7 @@ public class AST2Tests extends AST2BaseTest {
 
     // #define foo __typeof__((int*)0 - (int*)0)
     // typedef foo ptrdiff_t;
-    public void testRedefinePtrdiff_Bug230895() throws Exception {
+    public void testRedefinePtrdiff_230895() throws Exception {
     	String code= getAboveComment();
     	for (ParserLanguage lang: ParserLanguage.values()) {
     		BindingAssertionHelper ba= new BindingAssertionHelper(code, lang);
@@ -4958,38 +4962,31 @@ public class AST2Tests extends AST2BaseTest {
     //    void test() {
     //    	checkLong(__builtin_expect(1, 1));
     //    }
-    public void testReturnTypeOfBuiltin_Bug234309() throws Exception {
+    public void testReturnTypeOfBuiltin_234309() throws Exception {
     	String code= getAboveComment();
-    	parseAndCheckBindings(code, ParserLanguage.C, true);
-    	parseAndCheckBindings(code, ParserLanguage.CPP, true);
+    	parseAndCheckBindings(code, C, true);
+    	parseAndCheckBindings(code, CPP, true);
     }
 
     //    typedef void VOID;
-    //    VOID func(VOID) {
+    //    VOID func(void) {
     //    }
-    public void testTypedefVoid_Bug221567() throws Exception {
+    public void testTypedefVoid_221567() throws Exception {
     	String code= getAboveComment();
     	for (ParserLanguage lang: ParserLanguage.values()) {
     		BindingAssertionHelper ba= new BindingAssertionHelper(code, lang);
     		ITypedef td= ba.assertNonProblem("VOID;", 4, ITypedef.class);
-    		IBinding ref= ba.assertNonProblem("VOID)", 4);
-    		assertSame(td, ref);
 
     		IFunction func= ba.assertNonProblem("func", 4, IFunction.class);
     		IFunctionType ft= func.getType();
     		IType rt= ft.getReturnType();
     		IType[] pts= ft.getParameterTypes();
-    		assertEquals(1, pts.length);
-			IType pt = pts[0];
+    		assertEquals(0, pts.length);
 			assertInstance(rt, ITypedef.class);
-			assertInstance(pt, ITypedef.class);
 			rt= ((ITypedef) rt).getType();
-			pt= ((ITypedef) pt).getType();
 
 			assertTrue(rt instanceof IBasicType);
-    		assertEquals(IBasicType.t_void, ((IBasicType) rt).getType());
-    		assertTrue(pt instanceof IBasicType);
-    		assertEquals(IBasicType.t_void, ((IBasicType) pt).getType());
+    		assertEquals(IBasicType.Kind.eVoid, ((IBasicType) rt).getKind());
     	}
     }
 
@@ -4999,7 +4996,7 @@ public class AST2Tests extends AST2BaseTest {
     //    	printf(str(this is a // this should go away
     //    	string));
     //    }
-    public void testCommentInExpansion_Bug84276() throws Exception {
+    public void testCommentInExpansion_84276() throws Exception {
     	IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment());
     	IASTFunctionDefinition func= (IASTFunctionDefinition) tu.getDeclarations()[0];
 
@@ -5014,7 +5011,7 @@ public class AST2Tests extends AST2BaseTest {
     // int f3(int (tint));
     // int f4(int (identifier));
     // int f5(int *(tint[10]));
-    public void testParamWithFunctionType_Bug84242() throws Exception {
+    public void testParamWithFunctionType_84242() throws Exception {
     	final String comment= getAboveComment();
     	for (ParserLanguage lang: ParserLanguage.values()) {
         	BindingAssertionHelper ba= new BindingAssertionHelper(comment, lang);
@@ -5038,7 +5035,7 @@ public class AST2Tests extends AST2BaseTest {
 
     // class C { };
     // void f1(int(C)) { }
-    public void testParamWithFunctionTypeCpp_Bug84242() throws Exception {
+    public void testParamWithFunctionTypeCpp_84242() throws Exception {
     	BindingAssertionHelper ba= new BindingAssertionHelper(getAboveComment(), true);
 
     	IFunction f= ba.assertNonProblem("f1", 2, IFunction.class);
@@ -5047,7 +5044,7 @@ public class AST2Tests extends AST2BaseTest {
 
     // int (*f1(int par))[5] {};
     // int (*f1 (int par))[5];
-    public void testFunctionReturningPtrToArray_Bug216609() throws Exception {
+    public void testFunctionReturningPtrToArray_216609() throws Exception {
     	final String comment= getAboveComment();
     	for (ParserLanguage lang: ParserLanguage.values()) {
     		BindingAssertionHelper ba= new BindingAssertionHelper(getAboveComment(), lang);
@@ -5122,7 +5119,7 @@ public class AST2Tests extends AST2BaseTest {
     //    int a,b;
     //    { b; a; int a; }
     //  }
-    public void testLocalVariableResolution_Bug235831() throws Exception {
+    public void testLocalVariableResolution_235831() throws Exception {
     	final String comment= getAboveComment();
     	final boolean[] isCpps= {false, true};
     	for (ParserLanguage lang: ParserLanguage.values()) {
@@ -5138,7 +5135,7 @@ public class AST2Tests extends AST2BaseTest {
     }
 
     // int foo(int (*ptr) (int, int));
-    public void testComplexParameterBinding_Bug214482() throws Exception {
+    public void testComplexParameterBinding_214482() throws Exception {
     	final String comment= getAboveComment();
     	for (ParserLanguage lang: ParserLanguage.values()) {
     		BindingAssertionHelper ba= new BindingAssertionHelper(comment, lang);
@@ -5216,7 +5213,7 @@ public class AST2Tests extends AST2BaseTest {
     //          foux= 0;
     //    foux= 1;
     // }
-    public void testSwitchWithoutCompound_Bug105334() throws Exception {
+    public void testSwitchWithoutCompound_105334() throws Exception {
     	final String comment= getAboveComment();
     	for (ParserLanguage lang : ParserLanguage.values()) {
     		IASTTranslationUnit tu= parse(comment, lang);
@@ -5251,7 +5248,7 @@ public class AST2Tests extends AST2BaseTest {
     // a*a*(t)+a*a*a		// a,a,*,t,a,unary+,cast,*,a,*,a,*
     // (typeof a)(t)-a  	// typeof a,t,a,unary-,cast,cast
     // (typeof a)(a)-a  	// typeof a,a,cast,a,-
-    public void testBinaryVsCastAmbiguities_Bug237057() throws Exception {
+    public void testBinaryVsCastAmbiguities_237057() throws Exception {
     	CharSequence[] input= getContents(2);
     	String code= input[0].toString();
     	String[] samples= input[1].toString().split("\n");
@@ -5291,7 +5288,7 @@ public class AST2Tests extends AST2BaseTest {
     // (t)(a)+1				// t,a,cast,1,+
     // (f)(a)+1				// f,a,(),1,+
     // (t)(t)+1				// t,t,1,unary+,cast,cast
-    public void testCastVsFunctionCallAmbiguities_Bug237057() throws Exception {
+    public void testCastVsFunctionCallAmbiguities_237057() throws Exception {
     	CharSequence[] input= getContents(2);
     	String code= input[0].toString();
     	String[] samples= input[1].toString().split("\n");
@@ -5488,13 +5485,13 @@ public class AST2Tests extends AST2BaseTest {
 	//		int x;
 	//	} spinlock_t;
 	//	spinlock_t _lock = (spinlock_t) {  };
-	public void testCompoundInitializer_bug145387() throws Exception  {
+	public void testCompoundInitializer_145387() throws Exception  {
 		// valid in C99, not in C++.
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.C, true);
+		parseAndCheckBindings(getAboveComment(), C, true);
 	}
 
 	// enum __declspec(uuid("uuid")) bla { a, b};
-	public void testDeclspecInEnumSpecifier_bug241203() throws Exception  {
+	public void testDeclspecInEnumSpecifier_241203() throws Exception  {
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			parseAndCheckBindings(getAboveComment(), lang, true);
 		}
@@ -5523,7 +5520,7 @@ public class AST2Tests extends AST2BaseTest {
 	//    if (__builtin_types_compatible_p(typeof(p), char[])) {
 	//    }
 	// }
-	public void testBuiltinTypesCompatible_bug241570() throws Exception  {
+	public void testBuiltinTypesCompatible_241570() throws Exception  {
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			parseAndCheckBindings(getAboveComment(), lang, true);
 		}
@@ -5533,9 +5530,9 @@ public class AST2Tests extends AST2BaseTest {
 	//	void test() {
 	//	    alloc(__func__);
 	//	}
-	public void testPredefinedFunctionName_Bug247747() throws Exception {
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.C, false);
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP, false);
+	public void testPredefinedFunctionName_247747() throws Exception {
+		parseAndCheckBindings(getAboveComment(), C, false);
+		parseAndCheckBindings(getAboveComment(), CPP, false);
 	}
 
 	//	void alloc(const char * id) {}
@@ -5544,17 +5541,17 @@ public class AST2Tests extends AST2BaseTest {
 	//	    alloc(__FUNCTION__);
 	//	    alloc(__PRETTY_FUNCTION__);
 	//	}
-	public void testPredefinedFunctionNameGcc_Bug247747() throws Exception {
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.C, true);
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP, true);
+	public void testPredefinedFunctionNameGcc_247747() throws Exception {
+		parseAndCheckBindings(getAboveComment(), C, true);
+		parseAndCheckBindings(getAboveComment(), CPP, true);
 	}
 
 	//	int foo = 42;
 	//  typedef char StupidType;
 	//  StupidType const *bar = (StupidType const*)&foo;
-	public void testUnusualDeclSpecOrdering_Bug251514() throws Exception {
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.C, true);
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.CPP, true);
+	public void testUnusualDeclSpecOrdering_251514() throws Exception {
+		parseAndCheckBindings(getAboveComment(), C, true);
+		parseAndCheckBindings(getAboveComment(), CPP, true);
 	}
 
 	//	#define IF      if
@@ -5563,7 +5560,7 @@ public class AST2Tests extends AST2BaseTest {
 	//	#define SEMI_IF ; if
 	//	#define IF_COND if (1)
 	//  void test() {
-	public void testLeadingSyntax_Bug250251() throws Exception {
+	public void testLeadingSyntax_250251() throws Exception {
 		String code= getAboveComment();
 
 		IASTTranslationUnit tu= parseAndCheckBindings(code + "if (1) {};}");
@@ -5629,7 +5626,7 @@ public class AST2Tests extends AST2BaseTest {
 	//  #define P_BLOCK ){}
 	//	#define IF_COND if (1)
 	//  void test() {
-	public void testTrailingSyntax_Bug250251() throws Exception {
+	public void testTrailingSyntax_250251() throws Exception {
 		String code= getAboveComment();
 
 		IASTTranslationUnit tu= parseAndCheckBindings(code + "if (1) {};}");
@@ -5693,7 +5690,7 @@ public class AST2Tests extends AST2BaseTest {
 	//	#define SEMI_IF ; if
 	//	#define IF_COND if (1)
 	//  void test() {
-	public void testSyntax_Bug250251() throws Exception {
+	public void testSyntax_250251() throws Exception {
 		String code= getAboveComment();
 
 		IASTTranslationUnit tu= parseAndCheckBindings(code + "if (1) {};}");
@@ -5751,7 +5748,7 @@ public class AST2Tests extends AST2BaseTest {
 	//     <<
 	//     y;
 	// }
-	public void testSyntaxWithNL_Bug280175() throws Exception {
+	public void testSyntaxWithNL_280175() throws Exception {
 		String code= getAboveComment();
 		int offsetX= code.indexOf('x', code.indexOf('x')+1);
 		int offsetShift= code.indexOf('<');
@@ -5819,7 +5816,7 @@ public class AST2Tests extends AST2BaseTest {
 	//	void caller() {
 	//	   myfunc("");
 	//	}
-	public void testReferencesInInitializer_Bug251514() throws Exception {
+	public void testReferencesInInitializer_251514() throws Exception {
 		final String code = getAboveComment();
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			IASTTranslationUnit tu= parseAndCheckBindings(code, lang, true);
@@ -5832,7 +5829,7 @@ public class AST2Tests extends AST2BaseTest {
 	// void test() {
 	//    const void* p = &"string";
 	// }
-	public void testAdressOfStringLiteral_Bug252970() throws Exception {
+	public void testAdressOfStringLiteral_252970() throws Exception {
 		final String code = getAboveComment();
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			parseAndCheckBindings(code, lang);
@@ -5844,24 +5841,17 @@ public class AST2Tests extends AST2BaseTest {
 	// 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
 	// };
-	public void testScalabilityOfLargeTrivialInitializer_Bug253690() throws Exception {
-		sValidateCopy= false;
-		final int AMOUNT= 250000;
+	public void testScalabilityOfLargeTrivialInitializer_253690() throws Exception {
+		sValidateCopy = false;
+		final int AMOUNT = 250000;
 		final CharSequence[] input = getContents(3);
-		StringBuilder buf= new StringBuilder();
-		buf.append(input[0].toString());
-		final String line= input[1].toString();
-		for (int i = 0; i < AMOUNT/10; i++) {
-			buf.append(line);
-		}
-		buf.append(input[2].toString());
-		final String code= buf.toString();
+		final String code = concatInput(input, new int[] { 1, AMOUNT / 10, 1 });
 		for (ParserLanguage lang : ParserLanguage.values()) {
-			long mem= memoryUsed();
-			IASTTranslationUnit tu= parse(code, lang, false, true, true);
-			long diff= memoryUsed()-mem;
-			// allow a copy of the buffer + less than 2 bytes per initializer
-			final int expected = code.length()*2 + AMOUNT + AMOUNT/2;
+			long mem = memoryUsed();
+			IASTTranslationUnit tu = parse(code, lang, false, true, 0);
+			long diff = memoryUsed() - mem;
+			// Allow a copy of the buffer, plus less than 1.5 bytes per initializer.
+			final int expected = code.length() * 2 + AMOUNT + AMOUNT / 2;
 			assertTrue(String.valueOf(diff) + " expected < " + expected, diff < expected);
 			assertTrue(tu.isFrozen());
 		}
@@ -5872,32 +5862,79 @@ public class AST2Tests extends AST2BaseTest {
 	//	   {1,2,3},
 	//	   1.2,
 	//	   {
-		
+
 	// 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
 	//	   }
 	//	};
-	public void testLargeTrivialAggregateInitializer_Bug253690() throws Exception {
-		sValidateCopy= false;
-		final int AMOUNT= 250000;
+	public void testLargeTrivialAggregateInitializer_253690() throws Exception {
+		sValidateCopy = false;
+		final int AMOUNT = 250000;
 		final CharSequence[] input = getContents(3);
-		StringBuilder buf= new StringBuilder();
-		buf.append(input[0].toString());
-		final String line= input[1].toString();
-		for (int i = 0; i < AMOUNT/10; i++) {
-			buf.append(line);
-		}
-		buf.append(input[2].toString());
-		final String code= buf.toString();
+		final String code = concatInput(input, new int[] { 1, AMOUNT / 10, 1 });
 		for (ParserLanguage lang : ParserLanguage.values()) {
-			long mem= memoryUsed();
-			IASTTranslationUnit tu= parse(code, lang, false, true, true);
-			long diff= memoryUsed()-mem;
-			// allow a copy of the buffer + not even 1 byte per initializer
-			final int expected = code.length()*2 + AMOUNT + AMOUNT/2;
+			long mem = memoryUsed();
+			IASTTranslationUnit tu = parse(code, lang, false, true, 0);
+			long diff = memoryUsed() - mem;
+			// Allow a copy of the buffer, plus less than 1.5 bytes per initializer.
+			final int expected = code.length() * 2 + AMOUNT + AMOUNT / 2;
 			assertTrue(String.valueOf(diff) + " expected < " + expected, diff < expected);
 			assertTrue(tu.isFrozen());
 		}
+	}
+
+	// int a[]= {
+
+	// 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+	// };
+	public void testMaximumTrivialExpressionsInInitializers_412380() throws Exception {
+		sValidateCopy = false;
+		final int AMOUNT = 250000;
+		final int maximumTrivialExpressionsInInitializer = 1000;
+		final int additionalBytesPerInitializer = 90;
+		final CharSequence[] input = getContents(3);
+		final String code = concatInput(input, new int[] { 1, AMOUNT / 10, 1 });
+		for (ParserLanguage lang : ParserLanguage.values()) {
+			long mem = memoryUsed();
+			IASTTranslationUnit tu = parse(code, lang, false, true, maximumTrivialExpressionsInInitializer);
+			long diff = memoryUsed() - mem;
+			final int initializerSize = maximumTrivialExpressionsInInitializer * additionalBytesPerInitializer;
+			// Allow a copy of the buffer, plus less than 1.5 bytes per initializer.
+			final int expected = code.length() * 2 + AMOUNT + AMOUNT / 2 + initializerSize;
+			assertTrue(String.valueOf(diff) + " expected < " + expected, diff < expected);
+			assertTrue(tu.isFrozen());
+			tu.accept(new ASTVisitor() {
+				{
+					shouldVisitInitializers = true;
+				}
+
+				@Override
+				public int visit(IASTInitializer initializer) {
+					if (initializer instanceof IASTEqualsInitializer) {
+						IASTEqualsInitializer equalsInitializer = (IASTEqualsInitializer) initializer;
+						IASTInitializerClause initClause = equalsInitializer.getInitializerClause();
+						if (initClause instanceof IASTInitializerList) {
+							IASTInitializerList initList = (IASTInitializerList) initClause;
+							assertEquals(maximumTrivialExpressionsInInitializer, initList.getClauses().length);
+						}
+					}
+					return ASTVisitor.PROCESS_CONTINUE;
+				}
+			});
+		}
+	}
+
+	private String concatInput(CharSequence[] snippets, int[] snippetOccurences) {
+		final StringBuilder result = new StringBuilder();
+		final int snippetsToConcat = Math.min(snippets.length, snippetOccurences.length);
+		for (int i = 0; i < snippetsToConcat; i++) {
+			final CharSequence string = snippets[i];
+			for (int times = 0; times < snippetOccurences[i]; times++) {
+				result.append(string);
+			}
+		}
+		return result.toString();
 	}
 
 	private long memoryUsed() throws InterruptedException {
@@ -5916,10 +5953,10 @@ public class AST2Tests extends AST2BaseTest {
 
 	// int n= 0;
 	// int a[]= {0x00, sizeof(n)};
-	public void testNonTrivialInitializer_Bug253690() throws Exception {
+	public void testNonTrivialInitializer_253690() throws Exception {
 		final String code= getAboveComment();
 		for (ParserLanguage lang : ParserLanguage.values()) {
-			IASTTranslationUnit tu= parse(code, lang, false, true, true);
+			IASTTranslationUnit tu= parse(code, lang, false, true, 0);
 			IASTSimpleDeclaration d= getDeclaration(tu, 0);
 			IBinding b= d.getDeclarators()[0].getName().resolveBinding();
 			IASTName[] refs = tu.getReferences(b);
@@ -5930,7 +5967,7 @@ public class AST2Tests extends AST2BaseTest {
 	// void test() {
 	//    const void* p = 1+2;
 	// }
-	public void testGetChildren_Bug256127() throws Exception {
+	public void testGetChildren_256127() throws Exception {
 		final String code = getAboveComment();
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			IASTNode node= parseAndCheckBindings(code, lang);
@@ -5976,10 +6013,10 @@ public class AST2Tests extends AST2BaseTest {
 	//		struct s v;
 	//		v.mem = 1;
 	//	}
-	public void testNestedDeclarator_Bug257540() throws Exception {
+	public void testNestedDeclarator_257540() throws Exception {
 		final String code= getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C);
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, C);
+		parseAndCheckBindings(code, CPP);
 	}
 
 	//	typedef struct {
@@ -5990,26 +6027,26 @@ public class AST2Tests extends AST2BaseTest {
 	//	    cs foo;
 	//	    foo = ((cs) {1.2,1});
 	//	}
-	public void testCompoundLiterals_Bug258496() throws Exception {
+	public void testCompoundLiterals_258496() throws Exception {
 		final String code= getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C);
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, C);
+		parseAndCheckBindings(code, CPP);
 	}
 
 	// __thread int i;
 	// static __thread int j;
 	// extern __thread int k;
-	public void testThreadLocalVariables_Bug260387() throws Exception {
+	public void testThreadLocalVariables_260387() throws Exception {
 		final String code= getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	// void test() {
 	//    int a,b;
 	//    if ((a)+b);
 	// }
-	public void testAmbiguityResolutionInIfCondition_Bug261043() throws Exception {
+	public void testAmbiguityResolutionInIfCondition_261043() throws Exception {
 		final String code= getAboveComment();
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			IASTTranslationUnit tu= parseAndCheckBindings(code, lang, true);
@@ -6025,9 +6062,9 @@ public class AST2Tests extends AST2BaseTest {
 	//    const TInt; // declaration without name
 	//    const a;    // declares a;
 	// };
-	public void testAmbiguousDeclaration_Bug259373() throws Exception {
+	public void testAmbiguousDeclaration_259373() throws Exception {
 		final String code= getAboveComment();
-		IASTTranslationUnit tu= parseAndCheckBindings(code, ParserLanguage.C, true);
+		IASTTranslationUnit tu= parseAndCheckBindings(code, C, true);
 		BindingAssertionHelper bh= new BindingAssertionHelper(code, false);
 		ITypedef td= bh.assertNonProblem("TInt; //", 4);
 		IField f= bh.assertNonProblem("a;", 1);
@@ -6047,7 +6084,7 @@ public class AST2Tests extends AST2BaseTest {
 	//		pg->glob= 0;
 	//		pl->loc= 1;
 	//	}
-	public void testLocalVsGlobalStruct_Bug255973() throws Exception {
+	public void testLocalVsGlobalStruct_255973() throws Exception {
 		final String code= getAboveComment();
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			IASTTranslationUnit tu= parseAndCheckBindings(code, lang, true);
@@ -6062,7 +6099,7 @@ public class AST2Tests extends AST2BaseTest {
 		for (ParserLanguage lang : ParserLanguage.values()) {
 			IASTTranslationUnit tu= parseAndCheckBindings(code, lang, true);
 
-			BindingAssertionHelper ba= new BindingAssertionHelper(code, lang == ParserLanguage.CPP);
+			BindingAssertionHelper ba= new BindingAssertionHelper(code, lang == CPP);
 			ITypedef t= ba.assertNonProblem("A;", 1);
 			ICompositeType s1= ba.assertNonProblem("A; // struct", 1);
 			ICompositeType s2= ba.assertNonProblem("A*", 1);
@@ -6072,7 +6109,7 @@ public class AST2Tests extends AST2BaseTest {
 	}
 
 	//	typedef long unsigned int size_t;
-	//	
+	//
     //	size_t a = 0;
     //	size_t x = a + 5;
     //	size_t y = 2 + a;
@@ -6095,7 +6132,7 @@ public class AST2Tests extends AST2BaseTest {
 
 	//	typedef void* VoidPtr;
 	//	typedef VoidPtr (*Func)();
-	//	
+	//
 	//	void test(Func f) {
 	//	  f();
 	//	}
@@ -6127,7 +6164,7 @@ public class AST2Tests extends AST2BaseTest {
     public void testSizeofFunctionType_252243() throws Exception {
 		final String code= getAboveComment();
 		for (ParserLanguage lang : ParserLanguage.values()) {
-			BindingAssertionHelper ba= new BindingAssertionHelper(code, lang == ParserLanguage.CPP);
+			BindingAssertionHelper ba= new BindingAssertionHelper(code, lang == CPP);
 			ba.assertProblem("y));", 1);
 			IVariable v= ba.assertNonProblem("y);", 1);
 		}
@@ -6327,11 +6364,6 @@ public class AST2Tests extends AST2BaseTest {
     	return false;
     }
 
-	/**
-	 * @param declarations
-	 * @param index
-	 * @return
-	 */
 	private IBasicType getTypeForDeclaration(IASTDeclaration[] declarations, int index) {
 		IASTInitializer init = ((IASTSimpleDeclaration) declarations[index]).getDeclarators()[0].getInitializer();
 		return (IBasicType)((IASTExpression)((IASTEqualsInitializer) init).getInitializerClause()).getExpressionType();
@@ -6346,7 +6378,7 @@ public class AST2Tests extends AST2BaseTest {
 	//	    __TIME__;
 	//	}
 	public void testPredefinedMacroNamesC() throws Exception {
-		parseAndCheckBindings(getAboveComment(), ParserLanguage.C);
+		parseAndCheckBindings(getAboveComment(), C);
 	}
 
 	// long double longDouble = 1.0;
@@ -6877,7 +6909,7 @@ public class AST2Tests extends AST2BaseTest {
 	//  int MyGlobal[10];
 	//
 	public void testBug273797() throws Exception {
-		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), C);
 		IASTName n = ((IASTSimpleDeclaration) tu.getDeclarations()[0]).getDeclarators()[0].getName();
 		IVariable v = (IVariable) n.resolveBinding();
 
@@ -6899,7 +6931,7 @@ public class AST2Tests extends AST2BaseTest {
 	//	        (int) value1;
 	//	}
 	public void testBug278797() throws Exception {
-		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), ParserLanguage.C);
+		IASTTranslationUnit tu = parseAndCheckBindings(getAboveComment(), C);
 		IASTFunctionDefinition func = (IASTFunctionDefinition) tu.getDeclarations()[1];
 		IASTExpressionStatement stmt = ((IASTExpressionStatement)((IASTCompoundStatement) func.getBody()).getStatements()[0]);
 		IType t = ((IASTCastExpression) stmt.getExpression()).getOperand().getExpressionType();
@@ -6999,7 +7031,7 @@ public class AST2Tests extends AST2BaseTest {
 	//     structure.ptr = goo;
 	// }
 	public void testBindingsOnFields() throws Exception {
-	    IASTTranslationUnit tu = parse(getAboveComment(), ParserLanguage.C, false);
+	    IASTTranslationUnit tu = parse(getAboveComment(), C, false);
 	    IASTCompoundStatement bodyStmt  = (IASTCompoundStatement)((IASTFunctionDefinition) tu.getDeclarations()[2]).getBody();
 
 	    // Get the IFields bindings from the type used in the declaration of structure
@@ -7011,7 +7043,7 @@ public class AST2Tests extends AST2BaseTest {
 	    // Get the IField for the first assignment
 	    IASTFieldReference ref1 = (IASTFieldReference)((IASTBinaryExpression)((IASTExpressionStatement) bodyStmt.getStatements()[1]).getExpression()).getOperand1();
 	    IBinding field1 = ref1.getFieldName().resolveBinding();
-	
+
 	    // Get the IField for the second assignment
 	    IASTFieldReference ref2 = (IASTFieldReference)((IASTBinaryExpression)((IASTExpressionStatement) bodyStmt.getStatements()[2]).getExpression()).getOperand1();
 	    IBinding field2 = ref2.getFieldName().resolveBinding();
@@ -7019,7 +7051,7 @@ public class AST2Tests extends AST2BaseTest {
 	    // Compare the IField from the type and the assignments
 	    assertEquals(fields[0], field1);
 	    assertEquals(fields[1], field2); // fails
-	
+
 	    assertEquals(1, ((ICInternalBinding) field1).getDeclarations().length);
 	    assertEquals(1, ((ICInternalBinding) field2).getDeclarations().length);
 	}
@@ -7097,8 +7129,8 @@ public class AST2Tests extends AST2BaseTest {
 	//	int a[1];
 	public void testIncompleteArrays_269926() throws Exception {
 		final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C);
-		parseAndCheckBindings(code, ParserLanguage.CPP);
+		parseAndCheckBindings(code, C);
+		parseAndCheckBindings(code, CPP);
 	}
 
 	// void f1(const int* p);
@@ -7151,7 +7183,23 @@ public class AST2Tests extends AST2BaseTest {
 	//	static a[2]= {0,0};
 	public void testSkipAggregateInitializer_297550() throws Exception {
         final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, false, true);
+		IASTTranslationUnit tu = parseAndCheckBindings(code, C, false, 0);
+		assertTrue(tu.hasNodesOmitted());
+	}
+
+	//	static a[2]= {0,0};
+	public void testNoSkipTrivialAggregateInitializer_412380() throws Exception {
+		final String code = getAboveComment();
+		IASTTranslationUnit tu = parseAndCheckBindings(code, C, false);
+		assertFalse(tu.hasNodesOmitted());
+	}
+
+	//	static int i = 0;
+	//	static a[1]= {i};
+	public void testNoSkipNonTrivialAggregateInitializer_412380() throws Exception {
+		final String code = getAboveComment();
+		IASTTranslationUnit tu = parseAndCheckBindings(code, C, false, 0);
+		assertFalse(tu.hasNodesOmitted());
 	}
 
 	// typeof(b(1)) b(int);
@@ -7192,8 +7240,8 @@ public class AST2Tests extends AST2BaseTest {
 	// void f () __attribute__ ((int));
 	public void testAttributeSyntax_298841() throws Exception {
         final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	//	void func(int* obj) {
@@ -7216,7 +7264,7 @@ public class AST2Tests extends AST2BaseTest {
 	//  ONCE()
 	public void testPragmaOperator_294730() throws Exception {
         final String code = getAboveComment();
-		IASTTranslationUnit tu= parseAndCheckBindings(code, ParserLanguage.C);
+		IASTTranslationUnit tu= parseAndCheckBindings(code, C);
 		IASTPreprocessorStatement[] stmts = tu.getAllPreprocessorStatements();
 		assertEquals(5, stmts.length);
 		for (int i = 2; i < stmts.length; i++) {
@@ -7224,7 +7272,7 @@ public class AST2Tests extends AST2BaseTest {
 			assertInstance(stmt, IASTPreprocessorPragmaStatement.class);
 			assertEquals(i>2, ((IASTPreprocessorPragmaStatement) stmt).isPragmaOperator());
 		}
-		tu= parseAndCheckBindings(code, ParserLanguage.CPP);
+		tu= parseAndCheckBindings(code, CPP);
 		assertEquals(5, stmts.length);
 		for (int i = 2; i < stmts.length; i++) {
 			IASTPreprocessorStatement stmt = stmts[i];
@@ -7239,8 +7287,8 @@ public class AST2Tests extends AST2BaseTest {
 	//	}
 	public void testFunctionNameExpression() throws Exception {
         final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	//	#define MACRO
@@ -7269,8 +7317,8 @@ public class AST2Tests extends AST2BaseTest {
 	//	}
 	public void testVaArgWithFunctionPtr_311030() throws Exception {
         final String code = getAboveComment();
-		parseAndCheckBindings(code, ParserLanguage.C, true);
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, C, true);
+		parseAndCheckBindings(code, CPP, true);
 	}
 
 	//	void test() {
@@ -7313,18 +7361,18 @@ public class AST2Tests extends AST2BaseTest {
 	public void testPtrDiffRecursion_317004() throws Exception {
         final String comment = getAboveComment();
         String code= comment;
-		parseAndCheckBindings(code, ParserLanguage.C, true);
+		parseAndCheckBindings(code, C, true);
 		BindingAssertionHelper bh= new BindingAssertionHelper(code, false);
 		ITypedef td= bh.assertNonProblem("ptrdiff_t", 0);
-		assertEquals("int", ASTTypeUtil.getType(td.getType()));
+		assertEquals("long int", ASTTypeUtil.getType(td.getType()));
 		td= bh.assertNonProblem("size_t", 0);
 		assertEquals("unsigned long int", ASTTypeUtil.getType(td.getType()));
 
 		code= "namespace std {" + comment + "}";
-		parseAndCheckBindings(code, ParserLanguage.CPP, true);
+		parseAndCheckBindings(code, CPP, true);
 		bh= new BindingAssertionHelper(code, true);
 		td= bh.assertNonProblem("ptrdiff_t", 0);
-		assertEquals("int", ASTTypeUtil.getType(td.getType()));
+		assertEquals("long int", ASTTypeUtil.getType(td.getType()));
 		td= bh.assertNonProblem("size_t", 0);
 		assertEquals("unsigned long int", ASTTypeUtil.getType(td.getType()));
 	}
@@ -7368,16 +7416,16 @@ public class AST2Tests extends AST2BaseTest {
 	//	    sizeof(10); // wrong - getExpressionType returns float
 	//	    sizeof(int); // wrong - getExpressionType returns float
 	//	}
-	public void testTypeOfSizeof_Bug355052() throws Exception {
+	public void testTypeOfSizeof_355052() throws Exception {
 		final String code = getAboveComment();
-		IASTTranslationUnit tu= parseAndCheckBindings(code, ParserLanguage.CPP);
+		IASTTranslationUnit tu= parseAndCheckBindings(code, CPP);
 		IASTFunctionDefinition a= getDeclaration(tu, 0);
 		IASTExpressionStatement es= getStatement(a, 1);
 		assertEquals("unsigned long int", ASTTypeUtil.getType(es.getExpression().getExpressionType()));
 		es= getStatement(a, 2);
 		assertEquals("unsigned long int", ASTTypeUtil.getType(es.getExpression().getExpressionType()));
 
-		tu= parseAndCheckBindings(code, ParserLanguage.C);
+		tu= parseAndCheckBindings(code, C);
 		a= getDeclaration(tu, 0);
 		es= getStatement(a, 1);
 		assertEquals("unsigned long int", ASTTypeUtil.getType(es.getExpression().getExpressionType()));
@@ -7389,12 +7437,12 @@ public class AST2Tests extends AST2BaseTest {
 	//	    typedef int foobar_t;
 	//	    foobar_t *a = 0, *b = a;
 	//	}
-	public void testAmbiguousStatement_Bug360541() throws Exception {
+	public void testAmbiguousStatement_360541() throws Exception {
 		parseAndCheckBindings();
 	}
 
 	// typedef int T[sizeof(int)];
-	public void testSizeofExpression_Bug362464() throws Exception {
+	public void testSizeofExpression_362464() throws Exception {
 		String code= getAboveComment();
 		for (ParserLanguage l : ParserLanguage.values()) {
 			IASTTranslationUnit tu= parseAndCheckBindings(code, l);
@@ -7415,5 +7463,80 @@ public class AST2Tests extends AST2BaseTest {
 		IASTComment comment= tu.getComments()[0];
 		assertEquals("//comment", new String(comment.getComment()));
 		assertEquals("//comment", comment.getRawSignature());
+	}
+
+	//	template<typename T>
+	//	void test(T n) {
+	//	  for (__decltype(n + 0) i = 0; i < n; i++) {
+	//	  }
+	//	}
+	public void testGCCDecltype_397227() throws Exception {
+		parseAndCheckBindings(getAboveComment(), CPP, true);
+	}
+
+	// #define macro(R) #R""
+	public void testNoRawStringInPlainC_397127() throws Exception {
+		parseAndCheckBindings(getAboveComment(), C, true);
+	}
+	
+	// #define X 
+	// int a=X-1;X
+	public void testMacroReferences_399394() throws Exception {
+		IASTTranslationUnit tu= parseAndCheckBindings(getAboveComment());
+		assertEquals(2, countMacroRefs(tu));
+		
+		IASTSimpleDeclaration decl= getDeclaration(tu, 0);
+		assertEquals(1, countMacroRefs(decl));
+		
+		IASTEqualsInitializer init= (IASTEqualsInitializer) decl.getDeclarators()[0].getInitializer();
+		assertEquals(1, countMacroRefs(init));
+		
+		IASTUnaryExpression expr= (IASTUnaryExpression) init.getInitializerClause();
+		assertEquals(0, countMacroRefs(expr));
+	}
+
+	private int countMacroRefs(IASTNode node) {
+		int count = 0;
+		for (IASTNodeLocation loc : node.getNodeLocations()) {
+			if (loc instanceof IASTMacroExpansionLocation)
+				count++;
+		}
+		return count;
+	}
+	
+	//	typedef struct { int x; } A;
+	//
+	//	void (*function(A *a))(void) {
+	//	    a->x;
+	//	}
+	public void testFunctionReturningFunctionPointer_413204() throws Exception {
+		parseAndCheckBindings();
+	}
+	
+	//	double d = 00.9;
+	public void testOctalFloatingPointLiteral_394048() throws Exception {
+		parseAndCheckBindings();
+	}
+	
+	public void testMacOS9LineEnding_151329a() throws Exception {
+		parseAndCheckBindings("int waldo;\r#define bar");
+	}
+	
+	public void testMaxOS9LineEnding_151329b() throws Exception {
+		// This tests that if there is an \r\n in a macro continuation,
+		// the \r is not treated as an extra newline. The code
+		// stringifies the macro expansion and arranges for the string
+		// length to show up in a template parameter, whose value is
+		// checked by the test.
+		String code = "#define MACRO foo\\\r\n"
+				    + "bar\r\n"
+				    + "#define STRINGIFY_(x) #x\r\n"
+				    + "#define STRINGIFY(x) STRINGIFY_(x)\r\n"
+				    + "template <int N> void f(const char (&)[N]);\r\n"
+				    + "int main() { f(STRINGIFY(MACRO)); }\r\n";
+		BindingAssertionHelper helper = new BindingAssertionHelper(code, true);
+		ICPPTemplateInstance f = helper.assertNonProblem("f(STRINGIFY", "f");
+		// 7 characters for "foobar" + the null terminator.
+		assertEquals(7, f.getTemplateArguments()[0].getNonTypeValue().numericalValue().longValue());
 	}
 }

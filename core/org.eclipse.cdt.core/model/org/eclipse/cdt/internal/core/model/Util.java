@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2002, 2012 IBM Corporation and others.
+ * Copyright (c) 2002, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,11 +10,13 @@
  *     Markus Schorn (Wind River Systems)
  *     Anton Leherbauer (Wind River Systems)
  *     IBM Corporation - EFS support
+ *     Marc-Andre Laperle (Ericsson)
  *******************************************************************************/
 
 package org.eclipse.cdt.internal.core.model;
 
 import java.io.BufferedInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -29,10 +31,17 @@ import org.eclipse.core.filesystem.EFS;
 import org.eclipse.core.filesystem.IFileInfo;
 import org.eclipse.core.filesystem.URIUtil;
 import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.ProjectScope;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.preferences.DefaultScope;
+import org.eclipse.core.runtime.preferences.InstanceScope;
+import org.osgi.service.prefs.BackingStoreException;
+import org.osgi.service.prefs.Preferences;
 
 import com.ibm.icu.text.MessageFormat;
 
@@ -403,6 +412,155 @@ public class Util implements ICLogConstants {
 			}
 		}
 		// not found
+		return null;
+	}
+
+	/**
+	 * Returns value of line separator preference from the given preference node.
+	 */
+	private static String getLineSeparatorFromPreferences(Preferences node) {
+		try {
+			// be careful looking up for our node so not to create any nodes as side effect
+			if (node.nodeExists(Platform.PI_RUNTIME))
+				return node.node(Platform.PI_RUNTIME).get(Platform.PREF_LINE_SEPARATOR, null);
+		} catch (BackingStoreException e) {
+			// ignore
+		}
+		return null;
+	}
+
+	/**
+	 * Returns the first line separator found in the given file.
+	 * 
+	 * @param fileUri - URI if the file on the local file-system.
+	 * @return the first line separator in the given file or {@code null} if none was read.
+	 */
+	public static String getLineSeparator(URI fileUri) {
+		String value = null;
+		InputStream input = null;
+		try {
+			java.io.File file = new java.io.File(fileUri);
+			if (file.exists()) {
+				input = new FileInputStream(file);
+				value = getLineSeparator(input);
+			}
+		} catch (Exception e) {
+			// ignore
+		} finally {
+			try {
+				if (input != null)
+					input.close();
+			} catch (IOException e) {
+				//ignore
+			}
+		}
+		return value;
+	}
+
+	/**
+	 * Returns the line separator for the given file. If line separator is not found in the file
+	 * default value for the project or workspace is returned.
+	 * 
+	 * @param file - the file to look for a line separator.
+	 * @return the line separator for the given file. The method does not return {@code null}.
+	 */
+	public static String getLineSeparator(IFile file) {
+		String value = null;
+		InputStream input = null;
+		try {
+			input = file.getContents();
+			value = getLineSeparator(input);
+		} catch (CoreException e) {
+			// ignore
+		} finally {
+			try {
+				if (input != null)
+					input.close();
+			} catch (IOException e) {
+				//ignore
+			}
+		}
+
+		if (value == null)
+			value = getDefaultLineSeparator(file.getProject());
+
+		return value;
+	}
+
+	/**
+	 * Returns default line separator for the given project. The returned value
+	 * will be the first available value from the list below:
+	 * <ol>
+	 *   <li> Line separator defined in project preferences.
+	 *   <li> Line separator defined in instance preferences.
+	 *   <li> Line separator defined in default preferences.
+	 *   <li> Operating system default line separator.
+	 * </ol>
+	 * 
+	 * @param project - the project. If {@code null} no project preferences are inquired.
+	 * @return line separator for the given project. The method does not return {@code null}.
+	 */
+	public static String getDefaultLineSeparator(IProject project) {
+		String value = null;
+		Preferences rootNode = Platform.getPreferencesService().getRootNode();
+		// if the file does not exist or has no content yet, try with project preferences
+		if (project != null) {
+			value = getLineSeparatorFromPreferences(rootNode.node(ProjectScope.SCOPE).node(project.getName()));
+			if (value != null)
+				return value;
+		}
+		value = getDefaultLineSeparator();
+		return value;
+	}
+
+	/**
+	 * Returns default line separator for the workspace. The returned value
+	 * will be the first available value from the list below:
+	 * <ol>
+	 *   <li> Line separator defined in instance preferences.
+	 *   <li> Line separator defined in default preferences.
+	 *   <li> Operating system default line separator.
+	 * </ol>
+	 * @return line separator for the workspace. The method does not return {@code null}.
+	 */
+	public static String getDefaultLineSeparator() {
+		Preferences rootNode = Platform.getPreferencesService().getRootNode();
+		String value = null;
+
+		// try with instance preferences
+		value = getLineSeparatorFromPreferences(rootNode.node(InstanceScope.SCOPE));
+		if (value != null)
+			return value;
+		// try with default preferences
+		value = getLineSeparatorFromPreferences(rootNode.node(DefaultScope.SCOPE));
+		if (value != null)
+			return value;
+		// if there is no preference set, fall back to OS default value
+		return LINE_SEPARATOR;
+	}
+
+	/**
+	 * Returns the first line separator used by the input stream.
+	 * 
+	 * @param input - input stream to inspect.
+	 * @return line separator for the given input stream or {@code null} if no line separator was read.
+	 */
+	private static String getLineSeparator(InputStream input) {
+		try {
+			int c = input.read();
+			while (c != -1 && c != '\r' && c != '\n')
+				c = input.read();
+			if (c == '\n')
+				return "\n"; //$NON-NLS-1$
+			if (c == '\r') {
+				int c2 = input.read();
+				if (c2 == '\n')
+					return "\r\n"; //$NON-NLS-1$
+				return "\r"; //$NON-NLS-1$
+			}
+		} catch (IOException e) {
+			// ignore
+		}
 		return null;
 	}
 

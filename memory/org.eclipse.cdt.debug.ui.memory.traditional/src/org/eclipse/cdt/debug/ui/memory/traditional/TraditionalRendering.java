@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2010 Wind River Systems, Inc. and others.
+ * Copyright (c) 2006, 2014 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -7,12 +7,15 @@
  * 
  * Contributors:
  *     Ted R Williams (Wind River Systems, Inc.) - initial implementation
+ *     Alvaro Sanchez-Leon (Ericsson AB) - [Memory] Support 16 bit addressable size (Bug 426730)
  *******************************************************************************/
 
 package org.eclipse.cdt.debug.ui.memory.traditional;
 
 import java.lang.reflect.Method;
 import java.math.BigInteger;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.eclipse.cdt.debug.core.model.provisional.IMemoryRenderingViewportProvider;
 import org.eclipse.core.commands.AbstractHandler;
@@ -23,17 +26,24 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.debug.core.DebugException;
+import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.core.model.IMemoryBlock;
 import org.eclipse.debug.core.model.IMemoryBlockExtension;
 import org.eclipse.debug.core.model.MemoryByte;
 import org.eclipse.debug.internal.ui.DebugUIPlugin;
 import org.eclipse.debug.internal.ui.IInternalDebugUIConstants;
 import org.eclipse.debug.internal.ui.memory.IMemoryBlockConnection;
+import org.eclipse.debug.internal.ui.memory.provisional.MemoryViewPresentationContext;
+import org.eclipse.debug.internal.ui.viewers.model.provisional.IModelChangedListener;
+import org.eclipse.debug.internal.ui.viewers.model.provisional.IModelDelta;
+import org.eclipse.debug.internal.ui.viewers.model.provisional.IModelProxy;
+import org.eclipse.debug.internal.ui.viewers.model.provisional.IModelProxyFactory;
 import org.eclipse.debug.ui.IDebugUIConstants;
 import org.eclipse.debug.ui.memory.AbstractMemoryRendering;
 import org.eclipse.debug.ui.memory.AbstractTableRendering;
 import org.eclipse.debug.ui.memory.IMemoryRendering;
 import org.eclipse.debug.ui.memory.IMemoryRenderingContainer;
+import org.eclipse.debug.ui.memory.IMemoryRenderingSite;
 import org.eclipse.debug.ui.memory.IRepositionableMemoryRendering;
 import org.eclipse.debug.ui.memory.IResettableMemoryRendering;
 import org.eclipse.jface.action.Action;
@@ -58,6 +68,8 @@ import org.eclipse.swt.dnd.DND;
 import org.eclipse.swt.dnd.TextTransfer;
 import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
@@ -86,7 +98,7 @@ import org.eclipse.ui.progress.UIJob;
  */
 
 @SuppressWarnings("restriction")
-public class TraditionalRendering extends AbstractMemoryRendering implements IRepositionableMemoryRendering, IResettableMemoryRendering, IMemoryRenderingViewportProvider
+public class TraditionalRendering extends AbstractMemoryRendering implements IRepositionableMemoryRendering, IResettableMemoryRendering, IMemoryRenderingViewportProvider, IModelChangedListener
 {
 	protected Rendering fRendering;
     protected Action displayEndianBigAction;
@@ -96,7 +108,7 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
 	private IMemoryBlockConnection fConnection;
     
     private final static int MAX_MENU_COLUMN_COUNT = 8;
-
+    
 	public TraditionalRendering(String id)
     {
         super(id);
@@ -188,10 +200,87 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
     private int fAddressableSize;
     private int fAddressSize;
     
+    /*
+     * @see org.eclipse.debug.internal.ui.viewers.model.provisional.IModelChangedListener#modelChanged(org.eclipse.debug.internal.ui.viewers.model.provisional.IModelDelta, org.eclipse.debug.internal.ui.viewers.model.provisional.IModelProxy)
+     */
+    public void modelChanged(IModelDelta delta, IModelProxy proxy)
+        {
+        /*
+         * The event model in the traditional renderer is written to expect a suspend first
+         * which will cause it to save its current  data set away in an archive.  Then when 
+         * the state change comes through it will compare and refresh showing a difference.
+         */
+        int flags = delta.getFlags();
+        if ( ( flags & IModelDelta.STATE ) != 0 ) {
+                fRendering.handleSuspend(false);
+        }
+
+        fRendering.handleChange();
+        }
+
+    /*
+     * We use the model proxy which is supplied by the TCF implementation to provide the knowledge of memory 
+     * change notifications. The older backends ( the reference model, Wind River Systems Inc. ) are written
+     * to generate the Debug Model events. TCF follows the "ModelDelta/IModelProxy" implementation  that the 
+     * platform renderers use. So this implementation acts as a shim. If the older Debug Events come in then
+     * fine. If the newer model deltas come in fine also.
+     */
+    private IModelProxy fModel;
+
     @Override
-	public void init(IMemoryRenderingContainer container, IMemoryBlock block)
+        public void dispose()
+    {
+        /*
+         * We use the UI dispatch thread to protect the proxy information. Even though I believe the
+         * dispose routine is always called in the UI dispatch thread. I am going to make sure.
+         */
+    	Display.getDefault().asyncExec(new Runnable() {
+    		public void run() {
+    			if ( fModel != null ) {
+    				fModel.removeModelChangedListener(TraditionalRendering.this);
+    				fModel.dispose();
+    			}
+    		}});
+
+        if(this.fRendering != null)
+            this.fRendering.dispose();
+        disposeColors();
+        disposeFonts();
+        super.dispose();
+    }
+
+    @Override
+	public void init(final IMemoryRenderingContainer container, final IMemoryBlock block)
     {
     	super.init(container, block);
+
+    	/*
+         * Working with the model proxy must be done on the UI dispatch thread.
+         */
+    	final IModelProxyFactory factory = (IModelProxyFactory) DebugPlugin.getAdapter(block, IModelProxyFactory.class );
+    	if ( factory != null ) {
+    		Display.getDefault().asyncExec(new Runnable() {
+    			public void run() {
+
+    				/*
+    				 * The asynchronous model assumes we have an asynchronous viewer that has an IPresentationContext
+    				 * to represent it. The Platform memory subsystem provides a way to create one without a viewewr.
+    				 */
+    				IMemoryRenderingSite site = container.getMemoryRenderingSite();
+    				MemoryViewPresentationContext context = new  MemoryViewPresentationContext(site, container, TraditionalRendering.this);
+
+    				/*
+    				 * Get a new proxy and perform the initialization sequence so we are known the
+    				 * the model provider.
+    				 */
+    				fModel = factory.createModelProxy(block, context);
+    				if ( fModel != null ) {
+    					fModel.installed(null);
+    					fModel.addModelChangedListener(TraditionalRendering.this);
+    				}
+
+    			}});
+    	}
     	
     	try
     	{
@@ -411,6 +500,8 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
     private Color colorText;
     private Color colorTextAlternate;
     
+    private Map<Integer,Font> fonts = new HashMap<Integer,Font>(3);
+
     public void allocateColors()
     {
     	IPreferenceStore store = TraditionalRenderingPlugin.getDefault().getPreferenceStore();
@@ -475,6 +566,12 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
     	disposeChangedColors();
     }
 
+    public void disposeFonts()
+    {
+        for (Font font : fonts.values())
+            font.dispose();
+    }
+
     public void applyPreferences()
     {
     	if(fRendering != null && !fRendering.isDisposed())
@@ -495,6 +592,53 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
     	}
     }
     
+
+    private Font makeFont(Font font, String boldKey, String italicKey)
+    {
+        IPreferenceStore store = TraditionalRenderingPlugin.getDefault().getPreferenceStore();
+        int style = SWT.NONE;
+        if (store.getBoolean(boldKey))
+            style |= SWT.BOLD;
+        if (store.getBoolean(italicKey))
+            style |= SWT.ITALIC;
+
+        if (style == SWT.NONE)
+            return font;
+
+        Font modified = fonts.get(style);
+        if (modified == null)
+        {
+            FontData fontData = font.getFontData()[0];
+            modified = new Font(font.getDevice(), fontData.getName(), fontData.getHeight(), fontData.getStyle() | style);
+            fonts.put(style, modified);
+        }
+        return modified;
+    }
+
+    public Font getFontChanged(Font font)
+    {
+        return makeFont(font, TraditionalRenderingPreferenceConstants.MEM_COLOR_CHANGED_BOLD,
+                TraditionalRenderingPreferenceConstants.MEM_COLOR_CHANGED_ITALIC);
+    }
+
+    public Font getFontEdit(Font font)
+    {
+        return makeFont(font, TraditionalRenderingPreferenceConstants.MEM_COLOR_EDIT_BOLD,
+                TraditionalRenderingPreferenceConstants.MEM_COLOR_EDIT_ITALIC);
+    }
+
+    public boolean getBoxChanged()
+    {
+        IPreferenceStore store = TraditionalRenderingPlugin.getDefault().getPreferenceStore();
+        return store.getBoolean(TraditionalRenderingPreferenceConstants.MEM_COLOR_CHANGED_BOX);
+    }
+
+    public boolean getBoxEdit()
+    {
+        IPreferenceStore store = TraditionalRenderingPlugin.getDefault().getPreferenceStore();
+        return store.getBoolean(TraditionalRenderingPreferenceConstants.MEM_COLOR_EDIT_BOX);
+    }
+
     public Color getColorBackground()
     {
     	IPreferenceStore store = TraditionalRenderingPlugin.getDefault().getPreferenceStore();
@@ -1235,15 +1379,6 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
         // user can then change display endian if desired.
         fRendering.setDisplayLittleEndian(littleEndian);
     }
-    
-    @Override
-	public void dispose()
-    {
-        if(this.fRendering != null)
-            this.fRendering.dispose();
-        disposeColors();
-        super.dispose();
-    }
 
     /* (non-Javadoc)
      * @see org.eclipse.core.runtime.PlatformObject#getAdapter(java.lang.Class)
@@ -1251,7 +1386,7 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
 	@Override
 	@SuppressWarnings("rawtypes")
 	public Object getAdapter(Class adapter)
-    {
+	{
         if(adapter == IWorkbenchAdapter.class)
         {
             if(this.fWorkbenchAdapter == null)
@@ -1317,7 +1452,7 @@ public class TraditionalRendering extends AbstractMemoryRendering implements IRe
 
         return super.getAdapter(adapter);
     }
-
+		
 	public void resetRendering() throws DebugException {
 		fRendering.gotoAddress(fRendering.fBaseAddress);
 	}
@@ -1335,8 +1470,8 @@ class CopyBinaryAction extends CopyAction
 
 	public CopyBinaryAction(Rendering rendering) {
 		super(rendering, CopyType.BINARY, DND.CLIPBOARD);
-        setText(TraditionalRenderingMessages.getString("TraditionalRendering.BINARY")); //$NON-NLS-1$
-        setToolTipText(TraditionalRenderingMessages.getString("TraditionalRendering.COPY_SELECTED_DATA")); //$NON-NLS-1$
+		setText(TraditionalRenderingMessages.getString("TraditionalRendering.BINARY")); //$NON-NLS-1$
+		setToolTipText(TraditionalRenderingMessages.getString("TraditionalRendering.COPY_SELECTED_DATA")); //$NON-NLS-1$
 	}
 }
 
@@ -1482,8 +1617,12 @@ abstract class CopyAction extends Action
 //                    : 0);
 
             final int columns = fRendering.getColumnCount();
-
-            BigInteger lengthToRead = end.subtract(start);
+            int addressableSize = fRendering.getAddressableSize();
+            assert(addressableSize != 0);
+            
+            int addressesPerColumn = bytesPerColumn/addressableSize;
+            
+            BigInteger lengthToRead = end.subtract(start).multiply(BigInteger.valueOf(addressableSize));
 
             int rows = lengthToRead.divide(
                 BigInteger.valueOf(columns * bytesPerColumn)).intValue();
@@ -1496,7 +1635,7 @@ abstract class CopyAction extends Action
             for(int row = 0; row < rows; row++)
             {
                 BigInteger rowAddress = start.add(BigInteger.valueOf(row
-                    * columns * bytesPerColumn));
+                    * columns * addressesPerColumn));
 
                 if(copyAddress)
                 {
@@ -1509,7 +1648,7 @@ abstract class CopyAction extends Action
                     for(int col = 0; col < columns; col++)
                     {
                         BigInteger cellAddress = rowAddress.add(BigInteger
-                            .valueOf(col * bytesPerColumn));
+                            .valueOf(col * addressesPerColumn));
 
                         if(cellAddress.compareTo(end) < 0)
                         {
@@ -1551,7 +1690,7 @@ abstract class CopyAction extends Action
                     for(int col = 0; col < columns; col++)
                     {
                         BigInteger cellAddress = rowAddress.add(BigInteger
-                            .valueOf(col * fRendering.getBytesPerColumn()));
+                            .valueOf(col * addressesPerColumn));
 
                         if(cellAddress.compareTo(end) < 0)
                         {

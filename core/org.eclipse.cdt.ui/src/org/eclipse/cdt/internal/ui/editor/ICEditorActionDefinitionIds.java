@@ -13,7 +13,6 @@
  *     Sergey Prigogin (Google)
  *     Tomasz Wesolowski
  *******************************************************************************/
-
 package org.eclipse.cdt.internal.ui.editor;
 
 import org.eclipse.ui.texteditor.ITextEditorActionDefinitionIds;
@@ -27,7 +26,6 @@ import org.eclipse.ui.texteditor.ITextEditorActionDefinitionIds;
  * @noextend This interface is not intended to be extended by clients.
 */
 public interface ICEditorActionDefinitionIds extends ITextEditorActionDefinitionIds {
-
 	/**
 	 * Action definition ID of the source -> toggle comment action
 	 * (value <code>"org.eclipse.cdt.ui.edit.text.c.toggle.comment"</code>).
@@ -73,6 +71,12 @@ public interface ICEditorActionDefinitionIds extends ITextEditorActionDefinition
 	 * (value <code>"org.eclipse.cdt.ui.edit.text.c.add.include"</code>).
 	 */
 	public static final String ADD_INCLUDE= "org.eclipse.cdt.ui.edit.text.c.add.include"; //$NON-NLS-1$
+
+	/**
+	 * Action definition ID of the source -> organize includes action
+	 * (value <code>"org.eclipse.cdt.ui.edit.text.c.organize.includes"</code>).
+	 */
+	public static final String ORGANIZE_INCLUDES= "org.eclipse.cdt.ui.edit.text.c.organize.includes"; //$NON-NLS-1$
 
 	/**
 	 * Action definition ID of the open declaration action

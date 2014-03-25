@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,6 +8,7 @@
  * Contributors:
  *     Devin Steffler (IBM Corporation) - initial API and implementation
  *     Markus Schorn (Wind River Systems)
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.c;
 
@@ -22,54 +23,50 @@ public class CFunctionType implements IFunctionType, ISerializableType {
     private final IType[] parameters;
     private final IType returnType;
     
-    public CFunctionType( IType returnType, IType []  types ) {
+    public CFunctionType(IType returnType, IType[] types) {
         this.returnType = returnType;
         this.parameters = types;
     }
 
     @Override
-	public boolean isSameType( IType o ){
-        if( o == this )
+	public boolean isSameType(IType o) {
+        if (o == this)
             return true;
-        if( o instanceof ITypedef )
-            return o.isSameType( this );
-        if( o instanceof IFunctionType ){
+        if (o instanceof ITypedef)
+            return o.isSameType(this);
+        if (o instanceof IFunctionType) {
             IFunctionType ft = (IFunctionType) o;
-            IType [] fps;
+            IType[] fps;
             fps = ft.getParameterTypes();
-            if( fps.length != parameters.length )
+            if (fps.length != parameters.length)
                 return false;
-            if( ! returnType.isSameType( ft.getReturnType() ) )
+            if (!returnType.isSameType(ft.getReturnType()))
 			    return false;
-            for( int i = 0; i < parameters.length; i++ )
-                if( ! parameters[i].isSameType( fps[i] ) )
+            for (int i = 0; i < parameters.length; i++) {
+                if (!parameters[i].isSameType(fps[i]))
                     return false;
+            }
             return true;
         }
         return false;
     }
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.IFunctionType#getReturnType()
-     */
+
     @Override
 	public IType getReturnType() {
         return returnType;
     }
 
-    /* (non-Javadoc)
-     * @see org.eclipse.cdt.core.dom.ast.IFunctionType#getParameterTypes()
-     */
     @Override
 	public IType[] getParameterTypes() {
         return parameters;
     }
 
     @Override
-	public Object clone(){
+	public Object clone() {
         IType t = null;
    		try {
             t = (IType) super.clone();
-        } catch ( CloneNotSupportedException e ) {
+        } catch (CloneNotSupportedException e) {
             //not going to happen
         }
         return t;
@@ -77,17 +74,17 @@ public class CFunctionType implements IFunctionType, ISerializableType {
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer) throws CoreException {
-		int firstByte= ITypeMarshalBuffer.FUNCTION_TYPE;
+		short firstBytes = ITypeMarshalBuffer.FUNCTION_TYPE;
 
 		int len= parameters.length & 0xffff;
-		int codedLen= len * ITypeMarshalBuffer.FLAG1;
-		if (codedLen < ITypeMarshalBuffer.FLAG4) {
-			firstByte |= codedLen;
-			buffer.putByte((byte) firstByte);
+		int codedLen= len * ITypeMarshalBuffer.FIRST_FLAG;
+		if (codedLen < ITypeMarshalBuffer.LAST_FLAG) {
+			firstBytes |= codedLen;
+			buffer.putShort(firstBytes);
 		} else {
-			firstByte |= ITypeMarshalBuffer.FLAG4;
-			buffer.putByte((byte) firstByte);
-			buffer.putShort((short) len);
+			firstBytes |= ITypeMarshalBuffer.LAST_FLAG;
+			buffer.putShort(firstBytes);
+			buffer.putInt(len);
 		}
 		
 		buffer.marshalType(returnType);
@@ -96,12 +93,12 @@ public class CFunctionType implements IFunctionType, ISerializableType {
 		}
 	}
 	
-	public static IType unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
+	public static IType unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
 		int len;
-		if (((firstByte & ITypeMarshalBuffer.FLAG4) != 0)) {
-			len= buffer.getShort();
+		if (((firstBytes & ITypeMarshalBuffer.LAST_FLAG) != 0)) {
+			len= buffer.getInt();
 		} else {
-			len= (firstByte & (ITypeMarshalBuffer.FLAG4-1))/ITypeMarshalBuffer.FLAG1;
+			len= (firstBytes & (ITypeMarshalBuffer.LAST_FLAG - 1)) / ITypeMarshalBuffer.FIRST_FLAG;
 		}
 		IType rt= buffer.unmarshalType();
 		IType[] pars= new IType[len];

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2012 Monta Vista and others.
+ * Copyright (c) 2008, 2013 Monta Vista and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -452,9 +452,9 @@ public class MIVariableManager implements ICommandControl {
 		public MIDisplayHint getDisplayHint() { return displayHint; };
 		
 		/**
-		 * @since 4.0
+		 * @since 4.3
 		 */
-		protected void setDisplayHint(MIDisplayHint displayHint) {
+		public void setDisplayHint(MIDisplayHint displayHint) {
 			this.displayHint = displayHint;
 		};
 		
@@ -698,9 +698,9 @@ public class MIVariableManager implements ICommandControl {
 		 * Removes the specified child from LRU and makes the cleanup on its
 		 * children (if any).
 		 * 
-		 * @since 4.1
+         * @since 4.3
 		 */
-        private void cleanupChild(ExpressionInfo child) {
+        public void cleanupChild(ExpressionInfo child) {
 			String childFullExpression = child.getFullExpr();
 			VariableObjectId childId = new VariableObjectId();
 			childId.generateId(childFullExpression, getInternalId());
@@ -966,7 +966,7 @@ public class MIVariableManager implements ICommandControl {
 								@Override
 								protected void handleCompleted() {
 									if (isSuccess()) {
-										if (addNewChildren) {
+										if (addNewChildren && addedChildren != null) {
 											addedChildren[insertPosition] = monitoredVar.exprInfo;
 										}
 									} else {
@@ -974,7 +974,7 @@ public class MIVariableManager implements ICommandControl {
 										// the new varobj provided by gdb.
 										MIVariableObject newVar = createChild(childId, childFullExpression,
 												indexInParent, newChild);
-										if (addNewChildren) {
+										if (addNewChildren && addedChildren != null) {
 											addedChildren[insertPosition] = newVar.exprInfo;
 										}
 									}
@@ -1007,7 +1007,7 @@ public class MIVariableManager implements ICommandControl {
 						// Create a fresh MIVariableObject for this child, using
 						// the new varobj provided by -var-update.
 						childVar = createChild(childId, childFullExpression, i, newChild);
-						if (addNewChildren) {
+						if (addNewChildren && addedChildren != null) {
 							addedChildren[arrayPosition] = childVar.exprInfo;
 						}
 					}
@@ -1068,8 +1068,9 @@ public class MIVariableManager implements ICommandControl {
 		 *            The context containing the format to be used for the evaluation
 		 * @param rm
 		 *            The data request monitor that will hold the value returned
+		 * @since 4.3
 		 */
-		private void getValue(final FormattedValueDMContext dmc,
+		protected void getValue(final FormattedValueDMContext dmc,
 				              final DataRequestMonitor<FormattedValueDMData> rm) {
 
 			// We might already know the value
@@ -1233,7 +1234,7 @@ public class MIVariableManager implements ICommandControl {
 		 *            The data request monitor that will hold the children
 		 *            returned
 		 */
-		private void getChildren(final MIExpressionDMC exprDmc,
+		private void getChildren(final IExpressionDMContext exprDmc,
 				final int clientNumChildrenLimit, final DataRequestMonitor<ChildrenInfo> rm) {
 			
 			if (fetchingChildren) {
@@ -1300,8 +1301,9 @@ public class MIVariableManager implements ICommandControl {
 		 * @param rm
 		 *            The data request monitor that will hold the children
 		 *            returned
+		 * @since 4.3
 		 */
-		private void fetchChildren(final MIExpressionDMC exprDmc,
+		protected void fetchChildren(final IExpressionDMContext exprDmc,
 				int clientNumChildrenLimit, final DataRequestMonitor<ChildrenInfo> rm) {
 			
 			final int newNumChildrenLimit = clientNumChildrenLimit != IMIExpressions.CHILD_COUNT_LIMIT_UNSPECIFIED ?
@@ -1344,7 +1346,16 @@ public class MIVariableManager implements ICommandControl {
 	        	}
 	        	for (int i= 0; i < childrenOfArray.length; i++) {
 	        		String fullExpr = exprName + "[" + i + "]";//$NON-NLS-1$//$NON-NLS-2$
-	        		String relExpr = exprDmc.getRelativeExpression() + "[" + (castingIndex + i) + "]";//$NON-NLS-1$//$NON-NLS-2$
+	        		
+        			String relExpr;
+	        		if (exprDmc instanceof MIExpressionDMC) {
+	        			relExpr = ((MIExpressionDMC)exprDmc).getRelativeExpression();
+	        		} else {
+	        			// Unexpected, but avoid exception
+	        			relExpr = exprDmc.getExpression();
+	        		}
+	        		relExpr = relExpr + "[" + (castingIndex + i) + "]";//$NON-NLS-1$//$NON-NLS-2$
+	        		
 
 	        		childrenOfArray[i] = new ExpressionInfo(fullExpr, relExpr, false, exprInfo, i);
 	        	}
@@ -1818,8 +1829,9 @@ public class MIVariableManager implements ICommandControl {
 		 * @param rm
 		 *            The data request monitor that will hold the count of
 		 *            children returned
+		 * @since 4.3
 		 */
-		private void getChildrenCount(MIExpressionDMC exprDmc, final int numChildrenLimit,
+		protected void getChildrenCount(IExpressionDMContext exprDmc, final int numChildrenLimit,
 				final DataRequestMonitor<ChildrenCountInfo> rm) {
 			if (isNumChildrenHintTrustworthy()){
 				rm.setData(new ChildrenCountInfo(getNumChildrenHint(), hasMore()));
@@ -2143,9 +2155,12 @@ public class MIVariableManager implements ICommandControl {
 									
 									localExprInfo.setDynamic(getData()
 											.isDynamic());
-									localExprInfo.setParent(null);
-									localExprInfo.setIndexInParent(-1);
 									
+									// Do not initialize the parent or indexInParent, since they may
+									// already be set to something. This will happen for arrays.
+									// Their default values are ok for other cases i.e., null and -1
+									// bug 420366
+
 									setExpressionData(
 											localExprInfo,
 											getData().getType(),

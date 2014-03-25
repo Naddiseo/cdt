@@ -16,14 +16,14 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Stack;
 import java.util.StringTokenizer;
 
 import org.eclipse.cdt.make.core.MakeCorePlugin;
+import org.eclipse.cdt.make.core.makefile.IAutomaticVariable;
+import org.eclipse.cdt.make.core.makefile.IBuiltinFunction;
 import org.eclipse.cdt.make.core.makefile.IDirective;
-import org.eclipse.cdt.make.core.makefile.IMakefile;
 import org.eclipse.cdt.make.core.makefile.IMakefileReaderProvider;
 import org.eclipse.cdt.make.core.makefile.gnu.IGNUMakefile;
 import org.eclipse.cdt.make.internal.core.makefile.AbstractMakefile;
@@ -36,6 +36,7 @@ import org.eclipse.cdt.make.internal.core.makefile.EmptyLine;
 import org.eclipse.cdt.make.internal.core.makefile.IgnoreRule;
 import org.eclipse.cdt.make.internal.core.makefile.InferenceRule;
 import org.eclipse.cdt.make.internal.core.makefile.MakeFileConstants;
+import org.eclipse.cdt.make.internal.core.makefile.MakefileMessages;
 import org.eclipse.cdt.make.internal.core.makefile.MakefileReader;
 import org.eclipse.cdt.make.internal.core.makefile.PosixRule;
 import org.eclipse.cdt.make.internal.core.makefile.PreciousRule;
@@ -71,21 +72,81 @@ import org.eclipse.core.runtime.CoreException;
  */
 
 public class GNUMakefile extends AbstractMakefile implements IGNUMakefile {
-
 	public static String PATH_SEPARATOR = System.getProperty("path.separator", ":"); //$NON-NLS-1$ //$NON-NLS-2$
 	public static String FILE_SEPARATOR = System.getProperty("file.separator", "/"); //$NON-NLS-1$ //$NON-NLS-2$
 
-	String[] includeDirectories = new String[0];
-	IDirective[] builtins = new IDirective[0];
+	private String[] includeDirectories = new String[0];
+	private IDirective[] builtins = new IDirective[0];
+	@SuppressWarnings("nls")
+	private IAutomaticVariable[] autoVariables = new IAutomaticVariable[]{
+		new AutomaticVariable(this, "@", MakefileMessages.getString("GNUMakefile.automaticVariable.at")),
+		new AutomaticVariable(this, "%", MakefileMessages.getString("GNUMakefile.automaticVariable.percent")),
+		new AutomaticVariable(this, "<", MakefileMessages.getString("GNUMakefile.automaticVariable.less")),
+		new AutomaticVariable(this, "?", MakefileMessages.getString("GNUMakefile.automaticVariable.question")),
+		new AutomaticVariable(this, "^", MakefileMessages.getString("GNUMakefile.automaticVariable.carrot")),
+		new AutomaticVariable(this, "+", MakefileMessages.getString("GNUMakefile.automaticVariable.plus")),
+		new AutomaticVariable(this, "|", MakefileMessages.getString("GNUMakefile.automaticVariable.pipe")),
+		new AutomaticVariable(this, "*", MakefileMessages.getString("GNUMakefile.automaticVariable.star")),
+	};
+
+	@SuppressWarnings("nls")
+	private final static String[] functions = {
+		"subst", "patsubst", "strip", "findstring",
+		"filter", "filter-out", "sort",
+		"word", "words", "wordlist", "firstword", "lastword",
+		"dir", "notdir",
+		"suffix", "basename", "addsuffix", "addprefix",
+		"join", "wildcard", "realpath", "abspath",
+		"if", "or", "and", "foreach",
+		"call", "value", "eval", "origin", "flavor",
+		"shell", "error", "warning", "info",
+	};
+
+	@SuppressWarnings("nls")
+	private IBuiltinFunction[] builtinFunctions = new IBuiltinFunction[]{
+		new BuiltinFunction(this, "$(subst from,to,text)"),
+		new BuiltinFunction(this, "$(patsubst pattern,replacement,text)"),
+		new BuiltinFunction(this, "$(strip string)"),
+		new BuiltinFunction(this, "$(findstring find,in)"),
+		new BuiltinFunction(this, "$(filter pattern,text)"),
+		new BuiltinFunction(this, "$(filter-out pattern,text)"),
+		new BuiltinFunction(this, "$(sort list)"),
+		new BuiltinFunction(this, "$(word n,text)"),
+		new BuiltinFunction(this, "$(words text)"),
+		new BuiltinFunction(this, "$(wordlist s,e,text)"),
+		new BuiltinFunction(this, "$(firstword names)"),
+		new BuiltinFunction(this, "$(lastword names)"),
+		new BuiltinFunction(this, "$(dir names)"),
+		new BuiltinFunction(this, "$(notdir names)"),
+		new BuiltinFunction(this, "$(suffix names)"),
+		new BuiltinFunction(this, "$(basename names)"),
+		new BuiltinFunction(this, "$(addsuffix suffix,names)"),
+		new BuiltinFunction(this, "$(addprefix prefix,names)"),
+		new BuiltinFunction(this, "$(join list1,list2)"),
+		new BuiltinFunction(this, "$(wildcard pattern)"),
+		new BuiltinFunction(this, "$(realpath names)"),
+		new BuiltinFunction(this, "$(abspath names)"),
+		new BuiltinFunction(this, "$(if condition,then-part,else-part)"),
+		new BuiltinFunction(this, "$(or condition1,condition2,...)"),
+		new BuiltinFunction(this, "$(and condition1,condition2,...)"),
+		new BuiltinFunction(this, "$(foreach var,list,text)"),
+		new BuiltinFunction(this, "$(call variable,param,...)"),
+		new BuiltinFunction(this, "$(value variable)"),
+		new BuiltinFunction(this, "$(eval expression)"),
+		new BuiltinFunction(this, "$(origin variable)"),
+		new BuiltinFunction(this, "$(flavor variable)"),
+		new BuiltinFunction(this, "$(shell command)"),
+		new BuiltinFunction(this, "$(error error: text)"),
+		new BuiltinFunction(this, "$(warning warning: text)"),
+		new BuiltinFunction(this, "$(info info: text)"),
+	};
+
 	private IMakefileReaderProvider makefileReaderProvider;
 
 	public GNUMakefile() {
 		super(null);
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.make.core.makefile.IMakefile#getMakefileReaderProvider()
-	 */
 	@Override
 	public IMakefileReaderProvider getMakefileReaderProvider() {
 		return makefileReaderProvider;
@@ -96,9 +157,6 @@ public class GNUMakefile extends AbstractMakefile implements IGNUMakefile {
 		parse(URIUtil.toURI(filePath), new MakefileReader(reader));
 	}
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.make.core.makefile.IMakefile#parse(java.net.URI, org.eclipse.cdt.make.core.makefile.IMakefileReaderProvider)
-	 */
 	@Override
 	public void parse(URI fileURI,
 			IMakefileReaderProvider makefileReaderProvider) throws IOException {
@@ -108,8 +166,9 @@ public class GNUMakefile extends AbstractMakefile implements IGNUMakefile {
 			try {
 				final IFileStore store = EFS.getStore(fileURI);
 				final IFileInfo info = store.fetchInfo();
-				if (!info.exists() || info.isDirectory())
+				if (!info.exists() || info.isDirectory()) {
 					throw new IOException();
+				}
 
 				reader = new MakefileReader(new InputStreamReader(
 						store.openInputStream(EFS.NONE, null)));
@@ -520,7 +579,7 @@ public class GNUMakefile extends AbstractMakefile implements IGNUMakefile {
 					// ignore the "include" keyword.
 					continue;
 				}
-				filenames[i - 1] = st.nextToken();
+				filenames[i - 1] = expandString(st.nextToken(), true);
 			}
 		} else {
 			filenames = new String[0];
@@ -529,20 +588,20 @@ public class GNUMakefile extends AbstractMakefile implements IGNUMakefile {
 	}
 
 	/**
-	   * There are three forms of the "vpath" directive:
-	   *      "vpath PATTERN DIRECTORIES"
-	   * Specify the search path DIRECTORIES for file names that match PATTERN.
-	   *
-	   * The search path, DIRECTORIES, is a list of directories to be
-	   * searched, separated by colons (semi-colons on MS-DOS and
-	   * MS-Windows) or blanks, just like the search path used in the `VPATH' variable.
-	   *
-	   *      "vpath PATTERN"
-	   * Clear out the search path associated with PATTERN.
-	   *
-	   *      "vpath"
-	   * Clear all search paths previously specified with `vpath' directives.
-	   */
+	 * There are three forms of the "vpath" directive:
+	 *      "vpath PATTERN DIRECTORIES"
+	 * Specify the search path DIRECTORIES for file names that match PATTERN.
+	 *
+	 * The search path, DIRECTORIES, is a list of directories to be
+	 * searched, separated by colons (semi-colons on MS-DOS and
+	 * MS-Windows) or blanks, just like the search path used in the `VPATH' variable.
+	 *
+	 *      "vpath PATTERN"
+	 * Clear out the search path associated with PATTERN.
+	 *
+	 *      "vpath"
+	 * Clear all search paths previously specified with `vpath' directives.
+	 */
 	protected VPath parseVPath(String line) {
 		String pattern = null;
 		String[] directories;
@@ -712,8 +771,8 @@ public class GNUMakefile extends AbstractMakefile implements IGNUMakefile {
 			if (index > 0) {
 				type = line.charAt(index - 1);
 				if (type == VariableDefinition.TYPE_SIMPLE_EXPAND
-					|| type == VariableDefinition.TYPE_APPEND
-					|| type == VariableDefinition.TYPE_CONDITIONAL) {
+						|| type == VariableDefinition.TYPE_APPEND
+						|| type == VariableDefinition.TYPE_CONDITIONAL) {
 					separator = index - 1;
 				} else {
 					type = VariableDefinition.TYPE_RECURSIVE_EXPAND;
@@ -791,33 +850,20 @@ public class GNUMakefile extends AbstractMakefile implements IGNUMakefile {
 	}
 
 	@Override
-	public IDirective[] getDirectives(boolean expand) {
-		if (!expand) {
-			return getDirectives();
-		}
-		IDirective[] dirs = getDirectives();
-		ArrayList<IDirective> list = new ArrayList<IDirective>(Arrays.asList(dirs));
-		for (int i = 0; i < dirs.length; ++i) {
-			if (dirs[i] instanceof Include) {
-				Include include = (Include)dirs[i];
-				IDirective[] includedMakefiles = include.getDirectives();
-				for (int j = 0; j < includedMakefiles.length; ++j) {
-					IMakefile includedMakefile = (IMakefile)includedMakefiles[j];
-					list.addAll(Arrays.asList(includedMakefile.getDirectives()));
-				}
-			}
-		}
-		return list.toArray(new IDirective[list.size()]);
-	}
-
-	/* (non-Javadoc)
-	 * @see org.eclipse.cdt.make.internal.core.makefile.AbstractMakefile#getBuiltins()
-	 */
-	@Override
 	public IDirective[] getBuiltins() {
 		return builtins;
 	}
 
+	@Override
+	public IAutomaticVariable[] getAutomaticVariables() {
+		return autoVariables;
+	}
+	
+	@Override
+	public IBuiltinFunction[] getBuiltinFunctions() {
+		return builtinFunctions;
+	}
+	
 	@Override
 	public void setIncludeDirectories(String[] dirs) {
 		includeDirectories = dirs;

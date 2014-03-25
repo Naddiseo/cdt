@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2010 QNX Software Systems and others.
+ * Copyright (c) 2000, 2013 QNX Software Systems and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@
  *******************************************************************************/
 package org.eclipse.cdt.debug.internal.ui;
 
+import java.net.URI;
 import java.util.Iterator;
 
 import org.eclipse.cdt.debug.core.CDebugUtils;
@@ -39,6 +40,7 @@ import org.eclipse.debug.core.model.IVariable;
 import org.eclipse.debug.ui.DebugUITools;
 import org.eclipse.debug.ui.contexts.IDebugContextListener;
 import org.eclipse.debug.ui.contexts.IDebugContextProvider;
+import org.eclipse.jface.bindings.keys.KeyStroke;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
@@ -126,7 +128,7 @@ public class CDebugUIUtils {
 	static public String getValueText( IValue value ) {
 		StringBuffer label = new StringBuffer();
 		if ( value instanceof ICDebugElementStatus && !((ICDebugElementStatus)value).isOK() ) {
-			label.append(  MessageFormat.format( CDebugUIMessages.getString( "CDTDebugModelPresentation.4" ), new String[] { ((ICDebugElementStatus)value).getMessage() } ) ); //$NON-NLS-1$
+			label.append(  MessageFormat.format( CDebugUIMessages.getString( "CDTDebugModelPresentation.4" ), (Object[]) new String[] { ((ICDebugElementStatus)value).getMessage() } ) ); //$NON-NLS-1$
 		}
 		else if ( value instanceof ICValue ) {
 			ICType type = null;
@@ -200,7 +202,18 @@ public class CDebugUIUtils {
 
 	public static String getEditorFilePath( IEditorInput input ) throws CoreException {
 		if ( input instanceof IFileEditorInput ) {
-			return ((IFileEditorInput)input).getFile().getLocation().toOSString();
+			IPath location = ((IFileEditorInput)input).getFile().getLocation();
+			if (location != null) {
+				return location.toOSString();
+			}
+			URI locationURI = ((IFileEditorInput)input).getFile().getLocationURI();
+			if (locationURI != null) {
+				IPath uriPath = URIUtil.toPath(locationURI);
+				if (uriPath != null) {
+					return uriPath.toOSString();
+				}
+			}
+			return ""; //$NON-NLS-1$
 		}
 		if ( input instanceof IStorageEditorInput ) {
 			return ((IStorageEditorInput)input).getStorage().getFullPath().toOSString();
@@ -338,4 +351,20 @@ public class CDebugUIUtils {
         propertiesAction.run();
         propertiesAction.dispose();
     }
+    
+    /**
+     * Formats the given key stroke or click name and the modifier keys 
+     * to a key binding string that can be used in action texts. 
+     * 
+     * @param modifierKeys the modifier keys
+     * @param keyOrClick a key stroke or click, e.g. "Double Click"
+     * @return the formatted keyboard shortcut string, e.g. "Shift+Double Click"
+     * 
+     * @since 8.1
+     */
+    public static final String formatKeyBindingString(int modifierKeys, String keyOrClick) {
+        // this should actually all be delegated to KeyStroke class
+        return KeyStroke.getInstance(modifierKeys, KeyStroke.NO_KEY).format() + keyOrClick; 
+    }
+
 }

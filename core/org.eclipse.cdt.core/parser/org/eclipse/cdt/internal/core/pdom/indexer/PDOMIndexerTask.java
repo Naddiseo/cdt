@@ -1,27 +1,32 @@
 /*******************************************************************************
- * Copyright (c) 2006, 2010 Wind River Systems, Inc. and others.
+ * Copyright (c) 2006, 2013 Wind River Systems, Inc. and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Markus Schorn - initial API and implementation
- *    Sergey Prigogin (Google)
+ *     Markus Schorn - initial API and implementation
+ *     Sergey Prigogin (Google)
+ *     Marc-Andre Laperle (Ericsson)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.pdom.indexer;
 
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Set;
 
 import org.eclipse.cdt.core.CCorePlugin;
+import org.eclipse.cdt.core.CCorePreferenceConstants;
 import org.eclipse.cdt.core.dom.IPDOMIndexer;
 import org.eclipse.cdt.core.dom.IPDOMIndexerTask;
 import org.eclipse.cdt.core.index.IIndexManager;
 import org.eclipse.cdt.core.model.ICProject;
 import org.eclipse.cdt.core.model.ITranslationUnit;
+import org.eclipse.cdt.core.parser.IncludeExportPatterns;
 import org.eclipse.cdt.internal.core.index.IWritableIndex;
 import org.eclipse.cdt.internal.core.index.IWritableIndexManager;
 import org.eclipse.cdt.internal.core.model.CProject;
@@ -44,12 +49,12 @@ import com.ibm.icu.text.NumberFormat;
  */
 public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPDOMIndexerTask {
 	private static final String TRUE = "true"; //$NON-NLS-1$
-	
+
 	private AbstractPDOMIndexer fIndexer;
 	private boolean fWriteInfoToLog;
-	
-	protected PDOMIndexerTask(ITranslationUnit[] forceFiles, ITranslationUnit[] updateFiles, ITranslationUnit[] removeFiles,
-			AbstractPDOMIndexer indexer, boolean isFastIndexer) {
+
+	protected PDOMIndexerTask(ITranslationUnit[] forceFiles, ITranslationUnit[] updateFiles,
+			ITranslationUnit[] removeFiles, AbstractPDOMIndexer indexer, boolean isFastIndexer) {
 		super(concat(forceFiles, updateFiles), removeFiles, new ProjectIndexerInputAdapter(indexer.getProject()), isFastIndexer);
 		fIndexer= indexer;
 		setShowActivity(checkDebugOption(TRACE_ACTIVITY, TRUE));
@@ -59,6 +64,8 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 		setShowProblems(checkDebugOption(TRACE_PROBLEMS, TRUE));
 		final long limit = getIntProperty(IndexerPreferences.KEY_SKIP_FILES_LARGER_THAN_MB, 0);
 		setFileSizeLimit(limit * 1024 * 1024);
+		setIndexAllHeaderVersions(checkProperty(IndexerPreferences.KEY_INDEX_ALL_HEADER_VERSIONS));
+		setHeadersToIndexAllVersions(getStringSet(IndexerPreferences.KEY_INDEX_ALL_VERSIONS_SPECIFIC_HEADERS));
 		if (checkProperty(IndexerPreferences.KEY_SKIP_ALL_REFERENCES)) {
 			setSkipReferences(SKIP_ALL_REFERENCES);
 		} else {
@@ -84,7 +91,7 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 			if (i1 == i2) {
 				strategy = i1 ? UnusedHeaderStrategy.useBoth : UnusedHeaderStrategy.skip;
 			} else {
-				strategy = i1 == CProject.hasCCNature(getProject().getProject()) 
+				strategy = i1 == CProject.hasCCNature(getCProject().getProject())
 						? UnusedHeaderStrategy.useCPP : UnusedHeaderStrategy.useC;
 			}
 			setIndexHeadersWithoutContext(strategy);
@@ -95,7 +102,7 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 		setUpdateFlags(IIndexManager.UPDATE_CHECK_TIMESTAMPS | IIndexManager.UPDATE_CHECK_CONTENTS_HASH);
 		setForceFirstFiles(forceFiles.length);
 	}
-	
+
 	private static ITranslationUnit[] concat(ITranslationUnit[] added, ITranslationUnit[] changed) {
 		HashSet<ITranslationUnit> union = new HashSet<ITranslationUnit>(added.length + changed.length);
 		union.addAll(Arrays.asList(added));
@@ -127,19 +134,19 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 		});
 		return result;
 	}
-	
+
 	@Override
 	public final IPDOMIndexer getIndexer() {
 		return fIndexer;
 	}
-	
+
 	@Override
 	public final void run(IProgressMonitor monitor) throws InterruptedException {
 		long start = System.currentTimeMillis();
 		runTask(monitor);
 		traceEnd(start, fIndex, monitor.isCanceled());
 	}
-	
+
 	/**
 	 * Checks whether a given debug option is enabled. See {@link IPDOMIndexerTask}
 	 * for valid values.
@@ -155,6 +162,15 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 		return TRUE.equals(getIndexer().getProperty(key));
 	}
 
+	private Set<String> getStringSet(String key) {
+		String prefSetting = getIndexer().getProperty(key);
+		if (prefSetting != null && !prefSetting.isEmpty()) {
+			return new HashSet<String>(Arrays.asList(prefSetting.split(","))); //$NON-NLS-1$
+		}
+
+		return Collections.emptySet();
+	}
+
 	private int getIntProperty(String key, int defaultValue) {
 		final String value = getIndexer().getProperty(key);
 		if (value != null) {
@@ -166,14 +182,10 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 		return defaultValue;
 	}
 
-	private ICProject getProject() {
-		return getIndexer().getProject();
-	}
-
 	@Override
 	protected final IWritableIndex createIndex() {
 		try {
-			return ((IWritableIndexManager) CCorePlugin.getIndexManager()).getWritableIndex(getProject());
+			return ((IWritableIndexManager) CCorePlugin.getIndexManager()).getWritableIndex(getCProject());
 		} catch (CoreException e) {
 			CCorePlugin.log(e);
 		}
@@ -184,7 +196,21 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 	protected final ITodoTaskUpdater createTodoTaskUpdater() {
 		return new TodoTaskUpdater();
 	}
-	
+
+	@Override
+	protected final IncludeExportPatterns getIncludeExportPatterns() {
+		ICProject project = getCProject();
+		String exportPattern = CCorePreferenceConstants.getPreference(
+				CCorePreferenceConstants.INCLUDE_EXPORT_PATTERN, project, null);
+		String beginExportsPattern = CCorePreferenceConstants.getPreference(
+				CCorePreferenceConstants.INCLUDE_BEGIN_EXPORTS_PATTERN, project, null);
+		String endExportsPattern = CCorePreferenceConstants.getPreference(
+				CCorePreferenceConstants.INCLUDE_END_EXPORTS_PATTERN, project, null);
+		if (exportPattern == null && beginExportsPattern == null && endExportsPattern == null)
+			return null;
+		return new IncludeExportPatterns(exportPattern, beginExportsPattern, endExportsPattern);
+	}
+
 	protected void traceEnd(long start, IWritableIndex index, boolean wasCancelled) {
 		// log entry
 		if (fWriteInfoToLog && !wasCancelled && index != null) {
@@ -195,18 +221,20 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 			NumberFormat nfGroup= NumberFormat.getNumberInstance();
 			nfGroup.setGroupingUsed(true);
 			NumberFormat nfPercent= NumberFormat.getPercentInstance();
-			nfPercent.setMaximumFractionDigits(2);
-			nfPercent.setMinimumFractionDigits(2);
+			int fractionalDigits = Math.max(1 - (int) Math.floor(Math.log10(problemPct * 100.)), 0);
+			nfPercent.setMaximumFractionDigits(fractionalDigits);
+			nfPercent.setMinimumFractionDigits(0);
 			NumberFormat nfTime= NumberFormat.getNumberInstance();
-			nfTime.setMaximumFractionDigits(2);
-			nfTime.setMinimumFractionDigits(2);
+			fractionalDigits = Math.max(2 - (int) Math.floor(Math.log10(totalTime / 1000.)), 0);
+			nfTime.setMaximumFractionDigits(fractionalDigits);
+			nfTime.setMinimumFractionDigits(0);
 			nfTime.setGroupingUsed(true);
 			final String msg= NLS.bind(Messages.PDOMIndexerTask_indexerInfo,
 					new Object[] {
 						getCProject().getElementName(),
 						nfGroup.format(info.fCompletedSources),
 						nfGroup.format(info.fCompletedHeaders),
-						nfTime.format((double) totalTime / 1000),
+						nfTime.format(totalTime / 1000.),
 						nfGroup.format(fStatistics.fDeclarationCount),
 						nfGroup.format(fStatistics.fReferenceCount),
 						nfGroup.format(fStatistics.fUnresolvedIncludesCount),
@@ -217,7 +245,7 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 			);
 			CCorePlugin.getDefault().getLog().log(new Status(IStatus.INFO, CCorePlugin.PLUGIN_ID, msg));
 		}
-		
+
 		// tracing
 		if (checkDebugOption(IPDOMIndexerTask.TRACE_STATISTICS, TRUE)) {
 			String ident= "   ";   //$NON-NLS-1$
@@ -228,8 +256,8 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 			String kind= getIndexer().getClass().getName();
 			kind= kind.substring(kind.lastIndexOf('.') + 1);
 			final long dbSize= index.getDatabaseSizeBytes();
-			
-			System.out.println("C/C++ Indexer: Project '" + getProject().getElementName()     //$NON-NLS-1$
+
+			System.out.println("C/C++ Indexer: Project '" + getCProject().getElementName()     //$NON-NLS-1$
 					+ "' (" + info.fCompletedSources + " sources, "      //$NON-NLS-1$//$NON-NLS-2$
 					+ info.fCompletedHeaders + " headers)");    //$NON-NLS-1$
 			boolean skipRefs= checkProperty(IndexerPreferences.KEY_SKIP_ALL_REFERENCES);
@@ -256,6 +284,9 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 					+ fStatistics.fUnresolvedIncludesCount + " include, "     //$NON-NLS-1$
 					+ fStatistics.fPreprocessorProblemCount + " scanner, "     //$NON-NLS-1$
 					+ fStatistics.fSyntaxProblemsCount + " syntax errors.");    //$NON-NLS-1$
+			if (fStatistics.fTooManyTokensCount > 0)
+				System.out.println(ident + " Tokens: " //$NON-NLS-1$
+					+ fStatistics.fTooManyTokensCount + " TUs with too many tokens."); //$NON-NLS-1$
 
 			NumberFormat nfPercent= NumberFormat.getPercentInstance();
 			nfPercent.setMaximumFractionDigits(2);
@@ -264,7 +295,7 @@ public abstract class PDOMIndexerTask extends AbstractIndexerTask implements IPD
 					+ fStatistics.fDeclarationCount + " declarations, "    //$NON-NLS-1$
 					+ fStatistics.fReferenceCount + " references, "    //$NON-NLS-1$
 					+ fStatistics.fProblemBindingCount + "(" + nfPercent.format(problemPct) + ") unresolved.");     //$NON-NLS-1$ //$NON-NLS-2$
-			
+
 			long misses= index.getCacheMisses();
 			long hits= index.getCacheHits();
 			long tries= misses + hits;

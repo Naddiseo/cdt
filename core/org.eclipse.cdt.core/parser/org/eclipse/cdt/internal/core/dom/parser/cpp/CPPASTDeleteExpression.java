@@ -17,18 +17,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.cdt.core.dom.ast.ASTVisitor;
+import org.eclipse.cdt.core.dom.ast.IASTDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTExpression;
 import org.eclipse.cdt.core.dom.ast.IASTImplicitName;
+import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTDeleteExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
 import org.eclipse.cdt.internal.core.dom.parser.ASTNode;
+import org.eclipse.cdt.internal.core.dom.parser.IASTAmbiguityParent;
 import org.eclipse.cdt.internal.core.dom.parser.Value;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.CPPSemantics;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.EvalFixed;
 
 
-public class CPPASTDeleteExpression extends ASTNode implements ICPPASTDeleteExpression {
+public class CPPASTDeleteExpression extends ASTNode implements ICPPASTDeleteExpression, IASTAmbiguityParent {
     private static final ICPPEvaluation EVALUATION = new EvalFixed(CPPSemantics.VOID_TYPE, PRVALUE, Value.UNKNOWN);
 	
     private IASTExpression operand;
@@ -59,11 +62,7 @@ public class CPPASTDeleteExpression extends ASTNode implements ICPPASTDeleteExpr
 				: operand.copy(style));
 		copy.isGlobal = isGlobal;
 		copy.isVectored = isVectored;
-		copy.setOffsetAndLength(this);
-		if (style == CopyStyle.withLocations) {
-			copy.setCopyLocation(this);
-		}
-		return copy;
+		return copy(copy, style);
 	}
 
 	@Override
@@ -190,4 +189,14 @@ public class CPPASTDeleteExpression extends ASTNode implements ICPPASTDeleteExpr
 	public ValueCategory getValueCategory() {
 		return PRVALUE;
 	}
+	
+	@Override
+	public void replace(IASTNode child, IASTNode other) {
+		if (child == operand) {
+			other.setPropertyInParent(child.getPropertyInParent());
+			other.setParent(child.getParent());
+			operand = (IASTExpression) other;
+		}
+	}
+
 }

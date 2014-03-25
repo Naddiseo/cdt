@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2007, 2010 Intel Corporation, QNX Software Systems, and others.
+ * Copyright (c) 2007, 2013 Intel Corporation, QNX Software Systems, and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@
  *     Andrew Gvozdev
  *     QNX Software Systems - [271628] NPE in configs for project that failed to convert
  *     James Blackburn (Broadcom Corp.)
+ *     Serge Beauchamp (Freescale Semiconductor) - Bug 406545
  *******************************************************************************/
 package org.eclipse.cdt.ui.newui;
 
@@ -124,7 +125,7 @@ import org.eclipse.cdt.internal.ui.newui.Messages;
 public abstract class AbstractPage extends PropertyPage
 implements
 		IPreferencePageContainer, // dynamic pages
-		ICPropertyProvider // utility methods for tabs
+		ICPropertyProvider2 // utility methods for tabs
 {
 	private static ICResourceDescription resd = null;
 	private static ICConfigurationDescription[] cfgDescs = null;
@@ -353,7 +354,7 @@ implements
 		GridData gd;
 		parentComposite = new Composite(c, SWT.NONE);
 		parentComposite.setLayoutData(gd= new GridData(GridData.FILL_BOTH));
-		gd.widthHint= 800;
+		gd.widthHint= 600;
 		itabs.clear();
 		if (!isSingle()) {
 			parentComposite.setLayout(new FillLayout());
@@ -979,8 +980,11 @@ implements
 	}
 
 	protected void cfgChanged(ICConfigurationDescription _cfgd) {
-
 		CConfigurationStatus st = _cfgd.getConfigurationStatus();
+		if (st.getCode() == CConfigurationStatus.TOOLCHAIN_NOT_SUPPORTED) {
+			// Re-check, maybe user got the problem fixed 
+			st = _cfgd.getConfigurationData().getStatus();
+		}
 		if (errPane != null && errMessage != null) {
 			if (st.isOK()) {
 				errPane.setVisible(false);
@@ -1360,6 +1364,14 @@ implements
 					PlatformUI.getWorkbench().getHelpSystem().displayDynamicHelp();
 			}
 		}
+	}
+
+	/**
+	 * @since 5.7
+	 */
+	@Override
+	public ICPropertyTab getSelectedTab() {
+		return currentTab;
 	}
 
 }

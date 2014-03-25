@@ -7,24 +7,31 @@
  *
  * Contributors:
  *     Markus Schorn - initial API and implementation
+ *     Sergey Prigogin (Google)
  *******************************************************************************/
 package org.eclipse.cdt.internal.core.dom.parser.cpp.semantics;
 
 import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.PRVALUE;
 import static org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory.XVALUE;
 import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.ExpressionTypes.prvalueType;
-import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.*;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.CVTYPE;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.REF;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.TDEF;
+import static org.eclipse.cdt.internal.core.dom.parser.cpp.semantics.SemanticUtil.getNestedType;
 
 import org.eclipse.cdt.core.dom.ast.DOMException;
 import org.eclipse.cdt.core.dom.ast.IASTBinaryExpression;
 import org.eclipse.cdt.core.dom.ast.IASTExpression.ValueCategory;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
+import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.ISemanticProblem;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.IValue;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPBasicType;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassSpecialization;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunction;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPTemplateParameterMap;
 import org.eclipse.cdt.internal.core.dom.parser.ISerializableEvaluation;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeMarshalBuffer;
 import org.eclipse.cdt.internal.core.dom.parser.ProblemType;
@@ -41,7 +48,7 @@ import org.eclipse.core.runtime.CoreException;
 /**
  * Performs evaluation of an expression.
  */
-public class EvalConditional extends CPPEvaluation {
+public class EvalConditional extends CPPDependentEvaluation {
 	private final ICPPEvaluation fCondition, fPositive, fNegative;
 	private final boolean fPositiveThrows, fNegativeThrows;
 
@@ -49,13 +56,18 @@ public class EvalConditional extends CPPEvaluation {
 	private IType fType;
 	private ICPPFunction fOverload;
 
+	public EvalConditional(ICPPEvaluation condition, ICPPEvaluation positive, ICPPEvaluation negative,
+			boolean positiveThrows, boolean negativeThrows, IASTNode pointOfDefinition) {
+		this(condition, positive, negative, positiveThrows, negativeThrows, findEnclosingTemplate(pointOfDefinition));
+	}
 
-	public EvalConditional(ICPPEvaluation arg1, ICPPEvaluation arg2, ICPPEvaluation arg3,
-			boolean positiveThrows, boolean negativeThrows) {
+	public EvalConditional(ICPPEvaluation condition, ICPPEvaluation positive, ICPPEvaluation negative,
+			boolean positiveThrows, boolean negativeThrows, IBinding templateDefinition) {
+		super(templateDefinition);
     	// Gnu-extension: Empty positive expression is replaced by condition.
-		fCondition= arg1;
-		fPositive= arg2;
-		fNegative= arg3;
+		fCondition= condition;
+		fPositive= positive;
+		fNegative= negative;
 		fPositiveThrows= positiveThrows;
 		fNegativeThrows= negativeThrows;
 	}
@@ -103,7 +115,18 @@ public class EvalConditional extends CPPEvaluation {
 
 	@Override
 	public IValue getValue(IASTNode point) {
-		return Value.create(this, point);
+		IValue condValue = fCondition.getValue(point);
+		if (condValue == Value.UNKNOWN)
+			return Value.UNKNOWN;
+		Long cond = condValue.numericalValue();
+		if (cond != null) {
+			if (cond.longValue() != 0) {
+				return fPositive == null ? condValue : fPositive.getValue(point);
+			} else {
+				return fNegative.getValue(point);
+			}
+		}
+		return Value.create(this);
 	}
 
 	@Override
@@ -122,6 +145,13 @@ public class EvalConditional extends CPPEvaluation {
 	public boolean isValueDependent() {
 		return fCondition.isValueDependent() || (fPositive != null && fPositive.isValueDependent())
 				|| fNegative.isValueDependent();
+	}
+
+	@Override
+	public boolean isConstantExpression(IASTNode point) {
+		return fCondition.isConstantExpression(point)
+			&& (fPositive == null || fPositive.isConstantExpression(point))
+			&& fNegative.isConstantExpression(point);
 	}
 
 	private void evaluate(IASTNode point) {
@@ -158,7 +188,7 @@ public class EvalConditional extends CPPEvaluation {
 			} else if (void2 && void3) {
 				fType= uqt2;
 			} else {
-				fType= new ProblemType(ISemanticProblem.TYPE_UNKNOWN_FOR_EXPRESSION);
+				fType= ProblemType.UNKNOWN_FOR_EXPRESSION;
 			}
 			return;
 		}
@@ -188,10 +218,10 @@ public class EvalConditional extends CPPEvaluation {
 			if (cost2.converts() || cost3.converts()) {
 				if (cost2.converts()) {
 					if (cost3.converts() || cost2.isAmbiguousUDC()) {
-						fType= new ProblemType(ISemanticProblem.TYPE_UNKNOWN_FOR_EXPRESSION);
+						fType= ProblemType.UNKNOWN_FOR_EXPRESSION;
 					}
 				} else if (cost3.isAmbiguousUDC()) {
-					fType= new ProblemType(ISemanticProblem.TYPE_UNKNOWN_FOR_EXPRESSION);
+					fType= ProblemType.UNKNOWN_FOR_EXPRESSION;
 				}
 				return;
 			}
@@ -206,18 +236,18 @@ public class EvalConditional extends CPPEvaluation {
 				fType= t3;
 				fValueCategory= vcat3;
 			} else {
-				fType= new ProblemType(ISemanticProblem.TYPE_UNKNOWN_FOR_EXPRESSION);
+				fType= ProblemType.UNKNOWN_FOR_EXPRESSION;
 			}
 			return;
 		}
 
 		// 5.16-5: At least one class type but no conversion
 		if (isClassType2 || isClassType3) {
-			fOverload = CPPSemantics.findOverloadedConditionalOperator(point, positive, fNegative);
+			fOverload = CPPSemantics.findOverloadedConditionalOperator(point, getTemplateDefinitionScope(), positive, fNegative);			
 			if (fOverload != null) {
 				fType= ExpressionTypes.typeFromFunctionCall(fOverload);
 			} else {
-				fType= new ProblemType(ISemanticProblem.TYPE_UNKNOWN_FOR_EXPRESSION);
+				fType= ProblemType.UNKNOWN_FOR_EXPRESSION;
 			}
 			return;
 		}
@@ -232,7 +262,7 @@ public class EvalConditional extends CPPEvaluation {
 	    	if (fType == null) {
 	    		fType= Conversions.compositePointerType(t2, t3);
 		    	if (fType == null) {
-					fType= new ProblemType(ISemanticProblem.TYPE_UNKNOWN_FOR_EXPRESSION);
+					fType= ProblemType.UNKNOWN_FOR_EXPRESSION;
 		    	}
 	    	}
 		}
@@ -252,7 +282,7 @@ public class EvalConditional extends CPPEvaluation {
 			}
 			// Both are class types and one derives from the other
 			if (uqt1 instanceof ICPPClassType && uqt2 instanceof ICPPClassType) {
-				int dist= SemanticUtil.calculateInheritanceDepth(uqt1, uqt2);
+				int dist= SemanticUtil.calculateInheritanceDepth(uqt1, uqt2, point);
 				if (dist >= 0) {
 					CVQualifier cv1 = SemanticUtil.getCVQualifier(t1);
 					CVQualifier cv2 = SemanticUtil.getCVQualifier(t2);
@@ -263,7 +293,7 @@ public class EvalConditional extends CPPEvaluation {
 					}
 					return Cost.NO_CONVERSION;
 				}
-				if (SemanticUtil.calculateInheritanceDepth(uqt2, uqt1) >= 0)
+				if (SemanticUtil.calculateInheritanceDepth(uqt2, uqt1, point) >= 0)
 					return Cost.NO_CONVERSION;
 			}
 			// Unrelated class types or just one class:
@@ -287,24 +317,78 @@ public class EvalConditional extends CPPEvaluation {
 
 	@Override
 	public void marshal(ITypeMarshalBuffer buffer, boolean includeValue) throws CoreException {
-		int firstByte = ITypeMarshalBuffer.EVAL_CONDITIONAL;
+		short firstBytes = ITypeMarshalBuffer.EVAL_CONDITIONAL;
 		if (fPositiveThrows)
-			firstByte |= ITypeMarshalBuffer.FLAG1;
+			firstBytes |= ITypeMarshalBuffer.FLAG1;
 		if (fNegativeThrows)
-			firstByte |= ITypeMarshalBuffer.FLAG2;
+			firstBytes |= ITypeMarshalBuffer.FLAG2;
 
-		buffer.putByte((byte) firstByte);
+		buffer.putShort(firstBytes);
 		buffer.marshalEvaluation(fCondition, includeValue);
 		buffer.marshalEvaluation(fPositive, includeValue);
 		buffer.marshalEvaluation(fNegative, includeValue);
+		marshalTemplateDefinition(buffer);
 	}
 
-	public static ISerializableEvaluation unmarshal(int firstByte, ITypeMarshalBuffer buffer) throws CoreException {
-		boolean pth= (firstByte & ITypeMarshalBuffer.FLAG1) != 0;
-		boolean nth= (firstByte & ITypeMarshalBuffer.FLAG2) != 0;
+	public static ISerializableEvaluation unmarshal(short firstBytes, ITypeMarshalBuffer buffer) throws CoreException {
+		boolean pth= (firstBytes & ITypeMarshalBuffer.FLAG1) != 0;
+		boolean nth= (firstBytes & ITypeMarshalBuffer.FLAG2) != 0;
 		ICPPEvaluation cond= (ICPPEvaluation) buffer.unmarshalEvaluation();
 		ICPPEvaluation pos= (ICPPEvaluation) buffer.unmarshalEvaluation();
 		ICPPEvaluation neg= (ICPPEvaluation) buffer.unmarshalEvaluation();
-		return new EvalConditional(cond, pos, neg, pth, nth);
+		IBinding templateDefinition= buffer.unmarshalBinding();
+		return new EvalConditional(cond, pos, neg, pth, nth, templateDefinition);
+	}
+
+	@Override
+	public ICPPEvaluation instantiate(ICPPTemplateParameterMap tpMap, int packOffset,
+			ICPPClassSpecialization within, int maxdepth, IASTNode point) {
+		ICPPEvaluation condition = fCondition.instantiate(tpMap, packOffset, within, maxdepth, point);
+		ICPPEvaluation positive = fPositive == null ?
+				null : fPositive.instantiate(tpMap, packOffset, within, maxdepth, point);
+		ICPPEvaluation negative = fNegative.instantiate(tpMap, packOffset, within, maxdepth, point);
+		if (condition == fCondition && positive == fPositive && negative == fNegative)
+			return this;
+		return new EvalConditional(condition, positive, negative, fPositiveThrows, fNegativeThrows, getTemplateDefinition());
+	}
+
+	@Override
+	public ICPPEvaluation computeForFunctionCall(CPPFunctionParameterMap parameterMap,
+			int maxdepth, IASTNode point) {
+		ICPPEvaluation condition = fCondition.computeForFunctionCall(parameterMap, maxdepth, point);
+		// If the condition can be evaluated, fold the conditional into
+		// just the branch that is taken. This avoids infinite recursion
+		// when computing a recursive constexpr function where the base
+		// case of the recursion is one of the branches of the conditional.
+		Long conditionValue = condition.getValue(point).numericalValue();
+		if (conditionValue != null) {
+			if (conditionValue.longValue() != 0) {
+				return fPositive == null ? null : fPositive.computeForFunctionCall(parameterMap, maxdepth, point);
+			} else {
+				return fNegative.computeForFunctionCall(parameterMap, maxdepth, point);
+			}
+		}
+		ICPPEvaluation positive = fPositive == null ?
+				null : fPositive.computeForFunctionCall(parameterMap, maxdepth, point);
+		ICPPEvaluation negative = fNegative.computeForFunctionCall(parameterMap, maxdepth, point);
+		if (condition == fCondition && positive == fPositive && negative == fNegative)
+			return this;
+		return new EvalConditional(condition, positive, negative, fPositiveThrows, fNegativeThrows, getTemplateDefinition());
+	}
+
+	@Override
+	public int determinePackSize(ICPPTemplateParameterMap tpMap) {
+		int r = fCondition.determinePackSize(tpMap);
+		r = CPPTemplates.combinePackSize(r, fNegative.determinePackSize(tpMap));
+		if (fPositive != null)
+			r = CPPTemplates.combinePackSize(r, fPositive.determinePackSize(tpMap));
+		return r;
+	}
+
+	@Override
+	public boolean referencesTemplateParameter() {
+		return fCondition.referencesTemplateParameter() ||
+				(fPositive != null && fPositive.referencesTemplateParameter()) ||
+				fNegative.referencesTemplateParameter();
 	}
 }

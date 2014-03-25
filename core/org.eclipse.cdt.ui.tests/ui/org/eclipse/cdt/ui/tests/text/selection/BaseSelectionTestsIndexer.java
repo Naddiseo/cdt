@@ -43,7 +43,6 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.part.FileEditorInput;
 import org.eclipse.ui.texteditor.AbstractTextEditor;
 
-import org.eclipse.cdt.core.CCorePlugin;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
@@ -87,10 +86,6 @@ public class BaseSelectionTestsIndexer extends BaseUITestCase {
 		}
 	}
 	
-	public void waitForIndex(int maxSec) throws Exception {
-		assertTrue(CCorePlugin.getIndexManager().joinIndexer(maxSec * 1000, new NullProgressMonitor()));
-	}
-	
 	protected String getMessage(IStatus status) {
 		StringBuffer message = new StringBuffer("["); //$NON-NLS-1$
 		message.append(status.getMessage());
@@ -117,7 +112,7 @@ public class BaseSelectionTestsIndexer extends BaseUITestCase {
         
         fileManager.addFile(file);
         
-        waitForIndex(20); // only wait 20 seconds max.
+        waitForIndexer(fCProject); 
         
         return file;
     }

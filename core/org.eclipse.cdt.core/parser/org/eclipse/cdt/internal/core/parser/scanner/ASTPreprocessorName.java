@@ -6,11 +6,12 @@
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *    Markus Schorn - initial API and implementation
+ *     Markus Schorn - initial API and implementation
  *******************************************************************************/ 
 package org.eclipse.cdt.internal.core.parser.scanner;
 
 import org.eclipse.cdt.core.dom.ILinkage;
+import org.eclipse.cdt.core.dom.IName;
 import org.eclipse.cdt.core.dom.ast.ASTNodeProperty;
 import org.eclipse.cdt.core.dom.ast.IASTCompletionContext;
 import org.eclipse.cdt.core.dom.ast.IASTFileLocation;
@@ -23,6 +24,7 @@ import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
 import org.eclipse.cdt.core.dom.ast.IBinding;
 import org.eclipse.cdt.core.dom.ast.IMacroBinding;
 import org.eclipse.cdt.internal.core.dom.Linkage;
+import org.eclipse.core.runtime.IAdaptable;
 
 /**
  * Models IASTNames as needed for the preprocessor statements and macro expansions.
@@ -31,7 +33,9 @@ import org.eclipse.cdt.internal.core.dom.Linkage;
 class ASTPreprocessorName extends ASTPreprocessorNode implements IASTName {
 	private final char[] fName;
 	private final IBinding fBinding;
-	public ASTPreprocessorName(IASTNode parent, ASTNodeProperty property, int startNumber, int endNumber, char[] name, IBinding binding) {
+
+	public ASTPreprocessorName(IASTNode parent, ASTNodeProperty property, int startNumber,
+			int endNumber, char[] name, IBinding binding) {
 		super(parent, property, startNumber, endNumber);
 		fName= name;
 		fBinding= binding;
@@ -41,31 +45,38 @@ class ASTPreprocessorName extends ASTPreprocessorNode implements IASTName {
 	public IBinding resolveBinding() {
 		return fBinding;
 	}
+
 	@Override
 	public IBinding resolvePreBinding() {
 		return fBinding;
 	}
+
 	@Override
 	public IBinding getBinding() {
 		return fBinding;
 	}
+
 	@Override
 	public IBinding getPreBinding() {
 		return fBinding;
 	}
+
 	@Override
 	public ILinkage getLinkage() {
 		final IASTTranslationUnit tu= getTranslationUnit();
 		return tu == null ? Linkage.NO_LINKAGE : tu.getLinkage();
 	}
+
 	@Override
 	public IASTCompletionContext getCompletionContext() {
 		return null;
 	}
+
 	@Override
 	public boolean isDeclaration() {
 		return false;
 	}
+
 	@Override
 	public boolean isDefinition() {
 		return false;
@@ -74,14 +85,17 @@ class ASTPreprocessorName extends ASTPreprocessorNode implements IASTName {
 	public boolean isReference() {
 		return false;
 	}
+
 	@Override
 	public char[] toCharArray() {
 		return fName;
-	}    	
+	}
+
 	@Override
 	public char[] getSimpleID() {
 		return fName;
 	}
+
 	@Override
 	public char[] getLookupKey() {
 		return fName;
@@ -91,6 +105,7 @@ class ASTPreprocessorName extends ASTPreprocessorNode implements IASTName {
 	public String toString() {
 		return new String(fName);
 	}
+
 	@Override
 	public void setBinding(IBinding binding) {assert false;}
 
@@ -98,14 +113,17 @@ class ASTPreprocessorName extends ASTPreprocessorNode implements IASTName {
 	public int getRoleOfName(boolean allowResolution) {
 		return IASTNameOwner.r_unclear;
 	}
+
 	@Override
 	public IASTName getLastName() {
 		return this;
 	}
+
 	@Override
 	public boolean isQualified() {
 		return false;
 	}
+
 	@Override
 	public IASTName copy() {
 		throw new UnsupportedOperationException();
@@ -134,54 +152,64 @@ class ASTPreprocessorDefinition extends ASTPreprocessorName {
 	}
 }
 
+class ASTBuiltinName extends ASTPreprocessorDefinition implements IAdaptable {
+	private final IName fOriginalDefinition;
 
-class ASTBuiltinName extends ASTPreprocessorDefinition {
-	private final IASTFileLocation fFileLocation;
-
-	public ASTBuiltinName(IASTNode parent, ASTNodeProperty property, IASTFileLocation floc, char[] name, IBinding binding) {
+	public ASTBuiltinName(IASTNode parent, ASTNodeProperty property, IName originalDefinition,
+			char[] name, IBinding binding) {
 		super(parent, property, -1, -1, name, binding);
-		fFileLocation= floc;
+		fOriginalDefinition= originalDefinition;
 	}
 
 	@Override
 	public boolean contains(IASTNode node) {
-		return node==this;
+		return node == this;
 	}
 
 	@Override
 	public String getContainingFilename() {
-		if (fFileLocation == null) {
-			return ""; //$NON-NLS-1$
-		}
-		return fFileLocation.getFileName();
+		IASTFileLocation fileLocation = getFileLocation();
+		return fileLocation == null ? "" : fileLocation.getFileName(); //$NON-NLS-1$
 	}
 
 	@Override
 	public IASTFileLocation getFileLocation() {
-		return fFileLocation;
+		return fOriginalDefinition == null ? null : fOriginalDefinition.getFileLocation();
 	}
 
 	@Override
 	public IASTNodeLocation[] getNodeLocations() {
-		if (fFileLocation == null) {
+		IASTFileLocation fileLocation = getFileLocation();
+		if (fileLocation == null) {
 			return IASTNodeLocation.EMPTY_ARRAY;
 		}
-		return new IASTNodeLocation[] { fFileLocation };
+		return new IASTNodeLocation[] { fileLocation };
 	}
 
 	@Override
 	public String getRawSignature() {
-		if (fFileLocation == null) {
-			return ""; //$NON-NLS-1$
+		IASTFileLocation fileLocation = getFileLocation();
+		return fileLocation == null ? "" : toString(); //$NON-NLS-1$
+	}
+
+	@Override
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	public Object getAdapter(Class adapter) {
+		if (adapter.isAssignableFrom(ASTBuiltinName.class)) {
+			return this;
 		}
-		return toString();
+		if (fOriginalDefinition != null && adapter.isAssignableFrom(fOriginalDefinition.getClass())) {
+			return fOriginalDefinition;
+		}
+		return null;
 	}
 }
 
 class ASTMacroReferenceName extends ASTPreprocessorName {
 	private ImageLocationInfo fImageLocationInfo;
 	
-	public ASTMacroReferenceName(IASTNode parent, ASTNodeProperty property, int offset, int endOffset, IMacroBinding macro, ImageLocationInfo imgLocationInfo) {
+	public ASTMacroReferenceName(IASTNode parent, ASTNodeProperty property,
+			int offset, int endOffset, IMacroBinding macro, ImageLocationInfo imgLocationInfo) {
 		super(parent, property, offset, endOffset, macro.getNameCharArray(), macro);
 		fImageLocationInfo= imgLocationInfo;
 	}

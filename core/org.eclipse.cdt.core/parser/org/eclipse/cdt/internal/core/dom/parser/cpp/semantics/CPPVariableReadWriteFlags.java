@@ -25,6 +25,7 @@ import org.eclipse.cdt.core.dom.ast.IQualifierType;
 import org.eclipse.cdt.core.dom.ast.IType;
 import org.eclipse.cdt.core.dom.ast.IVariable;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTConstructorInitializer;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTNewExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTUnaryExpression;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPClassType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPConstructor;
@@ -32,7 +33,6 @@ import org.eclipse.cdt.core.dom.ast.cpp.ICPPFunctionType;
 import org.eclipse.cdt.core.dom.ast.cpp.ICPPReferenceType;
 import org.eclipse.cdt.internal.core.dom.parser.ITypeContainer;
 import org.eclipse.cdt.internal.core.dom.parser.VariableReadWriteFlags;
-import org.eclipse.cdt.internal.core.dom.parser.cpp.ClassTypeHelper;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.ICPPUnknownType;
 
 /**
@@ -61,7 +61,7 @@ public final class CPPVariableReadWriteFlags extends VariableReadWriteFlags {
 		IType type = CPPVisitor.createType(parent);
 		if (type instanceof ICPPUnknownType ||
 				type instanceof ICPPClassType &&
-				!ClassTypeHelper.hasTrivialDefaultConstructor((ICPPClassType) type)) {
+				!TypeTraits.hasTrivialDefaultConstructor((ICPPClassType) type, parent)) {
 			return WRITE;
 		}
 		return super.rwInDeclarator(parent, indirection);
@@ -69,7 +69,7 @@ public final class CPPVariableReadWriteFlags extends VariableReadWriteFlags {
 
 	private int rwInCtorInitializer(IASTNode node, int indirection, ICPPASTConstructorInitializer parent) {
 		IASTNode grand= parent.getParent();
-		if (grand instanceof IASTDeclarator) {
+		if (grand instanceof IASTDeclarator || grand instanceof ICPPASTNewExpression) {
 			// Look for a constructor being called.
 			if (grand instanceof IASTImplicitNameOwner) {
 				IASTImplicitName[] names = ((IASTImplicitNameOwner) grand).getImplicitNames();
@@ -88,7 +88,7 @@ public final class CPPVariableReadWriteFlags extends VariableReadWriteFlags {
 				}
 			}
 			// Allow for initialization of primitive types.
-			if (parent.getArguments().length == 1) {
+			if (grand instanceof IASTDeclarator && parent.getArguments().length == 1) {
 				IBinding binding= ((IASTDeclarator) grand).getName().getBinding();
 				if (binding instanceof IVariable) {
 					IType type= ((IVariable) binding).getType();
